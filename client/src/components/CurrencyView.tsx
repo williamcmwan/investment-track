@@ -220,7 +220,8 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
       CAD: "🇨🇦",
       SGD: "🇸🇬",
       JPY: "🇯🇵",
-      HKD: "🇭🇰"
+      HKD: "🇭🇰",
+      AUD: "🇦🇺"
     };
     
     const [from, to] = pair.split("/");
