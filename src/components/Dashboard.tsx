@@ -187,39 +187,45 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
             <CardDescription>Profit & Loss trends over time</CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="h-[400px]">
-              <LineChart data={chartData}>
+            <ChartContainer config={chartConfig} className="h-[300px] md:h-[400px]">
+              <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="date" 
                   tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  fontSize={12}
+                  tickMargin={8}
+                  interval="preserveStartEnd"
                 />
                 <YAxis 
                   tickFormatter={(value) => formatCurrency(value).replace(/[A-Z$€£¥]/g, '')}
+                  fontSize={12}
+                  tickMargin={8}
+                  width={60}
                 />
                 <ChartTooltip 
                   content={({ active, payload, label }) => {
                     if (active && payload && payload.length) {
                       return (
-                        <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                          <p className="font-medium text-foreground mb-2">
+                        <div className="bg-background border border-border rounded-lg p-2 md:p-3 shadow-lg max-w-xs">
+                          <p className="font-medium text-foreground mb-2 text-xs md:text-sm">
                             {new Date(label).toLocaleDateString('en-US', { 
                               year: 'numeric', 
-                              month: 'long', 
+                              month: 'short', 
                               day: 'numeric' 
                             })}
                           </p>
                           <div className="space-y-1">
                             {payload.map((entry, index) => (
-                              <div key={index} className="flex items-center gap-2">
+                              <div key={index} className="flex items-center gap-1 md:gap-2">
                                 <div 
-                                  className="w-3 h-3 rounded-sm" 
+                                  className="w-2 h-2 md:w-3 md:h-3 rounded-sm flex-shrink-0" 
                                   style={{ backgroundColor: entry.color }}
                                 />
-                                <span className="text-sm text-muted-foreground">
+                                <span className="text-xs text-muted-foreground truncate">
                                   {chartConfig[entry.dataKey as keyof typeof chartConfig]?.label}:
                                 </span>
-                                <span className="text-sm font-medium text-foreground">
+                                <span className="text-xs font-medium text-foreground">
                                   {formatCurrency(entry.value as number)}
                                 </span>
                               </div>
@@ -231,35 +237,39 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                     return null;
                   }}
                 />
-                <ChartLegend content={<ChartLegendContent />} />
+                <ChartLegend content={<ChartLegendContent className="text-xs" />} />
                 <Line 
                   type="monotone" 
                   dataKey="totalPL" 
                   stroke="var(--color-totalPL)" 
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: "var(--color-totalPL)" }}
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "var(--color-totalPL)" }}
+                  activeDot={{ r: 4, stroke: "var(--color-totalPL)", strokeWidth: 2 }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="investmentPL" 
                   stroke="var(--color-investmentPL)" 
                   strokeWidth={2}
-                  dot={{ r: 3, fill: "var(--color-investmentPL)" }}
+                  dot={{ r: 2, fill: "var(--color-investmentPL)" }}
+                  activeDot={{ r: 3, stroke: "var(--color-investmentPL)", strokeWidth: 2 }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="currencyPL" 
                   stroke="var(--color-currencyPL)" 
                   strokeWidth={2}
-                  dot={{ r: 3, fill: "var(--color-currencyPL)" }}
+                  dot={{ r: 2, fill: "var(--color-currencyPL)" }}
+                  activeDot={{ r: 3, stroke: "var(--color-currencyPL)", strokeWidth: 2 }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="dailyPL" 
                   stroke="var(--color-dailyPL)" 
                   strokeWidth={2}
-                  dot={{ r: 3, fill: "var(--color-dailyPL)" }}
-                  strokeDasharray="5 5"
+                  dot={{ r: 2, fill: "var(--color-dailyPL)" }}
+                  activeDot={{ r: 3, stroke: "var(--color-dailyPL)", strokeWidth: 2 }}
+                  strokeDasharray="3 3"
                 />
               </LineChart>
             </ChartContainer>
