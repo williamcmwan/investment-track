@@ -93,8 +93,30 @@ interface DashboardProps {
 const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) => {
   const [currentView, setCurrentView] = useState("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [baseCurrency, setBaseCurrency] = useState("HKD");
 
-  const formatCurrency = (amount: number, currency = "HKD") => {
+  // Exchange rates for currency conversion (mock data - in real app, fetch from API)
+  const exchangeRates: { [key: string]: number } = {
+    "USD": 7.85, // USD to HKD
+    "EUR": 8.45, // EUR to HKD  
+    "GBP": 9.95, // GBP to HKD
+    "CAD": 5.85, // CAD to HKD
+    "SGD": 5.75, // SGD to HKD
+    "JPY": 0.053, // JPY to HKD
+    "HKD": 1.0
+  };
+
+  const convertToBaseCurrency = (amount: number, fromCurrency: string) => {
+    if (fromCurrency === baseCurrency) return amount;
+    
+    // Convert to HKD first, then to base currency
+    const amountInHKD = fromCurrency === "HKD" ? amount : amount * exchangeRates[fromCurrency];
+    const baseRate = exchangeRates[baseCurrency];
+    
+    return baseCurrency === "HKD" ? amountInHKD : amountInHKD / baseRate;
+  };
+
+  const formatCurrency = (amount: number, currency = baseCurrency) => {
     return new Intl.NumberFormat("en-HK", {
       style: "currency",
       currency: currency,
@@ -105,65 +127,73 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     return `${percent > 0 ? "+" : ""}${percent.toFixed(2)}%`;
   };
 
-  const renderOverview = () => (
-    <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Capital</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              {formatCurrency(mockData.totalCapital)}
-            </div>
-          </CardContent>
-        </Card>
+  const renderOverview = () => {
+    // Convert all amounts to base currency
+    const totalCapitalConverted = convertToBaseCurrency(mockData.totalCapital, "HKD");
+    const currentBalanceConverted = convertToBaseCurrency(mockData.currentBalance, "HKD");
+    const totalProfitLossConverted = convertToBaseCurrency(mockData.totalProfitLoss, "HKD");
+    const currencyProfitLossConverted = convertToBaseCurrency(mockData.currencyProfitLoss, "HKD");
+    const investmentProfitLossConverted = convertToBaseCurrency(mockData.investmentProfitLoss, "HKD");
 
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Current Balance</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              {formatCurrency(mockData.currentBalance)}
-            </div>
-          </CardContent>
-        </Card>
+    return (
+      <div className="space-y-6">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Capital</CardTitle>
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-foreground">
+                {formatCurrency(totalCapitalConverted)}
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total P&L</CardTitle>
-            {mockData.totalProfitLoss > 0 ? (
-              <TrendingUp className="h-4 w-4 text-profit" />
-            ) : (
-              <TrendingDown className="h-4 w-4 text-loss" />
-            )}
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${mockData.totalProfitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
-              {formatCurrency(mockData.totalProfitLoss)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {formatPercent((mockData.totalProfitLoss / mockData.totalCapital) * 100)}
-            </p>
-          </CardContent>
-        </Card>
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Current Balance</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-foreground">
+                {formatCurrency(currentBalanceConverted)}
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Currency P&L</CardTitle>
-            <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${mockData.currencyProfitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
-              {formatCurrency(mockData.currencyProfitLoss)}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total P&L</CardTitle>
+              {totalProfitLossConverted > 0 ? (
+                <TrendingUp className="h-4 w-4 text-profit" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-loss" />
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${totalProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
+                {formatCurrency(totalProfitLossConverted)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {formatPercent((totalProfitLossConverted / totalCapitalConverted) * 100)}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Currency P&L</CardTitle>
+              <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${currencyProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
+                {formatCurrency(currencyProfitLossConverted)}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
       {/* Profit/Loss Breakdown */}
       <Card className="bg-gradient-card border-border shadow-card">
@@ -181,11 +211,11 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               </div>
             </div>
             <div className="text-right">
-              <p className={`font-bold ${mockData.investmentProfitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
-                {formatCurrency(mockData.investmentProfitLoss)}
+              <p className={`font-bold ${investmentProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
+                {formatCurrency(investmentProfitLossConverted)}
               </p>
               <p className="text-sm text-muted-foreground">
-                {formatPercent((mockData.investmentProfitLoss / mockData.totalCapital) * 100)}
+                {formatPercent((investmentProfitLossConverted / totalCapitalConverted) * 100)}
               </p>
             </div>
           </div>
@@ -199,8 +229,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               </div>
             </div>
             <div className="text-right">
-              <p className={`font-bold ${mockData.currencyProfitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
-                {formatCurrency(mockData.currencyProfitLoss)}
+              <p className={`font-bold ${currencyProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
+                {formatCurrency(currencyProfitLossConverted)}
               </p>
             </div>
           </div>
@@ -258,7 +288,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         </CardContent>
       </Card>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="flex flex-1 bg-background">
@@ -289,7 +320,13 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
 
           {currentView === "overview" && renderOverview()}
           {currentView === "accounts" && <AccountsView accounts={mockData.accounts} />}
-          {currentView === "currency" && <CurrencyView currencies={mockData.currencies} />}
+          {currentView === "currency" && (
+            <CurrencyView 
+              currencies={mockData.currencies} 
+              baseCurrency={baseCurrency}
+              onBaseCurrencyChange={setBaseCurrency}
+            />
+          )}
         </div>
       </main>
     </div>
