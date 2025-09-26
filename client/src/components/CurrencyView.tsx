@@ -423,18 +423,6 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
         </Card>
       </div>
 
-      {/* Exchange Rate Alert */}
-      <Card className="bg-gradient-card border-border shadow-card border-warning/50">
-        <CardHeader>
-          <CardTitle className="text-foreground flex items-center gap-2">
-            <RefreshCw className="h-5 w-5 text-warning" />
-            Live Exchange Rates
-          </CardTitle>
-          <CardDescription>
-            Rates are updated in real-time from external APIs. Click "Refresh Rates" to get the latest data.
-          </CardDescription>
-        </CardHeader>
-      </Card>
 
       {/* Currency Pairs List */}
       <div className="grid gap-6">
