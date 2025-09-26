@@ -43,7 +43,7 @@ All colors MUST be HSL.
     --warning-foreground: 217 10% 25%;
     
     --profit: 142 69% 58%;
-    --loss: 0 63% 31%;
+    --loss: 0 84% 65%;
     
     --gradient-primary: linear-gradient(135deg, hsl(142 69% 58%), hsl(160 69% 58%));
     --gradient-card: linear-gradient(145deg, hsl(217 10% 25%), hsl(220 12% 28%));
