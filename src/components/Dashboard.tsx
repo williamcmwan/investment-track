@@ -3,6 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -25,6 +27,19 @@ const mockData = {
   totalProfitLoss: 187500, // HKD
   currencyProfitLoss: 25000, // HKD
   investmentProfitLoss: 162500, // HKD
+  performanceHistory: [
+    { date: "2024-01-01", totalPL: 0, investmentPL: 0, currencyPL: 0, dailyPL: 0 },
+    { date: "2024-01-02", totalPL: 5000, investmentPL: 3500, currencyPL: 1500, dailyPL: 5000 },
+    { date: "2024-01-03", totalPL: 12000, investmentPL: 8500, currencyPL: 3500, dailyPL: 7000 },
+    { date: "2024-01-04", totalPL: 8000, investmentPL: 7000, currencyPL: 1000, dailyPL: -4000 },
+    { date: "2024-01-05", totalPL: 15000, investmentPL: 12000, currencyPL: 3000, dailyPL: 7000 },
+    { date: "2024-01-08", totalPL: 22000, investmentPL: 18000, currencyPL: 4000, dailyPL: 7000 },
+    { date: "2024-01-09", totalPL: 18000, investmentPL: 16000, currencyPL: 2000, dailyPL: -4000 },
+    { date: "2024-01-10", totalPL: 25000, investmentPL: 21000, currencyPL: 4000, dailyPL: 7000 },
+    { date: "2024-01-11", totalPL: 35000, investmentPL: 28000, currencyPL: 7000, dailyPL: 10000 },
+    { date: "2024-01-12", totalPL: 42000, investmentPL: 35000, currencyPL: 7000, dailyPL: 7000 },
+    { date: "2024-01-15", totalPL: 187500, investmentPL: 162500, currencyPL: 25000, dailyPL: 145500 }
+  ],
   accounts: [
     {
       id: 1,
@@ -135,8 +150,96 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     const currencyProfitLossConverted = convertToBaseCurrency(mockData.currencyProfitLoss, "HKD");
     const investmentProfitLossConverted = convertToBaseCurrency(mockData.investmentProfitLoss, "HKD");
 
+    // Convert historical data to base currency
+    const chartData = mockData.performanceHistory.map(item => ({
+      date: item.date,
+      totalPL: convertToBaseCurrency(item.totalPL, "HKD"),
+      investmentPL: convertToBaseCurrency(item.investmentPL, "HKD"),
+      currencyPL: convertToBaseCurrency(item.currencyPL, "HKD"),
+      dailyPL: convertToBaseCurrency(item.dailyPL, "HKD")
+    }));
+
+    const chartConfig = {
+      totalPL: {
+        label: "Total P&L",
+        color: "hsl(var(--primary))",
+      },
+      investmentPL: {
+        label: "Investment P&L",
+        color: "hsl(var(--chart-2))",
+      },
+      currencyPL: {
+        label: "Currency P&L",
+        color: "hsl(var(--chart-3))",
+      },
+      dailyPL: {
+        label: "Daily P&L",
+        color: "hsl(var(--chart-4))",
+      },
+    };
+
     return (
       <div className="space-y-6">
+        {/* Performance Chart */}
+        <Card className="bg-gradient-card border-border shadow-card">
+          <CardHeader>
+            <CardTitle className="text-foreground">Performance Overview</CardTitle>
+            <CardDescription>Profit & Loss trends over time</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="h-[400px]">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="date" 
+                  tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                />
+                <YAxis 
+                  tickFormatter={(value) => formatCurrency(value).replace(/[A-Z$€£¥]/g, '')}
+                />
+                <ChartTooltip 
+                  content={<ChartTooltipContent 
+                    labelFormatter={(value) => new Date(value).toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                    formatter={(value: number) => [formatCurrency(value), '']}
+                  />} 
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="totalPL" 
+                  stroke="var(--color-totalPL)" 
+                  strokeWidth={3}
+                  dot={{ r: 4 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="investmentPL" 
+                  stroke="var(--color-investmentPL)" 
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="currencyPL" 
+                  stroke="var(--color-currencyPL)" 
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="dailyPL" 
+                  stroke="var(--color-dailyPL)" 
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  strokeDasharray="5 5"
+                />
+              </LineChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
           <Card className="bg-gradient-card border-border shadow-card">
