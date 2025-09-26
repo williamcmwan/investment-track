@@ -75,7 +75,7 @@ const Login = ({ onLogin }: LoginProps) => {
                   <Button 
                     type="submit" 
                     size="sm"
-                    className="w-full h-8 bg-gradient-primary hover:opacity-90 transition-smooth text-sm"
+                    className="mx-4 h-8 bg-gradient-primary hover:opacity-90 transition-smooth text-sm"
                     disabled={isLoading}
                   >
                     {isLoading ? "Signing in..." : "Sign In"}
@@ -122,7 +122,7 @@ const Login = ({ onLogin }: LoginProps) => {
                   <Button 
                     type="submit" 
                     size="sm"
-                    className="w-full h-8 bg-gradient-primary hover:opacity-90 transition-smooth text-sm"
+                    className="mx-4 h-8 bg-gradient-primary hover:opacity-90 transition-smooth text-sm"
                     disabled={isLoading}
                   >
                     {isLoading ? "Creating account..." : "Create Account"}
