@@ -173,12 +173,12 @@ const CurrencyView = ({ currencies }: CurrencyViewProps) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Currency Exchange</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-foreground">Currency Exchange</h2>
           <p className="text-muted-foreground">Track exchange rates and currency profit/loss</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <Button variant="outline" className="border-primary text-primary hover:bg-primary/10">
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh Rates
@@ -188,7 +188,7 @@ const CurrencyView = ({ currencies }: CurrencyViewProps) => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         <Card className="bg-gradient-card border-border shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Currency P&L</CardTitle>
@@ -275,7 +275,7 @@ const CurrencyView = ({ currencies }: CurrencyViewProps) => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">Current Rate</p>
                   <p className="text-lg font-semibold text-foreground">

@@ -66,9 +66,11 @@ const mockData = {
 
 interface DashboardProps {
   onLogout: () => void;
+  sidebarOpen: boolean;
+  onSidebarToggle: () => void;
 }
 
-const Dashboard = ({ onLogout }: DashboardProps) => {
+const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) => {
   const [currentView, setCurrentView] = useState("overview");
 
   const formatCurrency = (amount: number, currency = "HKD") => {
@@ -85,7 +87,7 @@ const Dashboard = ({ onLogout }: DashboardProps) => {
   const renderOverview = () => (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
         <Card className="bg-gradient-card border-border shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Capital</CardTitle>
@@ -238,13 +240,19 @@ const Dashboard = ({ onLogout }: DashboardProps) => {
   );
 
   return (
-    <div className="flex h-screen bg-background">
-      <Sidebar currentView={currentView} onViewChange={setCurrentView} onLogout={onLogout} />
+    <div className="flex flex-1 bg-background">
+      <Sidebar 
+        currentView={currentView} 
+        onViewChange={setCurrentView} 
+        onLogout={onLogout}
+        isOpen={sidebarOpen}
+        onToggle={onSidebarToggle}
+      />
       
       <main className="flex-1 overflow-auto">
-        <div className="p-6">
+        <div className="p-4 md:p-6">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold text-foreground mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
               {currentView === "overview" && "Dashboard Overview"}
               {currentView === "accounts" && "Investment Accounts"}
               {currentView === "currency" && "Currency Exchange"}
