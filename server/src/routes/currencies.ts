@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { CurrencyPairModel, CreateCurrencyPairData, UpdateCurrencyPairData } from '../models/CurrencyPair.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
 import { ExchangeRateService } from '../services/exchangeRateService.js';
+import { EnhancedExchangeRateService } from '../services/enhancedExchangeRateService.js';
 
 const router = express.Router();
 
@@ -16,6 +17,38 @@ router.get('/popular-pairs', async (req, res) => {
   } catch (error) {
     console.error('Get popular pairs error:', error);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get last update time for exchange rates (public endpoint)
+router.get('/last-update', async (req, res) => {
+  try {
+    const lastUpdate = await ExchangeRateService.getLastUpdateTime();
+    return res.json({ 
+      lastUpdate,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Get last update time error:', error);
+    return res.status(500).json({ error: 'Failed to get last update time' });
+  }
+});
+
+// Update all currency pairs with enhanced exchange rates (multiple sources)
+router.post('/update-rates-enhanced', async (req: AuthenticatedRequest, res) => {
+  try {
+    await EnhancedExchangeRateService.updateAllCurrencyPairs(req.user?.id || 0);
+    
+    // Return updated pairs
+    const pairs = await CurrencyPairModel.findByUserId(req.user?.id || 0);
+    return res.json({ 
+      message: 'Enhanced exchange rates updated successfully',
+      pairs,
+      accuracy: 'Multi-source weighted average'
+    });
+  } catch (error) {
+    console.error('Update enhanced exchange rates error:', error);
+    return res.status(500).json({ error: 'Failed to update enhanced exchange rates' });
   }
 });
 

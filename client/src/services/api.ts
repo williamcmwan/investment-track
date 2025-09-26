@@ -167,6 +167,12 @@ class ApiClient {
     });
   }
 
+  async updateEnhancedExchangeRates() {
+    return this.request<{ message: string; pairs: any[]; accuracy: string }>('/currencies/update-rates-enhanced', {
+      method: 'POST',
+    });
+  }
+
   async getPopularPairs(baseCurrency: string = 'HKD') {
     return this.request<string[]>(`/currencies/popular-pairs?baseCurrency=${baseCurrency}`);
   }

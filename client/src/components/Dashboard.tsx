@@ -146,6 +146,35 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     }
   };
 
+  // Function to refresh with enhanced accuracy (multiple sources)
+  const handleEnhancedRefreshRates = async () => {
+    try {
+      setIsRefreshingRates(true);
+      const response = await apiClient.updateEnhancedExchangeRates();
+      if (response.data) {
+        toast({
+          title: "Enhanced Rates Updated",
+          description: `Exchange rates updated with ${response.data.accuracy}`,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to update enhanced exchange rates",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error updating enhanced rates:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update enhanced exchange rates",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshingRates(false);
+    }
+  };
+
   // Auto-refresh rates when overview page is visited
   useEffect(() => {
     if (currentView === "overview") {
@@ -525,19 +554,34 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                 </p>
               </div>
               {currentView === "overview" && (
-                <Button 
-                  variant="outline" 
-                  onClick={handleRefreshRates}
-                  disabled={isRefreshingRates}
-                  className="border-primary text-primary hover:bg-primary/10"
-                >
-                  {isRefreshingRates ? (
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                  )}
-                  Update Rates
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleRefreshRates}
+                    disabled={isRefreshingRates}
+                    className="border-primary text-primary hover:bg-primary/10"
+                  >
+                    {isRefreshingRates ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Update Rates
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleEnhancedRefreshRates}
+                    disabled={isRefreshingRates}
+                    className="border-green-500 text-green-500 hover:bg-green-500/10"
+                  >
+                    {isRefreshingRates ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Enhanced Rates
+                  </Button>
+                </div>
               )}
             </div>
           </div>

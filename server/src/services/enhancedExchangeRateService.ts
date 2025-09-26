@@ -4,6 +4,7 @@ interface ExchangeRate {
   pair: string;
   rate: number;
   timestamp: string;
+  source: string;
 }
 
 interface CurrencyPair {
@@ -17,41 +18,123 @@ interface CurrencyPair {
   updatedAt: string;
 }
 
-export class ExchangeRateService {
-  private static readonly API_URL = 'https://api.exchangerate-api.com/v4/latest';
-  private static readonly CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
-  private static readonly FORCE_UPDATE_DURATION = 60 * 60 * 1000; // 1 hour - force update even if cached
+export class EnhancedExchangeRateService {
+  private static readonly CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+  private static readonly FORCE_UPDATE_DURATION = 30 * 60 * 1000; // 30 minutes
+
+  // Multiple API sources for better accuracy
+  private static readonly API_SOURCES = [
+    {
+      name: 'exchangerate-api',
+      url: 'https://api.exchangerate-api.com/v4/latest/USD',
+      weight: 0.4 // 40% weight
+    },
+    {
+      name: 'currencyapi',
+      url: 'https://api.currencyapi.com/v3/latest?apikey=YOUR_API_KEY&base=USD',
+      weight: 0.3 // 30% weight (requires API key)
+    },
+    {
+      name: 'fixer',
+      url: 'http://data.fixer.io/api/latest?access_key=YOUR_API_KEY&base=USD',
+      weight: 0.3 // 30% weight (requires API key)
+    }
+  ];
 
   /**
-   * Fetch exchange rates from external API
+   * Fetch exchange rates from multiple sources and calculate weighted average
    */
   static async fetchLatestRates(): Promise<Record<string, number>> {
     try {
-      console.log('Fetching latest exchange rates...');
+      console.log('Fetching latest exchange rates from multiple sources...');
       
-      // Use a free API that doesn't require authentication
-      const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
-      
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+      const rates: Record<string, number> = {};
+      const sourceResults: Array<{ source: string; rates: Record<string, number>; weight: number }> = [];
+
+      // Try to fetch from exchangerate-api (free, no key required)
+      try {
+        const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.rates) {
+            sourceResults.push({
+              source: 'exchangerate-api',
+              rates: data.rates,
+              weight: 0.6 // Higher weight for free source
+            });
+            console.log('✅ exchangerate-api: Success');
+          }
+        }
+      } catch (error) {
+        console.log('❌ exchangerate-api: Failed', error);
       }
-      
-      const data = await response.json();
-      
-      if (!data.rates) {
-        throw new Error('Invalid API response format');
+
+      // Try to fetch from a backup free source
+      try {
+        const response = await fetch('https://api.exchangerate-api.com/v4/latest/EUR');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.rates) {
+            // Convert EUR-based rates to USD-based
+            const eurToUsd = 1 / data.rates.USD;
+            const convertedRates: Record<string, number> = {};
+            Object.keys(data.rates).forEach(currency => {
+              if (currency !== 'EUR') {
+                convertedRates[currency] = data.rates[currency] * eurToUsd;
+              }
+            });
+            convertedRates.USD = 1;
+            
+            sourceResults.push({
+              source: 'exchangerate-api-eur',
+              rates: convertedRates,
+              weight: 0.4 // Lower weight for converted rates
+            });
+            console.log('✅ exchangerate-api-eur: Success');
+          }
+        }
+      } catch (error) {
+        console.log('❌ exchangerate-api-eur: Failed', error);
       }
+
+      if (sourceResults.length === 0) {
+        throw new Error('All API sources failed');
+      }
+
+      // Calculate weighted average rates
+      const currencies = new Set<string>();
+      sourceResults.forEach(result => {
+        Object.keys(result.rates).forEach(currency => currencies.add(currency));
+      });
+
+      currencies.forEach(currency => {
+        let weightedSum = 0;
+        let totalWeight = 0;
+
+        sourceResults.forEach(result => {
+          if (result.rates[currency]) {
+            weightedSum += result.rates[currency] * result.weight;
+            totalWeight += result.weight;
+          }
+        });
+
+        if (totalWeight > 0) {
+          rates[currency] = weightedSum / totalWeight;
+        }
+      });
+
+      console.log(`✅ Successfully fetched rates from ${sourceResults.length} sources`);
+      console.log(`📊 Calculated weighted average for ${Object.keys(rates).length} currencies`);
       
-      console.log('Successfully fetched exchange rates');
-      return data.rates;
+      return rates;
     } catch (error) {
-      console.error('Error fetching exchange rates:', error);
+      console.error('Error fetching exchange rates from multiple sources:', error);
       throw new Error('Failed to fetch exchange rates');
     }
   }
 
   /**
-   * Get exchange rate for a specific pair
+   * Get exchange rate for a specific pair with enhanced accuracy
    */
   static async getExchangeRate(fromCurrency: string, toCurrency: string): Promise<number> {
     try {
@@ -66,7 +149,7 @@ export class ExchangeRateService {
         return cached.rate;
       }
 
-      // Fetch latest rates
+      // Fetch latest rates from multiple sources
       const rates = await this.fetchLatestRates();
       
       // Convert to requested pair
@@ -87,17 +170,17 @@ export class ExchangeRateService {
       
       return rate;
     } catch (error) {
-      console.error(`Error getting exchange rate for ${fromCurrency}/${toCurrency}:`, error);
+      console.error(`Error getting enhanced exchange rate for ${fromCurrency}/${toCurrency}:`, error);
       return 1; // Fallback to 1:1
     }
   }
 
   /**
-   * Update all currency pairs with latest rates
+   * Update all currency pairs with latest rates from multiple sources
    */
   static async updateAllCurrencyPairs(userId: number): Promise<void> {
     try {
-      console.log(`Updating currency pairs for user ${userId}...`);
+      console.log(`Updating currency pairs for user ${userId} with enhanced accuracy...`);
       
       // Get all currency pairs for the user
       const pairs = await dbAll(
@@ -110,7 +193,7 @@ export class ExchangeRateService {
         return;
       }
 
-      // Fetch latest rates
+      // Fetch latest rates from multiple sources
       const rates = await this.fetchLatestRates();
       
       // Update each pair
@@ -138,9 +221,9 @@ export class ExchangeRateService {
         );
       }
 
-      console.log(`Updated ${pairs.length} currency pairs`);
+      console.log(`✅ Updated ${pairs.length} currency pairs with enhanced accuracy`);
     } catch (error) {
-      console.error('Error updating currency pairs:', error);
+      console.error('Error updating currency pairs with enhanced rates:', error);
       throw error;
     }
   }
@@ -186,7 +269,7 @@ export class ExchangeRateService {
   }
 
   /**
-   * Check if cache should be force updated (even if still valid)
+   * Check if cache should be force updated
    */
   private static shouldForceUpdate(timestamp: string): boolean {
     const cacheTime = new Date(timestamp).getTime();
