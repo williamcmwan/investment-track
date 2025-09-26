@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { CurrencyPairModel, CreateCurrencyPairData, UpdateCurrencyPairData } from '../models/CurrencyPair.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
+import { ExchangeRateService } from '../services/exchangeRateService.js';
 
 const router = express.Router();
 
@@ -11,7 +12,6 @@ router.use(authenticateToken);
 // Validation schemas
 const createCurrencyPairSchema = z.object({
   pair: z.string().min(5).max(10), // e.g., "USD/HKD"
-  currentRate: z.number().positive(),
   avgCost: z.number().positive(),
   amount: z.number().positive()
 });
@@ -58,7 +58,16 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
   try {
     const validatedData = createCurrencyPairSchema.parse(req.body);
     
-    const pair = await CurrencyPairModel.create(req.user?.id || 0, validatedData as CreateCurrencyPairData);
+    // Get current exchange rate for the pair
+    const [fromCurrency, toCurrency] = validatedData.pair.split('/');
+    const currentRate = await ExchangeRateService.getExchangeRate(fromCurrency, toCurrency);
+    
+    const pairData = {
+      ...validatedData,
+      currentRate
+    };
+    
+    const pair = await CurrencyPairModel.create(req.user?.id || 0, pairData as CreateCurrencyPairData);
     return res.status(201).json(pair);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -113,6 +122,56 @@ router.delete('/:id', async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     console.error('Delete currency pair error:', error);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update all currency pairs with latest exchange rates
+router.post('/update-rates', async (req: AuthenticatedRequest, res) => {
+  try {
+    await ExchangeRateService.updateAllCurrencyPairs(req.user?.id || 0);
+    
+    // Return updated pairs
+    const pairs = await CurrencyPairModel.findByUserId(req.user?.id || 0);
+    return res.json({ 
+      message: 'Exchange rates updated successfully',
+      pairs 
+    });
+  } catch (error) {
+    console.error('Update exchange rates error:', error);
+    return res.status(500).json({ error: 'Failed to update exchange rates' });
+  }
+});
+
+// Get popular currency pairs
+router.get('/popular-pairs', async (req: AuthenticatedRequest, res) => {
+  try {
+    const popularPairs = ExchangeRateService.getPopularPairs();
+    return res.json(popularPairs);
+  } catch (error) {
+    console.error('Get popular pairs error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get exchange rate for a specific pair
+router.get('/rate/:pair', async (req: AuthenticatedRequest, res) => {
+  try {
+    const pair = req.params.pair;
+    if (!pair || !pair.includes('/')) {
+      return res.status(400).json({ error: 'Invalid currency pair format' });
+    }
+    
+    const [fromCurrency, toCurrency] = pair.split('/');
+    const rate = await ExchangeRateService.getExchangeRate(fromCurrency, toCurrency);
+    
+    return res.json({ 
+      pair, 
+      rate,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Get exchange rate error:', error);
+    return res.status(500).json({ error: 'Failed to get exchange rate' });
   }
 });
 

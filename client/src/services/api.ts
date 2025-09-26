@@ -134,7 +134,6 @@ class ApiClient {
 
   async createCurrencyPair(pairData: {
     pair: string;
-    currentRate: number;
     avgCost: number;
     amount: number;
   }) {
@@ -159,6 +158,21 @@ class ApiClient {
     return this.request<{ message: string }>(`/currencies/${id}`, {
       method: 'DELETE',
     });
+  }
+
+  // Currency exchange methods
+  async updateExchangeRates() {
+    return this.request<{ message: string; pairs: any[] }>('/currencies/update-rates', {
+      method: 'POST',
+    });
+  }
+
+  async getPopularPairs() {
+    return this.request<string[]>('/currencies/popular-pairs');
+  }
+
+  async getExchangeRate(pair: string) {
+    return this.request<{ pair: string; rate: number; timestamp: string }>(`/currencies/rate/${pair}`);
   }
 
   // Performance endpoints

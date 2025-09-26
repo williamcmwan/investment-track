@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,12 +14,15 @@ import {
   ArrowUpRight, 
   ArrowDownRight,
   Wallet,
-  ArrowLeftRight
+  ArrowLeftRight,
+  RefreshCw
 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
 import CurrencyView from "./CurrencyView";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiClient } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 // Mock data
 const mockData = {
@@ -110,7 +113,45 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const [currentView, setCurrentView] = useState("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [baseCurrency, setBaseCurrency] = useState("HKD");
+  const [isRefreshingRates, setIsRefreshingRates] = useState(false);
   const { user } = useAuth();
+  const { toast } = useToast();
+
+  // Function to refresh exchange rates
+  const handleRefreshRates = async () => {
+    try {
+      setIsRefreshingRates(true);
+      const response = await apiClient.updateExchangeRates();
+      if (response.data) {
+        toast({
+          title: "Success",
+          description: "Exchange rates updated successfully",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to update exchange rates",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error updating rates:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update exchange rates",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshingRates(false);
+    }
+  };
+
+  // Auto-refresh rates when overview page is visited
+  useEffect(() => {
+    if (currentView === "overview") {
+      handleRefreshRates();
+    }
+  }, [currentView]);
 
   // Exchange rates for currency conversion (mock data - in real app, fetch from API)
   const exchangeRates: { [key: string]: number } = {
@@ -470,23 +511,41 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       <main className="flex-1 overflow-auto">
         <div className="p-4 md:p-6">
           <div className="mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
-              {currentView === "overview" && "Dashboard Overview"}
-              {currentView === "accounts" && "Investment Accounts"}
-              {currentView === "currency" && "Currency Exchange"}
-            </h1>
-            <p className="text-muted-foreground">
-              {currentView === "overview" && "Monitor your investment performance"}
-              {currentView === "accounts" && "Manage your broker accounts"}
-              {currentView === "currency" && "Track currency exchange rates"}
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
+                  {currentView === "overview" && "Dashboard Overview"}
+                  {currentView === "accounts" && "Investment Accounts"}
+                  {currentView === "currency" && "Currency Exchange"}
+                </h1>
+                <p className="text-muted-foreground">
+                  {currentView === "overview" && "Monitor your investment performance"}
+                  {currentView === "accounts" && "Manage your broker accounts"}
+                  {currentView === "currency" && "Track currency exchange rates"}
+                </p>
+              </div>
+              {currentView === "overview" && (
+                <Button 
+                  variant="outline" 
+                  onClick={handleRefreshRates}
+                  disabled={isRefreshingRates}
+                  className="border-primary text-primary hover:bg-primary/10"
+                >
+                  {isRefreshingRates ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Update Rates
+                </Button>
+              )}
+            </div>
           </div>
 
           {currentView === "overview" && renderOverview()}
           {currentView === "accounts" && <AccountsView accounts={mockData.accounts} />}
           {currentView === "currency" && (
             <CurrencyView 
-              currencies={mockData.currencies} 
               baseCurrency={baseCurrency}
               onBaseCurrencyChange={setBaseCurrency}
             />

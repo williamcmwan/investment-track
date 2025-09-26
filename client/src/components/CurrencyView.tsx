@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { apiClient } from "@/services/api";
 import { 
   PlusCircle, 
   Edit, 
@@ -15,26 +17,184 @@ import {
   ArrowDownRight,
   RefreshCw,
   ArrowLeftRight,
-  Settings
+  Settings,
+  Trash2,
+  Loader2
 } from "lucide-react";
 
-interface Currency {
+interface CurrencyPair {
+  id: number;
   pair: string;
-  rate: number;
+  currentRate: number;
   avgCost: number;
-  profitLoss: number;
   amount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface CurrencyViewProps {
-  currencies: Currency[];
   baseCurrency: string;
   onBaseCurrencyChange: (currency: string) => void;
 }
 
-const CurrencyView = ({ currencies, baseCurrency, onBaseCurrencyChange }: CurrencyViewProps) => {
+const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps) => {
+  const [currencies, setCurrencies] = useState<CurrencyPair[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [showBaseCurrencySettings, setShowBaseCurrencySettings] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [popularPairs, setPopularPairs] = useState<string[]>([]);
+  const { toast } = useToast();
+
+  // Form state for adding new currency pair
+  const [newPair, setNewPair] = useState({
+    pair: '',
+    avgCost: '',
+    amount: ''
+  });
+
+  // Load currencies and popular pairs on component mount
+  useEffect(() => {
+    loadCurrencies();
+    loadPopularPairs();
+  }, []);
+
+  const loadCurrencies = async () => {
+    try {
+      setIsLoading(true);
+      const response = await apiClient.getCurrencyPairs();
+      if (response.data) {
+        setCurrencies(response.data);
+      } else {
+        console.error('Failed to load currencies:', response.error);
+        toast({
+          title: "Error",
+          description: "Failed to load currency pairs",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error loading currencies:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load currency pairs",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadPopularPairs = async () => {
+    try {
+      const response = await apiClient.getPopularPairs();
+      if (response.data) {
+        setPopularPairs(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading popular pairs:', error);
+    }
+  };
+
+  const handleAddCurrencyPair = async () => {
+    if (!newPair.pair || !newPair.avgCost || !newPair.amount) {
+      toast({
+        title: "Invalid Input",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await apiClient.createCurrencyPair({
+        pair: newPair.pair,
+        avgCost: parseFloat(newPair.avgCost),
+        amount: parseFloat(newPair.amount)
+      });
+
+      if (response.data) {
+        toast({
+          title: "Success",
+          description: "Currency pair added successfully",
+        });
+        setNewPair({ pair: '', avgCost: '', amount: '' });
+        setIsAddDialogOpen(false);
+        loadCurrencies(); // Reload the list
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to add currency pair",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error adding currency pair:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add currency pair",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateRates = async () => {
+    try {
+      setIsRefreshing(true);
+      const response = await apiClient.updateExchangeRates();
+      if (response.data) {
+        setCurrencies(response.data.pairs);
+        toast({
+          title: "Success",
+          description: "Exchange rates updated successfully",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to update exchange rates",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error updating rates:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update exchange rates",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleDeleteCurrencyPair = async (id: number) => {
+    try {
+      const response = await apiClient.deleteCurrencyPair(id);
+      if (response.data) {
+        toast({
+          title: "Success",
+          description: "Currency pair deleted successfully",
+        });
+        loadCurrencies(); // Reload the list
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to delete currency pair",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting currency pair:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete currency pair",
+        variant: "destructive",
+      });
+    }
+  };
 
   const formatCurrency = (amount: number, currency = baseCurrency) => {
     return new Intl.NumberFormat("en-HK", {
@@ -62,6 +222,14 @@ const CurrencyView = ({ currencies, baseCurrency, onBaseCurrencyChange }: Curren
     return `${flagMap[from]} → ${flagMap[to]}`;
   };
 
+  const calculateProfitLoss = (currency: CurrencyPair) => {
+    const currentValue = currency.amount * currency.currentRate;
+    const costBasis = currency.amount * currency.avgCost;
+    return currentValue - costBasis;
+  };
+
+  const totalProfitLoss = currencies.reduce((sum, curr) => sum + calculateProfitLoss(curr), 0);
+
   const AddCurrencyDialog = () => (
     <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
       <DialogTrigger asChild>
@@ -80,17 +248,16 @@ const CurrencyView = ({ currencies, baseCurrency, onBaseCurrencyChange }: Curren
         <div className="grid gap-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="currency-pair">Currency Pair</Label>
-            <Select>
+            <Select value={newPair.pair} onValueChange={(value) => setNewPair({...newPair, pair: value})}>
               <SelectTrigger className="bg-background/50">
                 <SelectValue placeholder="Select currency pair" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="USD/HKD">🇺🇸 USD to HKD</SelectItem>
-                <SelectItem value="EUR/HKD">🇪🇺 EUR to HKD</SelectItem>
-                <SelectItem value="GBP/HKD">🇬🇧 GBP to HKD</SelectItem>
-                <SelectItem value="CAD/HKD">🇨🇦 CAD to HKD</SelectItem>
-                <SelectItem value="SGD/HKD">🇸🇬 SGD to HKD</SelectItem>
-                <SelectItem value="JPY/HKD">🇯🇵 JPY to HKD</SelectItem>
+                {popularPairs.map((pair) => (
+                  <SelectItem key={pair} value={pair}>
+                    {getCurrencyFlags(pair)} {pair}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -101,6 +268,8 @@ const CurrencyView = ({ currencies, baseCurrency, onBaseCurrencyChange }: Curren
               type="number"
               step="0.0001"
               placeholder="7.8500"
+              value={newPair.avgCost}
+              onChange={(e) => setNewPair({...newPair, avgCost: e.target.value})}
               className="bg-background/50"
             />
           </div>
@@ -110,6 +279,8 @@ const CurrencyView = ({ currencies, baseCurrency, onBaseCurrencyChange }: Curren
               id="amount"
               type="number"
               placeholder="100000"
+              value={newPair.amount}
+              onChange={(e) => setNewPair({...newPair, amount: e.target.value})}
               className="bg-background/50"
             />
           </div>
@@ -118,7 +289,12 @@ const CurrencyView = ({ currencies, baseCurrency, onBaseCurrencyChange }: Curren
           <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
             Cancel
           </Button>
-          <Button className="bg-gradient-primary hover:opacity-90">
+          <Button 
+            className="bg-gradient-primary hover:opacity-90"
+            onClick={handleAddCurrencyPair}
+            disabled={isLoading}
+          >
+            {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
             Add Currency Pair
           </Button>
         </DialogFooter>
@@ -126,53 +302,13 @@ const CurrencyView = ({ currencies, baseCurrency, onBaseCurrencyChange }: Curren
     </Dialog>
   );
 
-  const UpdateRateDialog = ({ currency }: { currency: Currency }) => (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="border-primary text-primary hover:bg-primary/10">
-          <Edit className="h-3 w-3 mr-1" />
-          Update
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="bg-card border-border">
-        <DialogHeader>
-          <DialogTitle className="text-foreground">Update Exchange Rate - {currency.pair}</DialogTitle>
-          <DialogDescription>
-            Update your average exchange cost for this currency pair.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="new-avg-cost">New Average Exchange Cost</Label>
-            <Input
-              id="new-avg-cost"
-              type="number"
-              step="0.0001"
-              defaultValue={currency.avgCost}
-              className="bg-background/50"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="additional-amount">Additional Amount (optional)</Label>
-            <Input
-              id="additional-amount"
-              type="number"
-              placeholder="0"
-              className="bg-background/50"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline">Cancel</Button>
-          <Button className="bg-gradient-primary hover:opacity-90">
-            Update Rate
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-
-  const totalProfitLoss = currencies.reduce((sum, curr) => sum + curr.profitLoss, 0);
+  if (isLoading && currencies.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -213,8 +349,17 @@ const CurrencyView = ({ currencies, baseCurrency, onBaseCurrencyChange }: Curren
       )}
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-        <Button variant="outline" className="border-primary text-primary hover:bg-primary/10">
-          <RefreshCw className="h-4 w-4 mr-2" />
+        <Button 
+          variant="outline" 
+          className="border-primary text-primary hover:bg-primary/10"
+          onClick={handleUpdateRates}
+          disabled={isRefreshing}
+        >
+          {isRefreshing ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
           Refresh Rates
         </Button>
         <Button 
@@ -265,7 +410,7 @@ const CurrencyView = ({ currencies, baseCurrency, onBaseCurrencyChange }: Curren
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">
-              {formatCurrency(currencies.reduce((sum, curr) => sum + curr.amount, 0))}
+              {formatCurrency(currencies.reduce((sum, curr) => sum + (curr.amount * curr.currentRate), 0))}
             </div>
             <p className="text-xs text-muted-foreground">Total amount in foreign currencies</p>
           </CardContent>
@@ -280,112 +425,135 @@ const CurrencyView = ({ currencies, baseCurrency, onBaseCurrencyChange }: Curren
             Live Exchange Rates
           </CardTitle>
           <CardDescription>
-            Rates are updated in real-time. Last updated: Jan 15, 2024 14:30 HKT
+            Rates are updated in real-time from external APIs. Click "Refresh Rates" to get the latest data.
           </CardDescription>
         </CardHeader>
       </Card>
 
       {/* Currency Pairs List */}
       <div className="grid gap-6">
-        {currencies.map((currency, index) => (
-          <Card key={index} className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/20 rounded-lg">
-                    <ArrowLeftRight className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-foreground flex items-center gap-2">
-                      {getCurrencyFlags(currency.pair)} {currency.pair}
-                    </CardTitle>
-                    <CardDescription>Exchange rate tracking</CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={currency.profitLoss > 0 ? "default" : "destructive"}>
-                    {currency.profitLoss > 0 ? (
-                      <ArrowUpRight className="h-3 w-3 mr-1" />
-                    ) : (
-                      <ArrowDownRight className="h-3 w-3 mr-1" />
-                    )}
-                    {formatCurrency(currency.profitLoss)}
-                  </Badge>
-                  <UpdateRateDialog currency={currency} />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Current Rate</p>
-                  <p className="text-lg font-semibold text-foreground">
-                    {formatRate(currency.rate)}
-                  </p>
-                  <div className="flex items-center gap-1">
-                    {currency.rate > currency.avgCost ? (
-                      <ArrowUpRight className="h-3 w-3 text-profit" />
-                    ) : (
-                      <ArrowDownRight className="h-3 w-3 text-loss" />
-                    )}
-                    <span className={`text-xs ${currency.rate > currency.avgCost ? 'text-profit' : 'text-loss'}`}>
-                      {((currency.rate - currency.avgCost) / currency.avgCost * 100).toFixed(2)}%
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Your Avg Cost</p>
-                  <p className="text-lg font-semibold text-foreground">
-                    {formatRate(currency.avgCost)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Cost basis for calculations
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Amount ({currency.pair.split('/')[0]})</p>
-                  <p className="text-lg font-semibold text-foreground">
-                    {formatCurrency(currency.amount, currency.pair.split('/')[0])}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Total foreign currency held
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Unrealized P&L</p>
-                  <p className={`text-lg font-semibold ${currency.profitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
-                    {formatCurrency(currency.profitLoss)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {((currency.profitLoss / (currency.amount * currency.avgCost)) * 100).toFixed(2)}% of exposure
-                  </p>
-                </div>
-              </div>
-              
-              {/* Rate Comparison Bar */}
-              <div className="mt-4 space-y-2">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Your Cost: {formatRate(currency.avgCost)}</span>
-                  <span>Current: {formatRate(currency.rate)}</span>
-                </div>
-                <div className="h-2 bg-background/50 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full transition-all duration-300 ${
-                      currency.rate > currency.avgCost ? 'bg-profit' : 'bg-loss'
-                    }`}
-                    style={{ 
-                      width: `${Math.abs((currency.rate - currency.avgCost) / currency.avgCost) * 100 * 10}%`,
-                      maxWidth: '100%'
-                    }}
-                  />
-                </div>
-              </div>
+        {currencies.length === 0 ? (
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <ArrowLeftRight className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No Currency Pairs</h3>
+              <p className="text-muted-foreground text-center mb-4">
+                Start tracking your currency exchanges by adding your first currency pair.
+              </p>
+              <AddCurrencyDialog />
             </CardContent>
           </Card>
-        ))}
+        ) : (
+          currencies.map((currency) => {
+            const profitLoss = calculateProfitLoss(currency);
+            return (
+              <Card key={currency.id} className="bg-gradient-card border-border shadow-card">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/20 rounded-lg">
+                        <ArrowLeftRight className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-foreground flex items-center gap-2">
+                          {getCurrencyFlags(currency.pair)} {currency.pair}
+                        </CardTitle>
+                        <CardDescription>Exchange rate tracking</CardDescription>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={profitLoss > 0 ? "default" : "destructive"}>
+                        {profitLoss > 0 ? (
+                          <ArrowUpRight className="h-3 w-3 mr-1" />
+                        ) : (
+                          <ArrowDownRight className="h-3 w-3 mr-1" />
+                        )}
+                        {formatCurrency(profitLoss)}
+                      </Badge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteCurrencyPair(currency.id)}
+                        className="text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Current Rate</p>
+                      <p className="text-lg font-semibold text-foreground">
+                        {formatRate(currency.currentRate)}
+                      </p>
+                      <div className="flex items-center gap-1">
+                        {currency.currentRate > currency.avgCost ? (
+                          <ArrowUpRight className="h-3 w-3 text-profit" />
+                        ) : (
+                          <ArrowDownRight className="h-3 w-3 text-loss" />
+                        )}
+                        <span className={`text-xs ${currency.currentRate > currency.avgCost ? 'text-profit' : 'text-loss'}`}>
+                          {((currency.currentRate - currency.avgCost) / currency.avgCost * 100).toFixed(2)}%
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Your Avg Cost</p>
+                      <p className="text-lg font-semibold text-foreground">
+                        {formatRate(currency.avgCost)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Cost basis for calculations
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Amount ({currency.pair.split('/')[0]})</p>
+                      <p className="text-lg font-semibold text-foreground">
+                        {formatCurrency(currency.amount, currency.pair.split('/')[0])}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Total foreign currency held
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Unrealized P&L</p>
+                      <p className={`text-lg font-semibold ${profitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
+                        {formatCurrency(profitLoss)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {((profitLoss / (currency.amount * currency.avgCost)) * 100).toFixed(2)}% of exposure
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Rate Comparison Bar */}
+                  <div className="mt-4 space-y-2">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Your Cost: {formatRate(currency.avgCost)}</span>
+                      <span>Current: {formatRate(currency.currentRate)}</span>
+                    </div>
+                    <div className="h-2 bg-background/50 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-300 ${
+                          currency.currentRate > currency.avgCost ? 'bg-profit' : 'bg-loss'
+                        }`}
+                        style={{ 
+                          width: `${Math.abs((currency.currentRate - currency.avgCost) / currency.avgCost) * 100 * 10}%`,
+                          maxWidth: '100%'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
       </div>
     </div>
   );
