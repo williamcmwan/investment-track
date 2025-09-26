@@ -213,28 +213,28 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                   dataKey="totalPL" 
                   stroke="var(--color-totalPL)" 
                   strokeWidth={3}
-                  dot={{ r: 4 }}
+                  dot={{ r: 4, fill: "var(--color-totalPL)" }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="investmentPL" 
                   stroke="var(--color-investmentPL)" 
                   strokeWidth={2}
-                  dot={{ r: 3 }}
+                  dot={{ r: 3, fill: "var(--color-investmentPL)" }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="currencyPL" 
                   stroke="var(--color-currencyPL)" 
                   strokeWidth={2}
-                  dot={{ r: 3 }}
+                  dot={{ r: 3, fill: "var(--color-currencyPL)" }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="dailyPL" 
                   stroke="var(--color-dailyPL)" 
                   strokeWidth={2}
-                  dot={{ r: 3 }}
+                  dot={{ r: 3, fill: "var(--color-dailyPL)" }}
                   strokeDasharray="5 5"
                 />
               </LineChart>
