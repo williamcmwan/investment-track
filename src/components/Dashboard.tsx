@@ -198,14 +198,38 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                   tickFormatter={(value) => formatCurrency(value).replace(/[A-Z$€£¥]/g, '')}
                 />
                 <ChartTooltip 
-                  content={<ChartTooltipContent 
-                    labelFormatter={(value) => new Date(value).toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}
-                    formatter={(value: number) => [formatCurrency(value), '']}
-                  />} 
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                          <p className="font-medium text-foreground mb-2">
+                            {new Date(label).toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })}
+                          </p>
+                          <div className="space-y-1">
+                            {payload.map((entry, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <div 
+                                  className="w-3 h-3 rounded-sm" 
+                                  style={{ backgroundColor: entry.color }}
+                                />
+                                <span className="text-sm text-muted-foreground">
+                                  {chartConfig[entry.dataKey as keyof typeof chartConfig]?.label}:
+                                </span>
+                                <span className="text-sm font-medium text-foreground">
+                                  {formatCurrency(entry.value as number)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
                 />
                 <ChartLegend content={<ChartLegendContent />} />
                 <Line 
