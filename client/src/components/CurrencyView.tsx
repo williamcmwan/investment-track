@@ -438,9 +438,15 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
             </CardContent>
           </Card>
         ) : (
-          currencies.map((currency) => {
-            const profitLoss = calculateProfitLoss(currency);
-            return (
+          currencies
+            .map((currency) => ({
+              ...currency,
+              profitLoss: calculateProfitLoss(currency)
+            }))
+            .sort((a, b) => b.profitLoss - a.profitLoss) // Sort by P&L descending (highest first)
+            .map((currency) => {
+              const profitLoss = currency.profitLoss;
+              return (
               <Card key={currency.id} className="bg-gradient-card border-border shadow-card">
                 <CardHeader>
                   <div className="flex items-center justify-between">
