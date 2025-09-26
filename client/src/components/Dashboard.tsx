@@ -19,6 +19,7 @@ import {
 import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
 import CurrencyView from "./CurrencyView";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Mock data
 const mockData = {
@@ -109,6 +110,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const [currentView, setCurrentView] = useState("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [baseCurrency, setBaseCurrency] = useState("HKD");
+  const { user } = useAuth();
 
   // Exchange rates for currency conversion (mock data - in real app, fetch from API)
   const exchangeRates: { [key: string]: number } = {
@@ -462,6 +464,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         onToggle={onSidebarToggle}
         isCollapsed={sidebarCollapsed}
         onCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        user={user}
       />
       
       <main className="flex-1 overflow-auto">

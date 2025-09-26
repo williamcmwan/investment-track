@@ -1,134 +1,77 @@
 # Investment Tracker
 
-A comprehensive investment portfolio tracking application built with React, TypeScript, and Tailwind CSS. Track your investment accounts, currency exchanges, and portfolio performance with real-time data visualization.
-
-![Investment Tracker Dashboard](https://via.placeholder.com/800x400/0ea5e9/ffffff?text=Investment+Tracker+Dashboard)
+A modern, full-stack investment tracking application built with React, Node.js, and SQLite. Features secure authentication with 2FA support, multi-currency tracking, and comprehensive portfolio analytics.
 
 ## 🚀 Features
 
-- **Multi-Account Portfolio Tracking**: Monitor multiple investment accounts with detailed breakdowns
-- **Currency Exchange Management**: Track currency pairs and exchange rate fluctuations
-- **Real-time P&L Visualization**: Interactive charts showing profit/loss over time
-- **Responsive Design**: Optimized for both desktop and mobile devices
-- **Collapsible Sidebar**: Clean navigation with mobile-friendly hamburger menu
-- **Multi-Currency Support**: Set your base currency and track foreign exchange positions
-- **Dark/Light Mode**: Adaptive UI theme support
+- **Secure Authentication**: JWT-based auth with Two-Factor Authentication (2FA) support
+- **Multi-Currency Support**: Track investments in multiple currencies
+- **Portfolio Analytics**: Comprehensive performance tracking and reporting
+- **Real-time Data**: Live currency rates and portfolio updates
+- **Responsive Design**: Modern UI with mobile support
+- **Type Safety**: Full TypeScript implementation
 
-## 🛠️ Technology Stack
-
-- **Frontend Framework**: React 18 with TypeScript
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS with custom design tokens
-- **UI Components**: shadcn/ui component library
-- **Charts**: Recharts for data visualization
-- **Routing**: React Router DOM
-- **State Management**: React hooks and context
-- **Icons**: Lucide React
-- **Development**: ESLint for code quality
-
-## 📁 Project Structure
+## 🏗️ Architecture
 
 ```
-src/
-├── components/
-│   ├── ui/                    # Reusable UI components (shadcn/ui)
-│   │   ├── button.tsx         # Button component with variants
-│   │   ├── card.tsx          # Card container component
-│   │   ├── dialog.tsx        # Modal dialog component
-│   │   ├── input.tsx         # Form input component
-│   │   ├── select.tsx        # Dropdown select component
-│   │   ├── sidebar.tsx       # Sidebar navigation component
-│   │   └── ...               # Other UI primitives
-│   ├── AccountsView.tsx      # Investment accounts management
-│   ├── CurrencyView.tsx      # Currency exchange tracking
-│   ├── Dashboard.tsx         # Main dashboard with charts and overview
-│   ├── Login.tsx            # Authentication/login interface
-│   └── Sidebar.tsx          # Main navigation sidebar
-├── pages/
-│   ├── Index.tsx            # Main application page
-│   └── NotFound.tsx         # 404 error page
-├── hooks/
-│   ├── use-mobile.tsx       # Mobile device detection hook
-│   └── use-toast.ts         # Toast notification hook
-├── lib/
-│   └── utils.ts             # Utility functions and helpers
-├── App.tsx                  # Root application component
-├── main.tsx                 # Application entry point
-├── index.css               # Global styles and design tokens
-└── vite-env.d.ts          # Vite environment type definitions
+investment-track/
+├── client/                 # React frontend
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   ├── contexts/       # React contexts (Auth, Data)
+│   │   ├── hooks/          # Custom React hooks
+│   │   ├── services/       # API client
+│   │   └── pages/          # Page components
+│   └── public/             # Static assets
+├── server/                 # Node.js backend
+│   ├── src/
+│   │   ├── database/       # Database schema & migrations
+│   │   ├── models/         # Data models
+│   │   ├── routes/         # API routes
+│   │   ├── services/       # Business logic
+│   │   └── middleware/     # Express middleware
+├── scripts/                # Deployment scripts
+│   ├── deploy.sh           # Full deployment script
+│   ├── start-dev.sh        # Development mode
+│   └── start-production.sh # Production mode
+├── config/                 # Configuration files
+│   ├── nginx-production.conf # Nginx configuration
+│   └── investment-tracker.service # Systemd service
+└── docs/                   # Documentation
 ```
 
-## 🎨 Design System
+## 🛠️ Tech Stack
 
-The application uses a comprehensive design system with semantic color tokens:
+### Frontend
+- **React 18** - UI framework
+- **TypeScript** - Type safety
+- **Vite** - Build tool
+- **Tailwind CSS** - Styling
+- **shadcn/ui** - Component library
+- **React Router** - Routing
+- **Recharts** - Data visualization
 
-- **Primary Colors**: Brand blue with gradient variants
-- **Semantic Colors**: Success (green), warning (yellow), destructive (red)
-- **Surface Colors**: Background, card, and border variants
-- **Typography**: Consistent font scaling and weights
-- **Spacing**: Standardized spacing scale
-- **Shadows**: Elegant shadow system with primary color integration
+### Backend
+- **Node.js** - Runtime
+- **Express.js** - Web framework
+- **TypeScript** - Type safety
+- **SQLite** - Database
+- **JWT** - Authentication
+- **bcrypt** - Password hashing
+- **speakeasy** - 2FA (TOTP)
+- **qrcode** - QR code generation
 
-## 📱 Component Overview
-
-### Core Components
-
-#### `Dashboard.tsx`
-Main dashboard component featuring:
-- Portfolio overview cards showing total value, cash, and P&L
-- Interactive line chart for profit/loss visualization
-- Navigation between different views (accounts, currency)
-- Responsive layout with mobile optimizations
-
-#### `AccountsView.tsx`
-Investment account management with:
-- Account listing with expandable details
-- Individual stock holdings display
-- Profit/loss calculations per account
-- Add/edit account functionality
-
-#### `CurrencyView.tsx`
-Currency exchange tracking featuring:
-- Currency pair monitoring (USD/HKD, EUR/HKD, etc.)
-- Real-time exchange rate display
-- Profit/loss from currency fluctuations
-- Base currency configuration (collapsible)
-
-#### `Sidebar.tsx`
-Navigation sidebar with:
-- Collapsible design for desktop
-- Mobile-friendly overlay mode
-- User profile section
-- Active route highlighting
-- Logout functionality
-
-#### `Login.tsx`
-Authentication interface with:
-- Clean, professional design
-- Feature highlights
-- Responsive layout
-- Brand consistency
-
-### UI Components (`src/components/ui/`)
-
-Built on shadcn/ui, these components provide:
-- Consistent styling and behavior
-- Accessibility compliance
-- Theme integration
-- TypeScript support
-
-## 🚀 Getting Started
+## 📦 Installation
 
 ### Prerequisites
+- Node.js 18+ 
+- npm or yarn
 
-- Node.js (v16 or higher)
-- npm or yarn package manager
-
-### Installation
+### Quick Start
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/investment-track.git
+   git clone <repository-url>
    cd investment-track
    ```
 
@@ -137,93 +80,222 @@ Built on shadcn/ui, these components provide:
    npm install
    ```
 
-3. **Start the development server**
+3. **Set up environment variables**
    ```bash
-   npm run dev
+   # Copy environment files
+   cp server/env.example server/.env
+   cp client/env.example client/.env
+   
+   # Edit server/.env with your configuration
+   JWT_SECRET=your-super-secret-jwt-key
    ```
 
-4. **Open your browser**
-   Navigate to `http://localhost:5173`
+4. **Deploy and start**
+   ```bash
+   # Deploy (installs deps, builds client, migrates DB)
+   ./scripts/deploy.sh
+   
+   # Start development servers
+   ./scripts/start-dev.sh
+   ```
 
-### Build for Production
+5. **Access the application**
+   - Application: http://localhost:3002
+   - Backend API: http://localhost:3002/api
+   - Health check: http://localhost:3002/health
 
+## 🔧 Development
+
+### Development Mode
 ```bash
-npm run build
+# Start both client and server in development mode
+./scripts/start-dev.sh
+# Frontend: http://localhost:5173 (Vite dev server)
+# Backend: http://localhost:3002 (Express server)
 ```
 
-## 🎯 Usage
+### Production Mode
+```bash
+# Deploy everything
+./scripts/deploy.sh
 
-1. **Login**: Start with the login screen to access the dashboard
-2. **Dashboard**: View your portfolio overview and P&L chart
-3. **Accounts**: Manage your investment accounts and holdings
-4. **Currency**: Track currency exchange positions and rates
-5. **Navigation**: Use the collapsible sidebar to switch between views
+# Start production server (single port)
+./scripts/start-production.sh
+# Application: http://localhost:3002
+```
 
-### Mobile Experience
+### Database Management
+```bash
+# Run migrations
+cd server && npx tsx src/database/migrate.ts
 
-- Tap the hamburger menu to open the sidebar
-- Sidebar automatically closes when selecting items
-- Charts are optimized for touch interaction
-- Responsive layouts adapt to screen size
+# Seed with demo data
+cd server && npx tsx src/database/seed.ts
+```
+
+## 🔐 Authentication
+
+### User Registration
+- Email and password registration
+- Password confirmation validation
+- Automatic login after registration
+
+### Two-Factor Authentication (2FA)
+- TOTP-based 2FA using authenticator apps
+- QR code generation for easy setup
+- Backup codes for account recovery
+- Optional 2FA setup after login
+
+### Security Features
+- JWT token authentication
+- Password hashing with bcrypt
+- CORS protection
+- Rate limiting
+- Input validation with Zod
+
+## 📊 API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
+- `POST /api/2fa/setup` - Setup 2FA
+- `POST /api/2fa/verify` - Verify 2FA setup
+- `POST /api/2fa/verify-login` - Verify 2FA during login
+
+### Accounts
+- `GET /api/accounts` - Get user accounts
+- `POST /api/accounts` - Create account
+- `PUT /api/accounts/:id` - Update account
+- `DELETE /api/accounts/:id` - Delete account
+
+### Currency Pairs
+- `GET /api/currencies` - Get currency pairs
+- `POST /api/currencies` - Create currency pair
+- `PUT /api/currencies/:id` - Update currency pair
+- `DELETE /api/currencies/:id` - Delete currency pair
+
+### Performance
+- `GET /api/performance` - Get performance data
+- `POST /api/performance` - Create performance record
+
+## 🗄️ Database Schema
+
+### Users Table
+- `id` - Primary key
+- `email` - Unique email address
+- `password_hash` - Hashed password
+- `name` - User's full name
+- `base_currency` - Default currency (HKD)
+- `two_factor_secret` - 2FA secret key
+- `two_factor_enabled` - 2FA status
+
+### Accounts Table
+- `id` - Primary key
+- `user_id` - Foreign key to users
+- `name` - Account name
+- `currency` - Account currency
+- `original_capital` - Initial investment
+- `current_balance` - Current balance
+
+### Currency Pairs Table
+- `id` - Primary key
+- `user_id` - Foreign key to users
+- `pair` - Currency pair (e.g., USD/HKD)
+- `current_rate` - Current exchange rate
+- `avg_cost` - Average cost basis
+- `amount` - Amount held
+
+## 🚀 Deployment
+
+### Production Deployment
+1. **Set up environment variables**
+   ```bash
+   cp server/env.example server/.env
+   # Edit server/.env with production values
+   ```
+
+2. **Deploy**
+   ```bash
+   ./scripts/deploy.sh
+   ```
+
+3. **Start production server**
+   ```bash
+   ./scripts/start-production.sh
+   ```
+
+### Nginx Configuration
+The project includes a `config/nginx-production.conf` template for serving the client and proxying API requests.
+
+### Systemd Service
+Use `config/investment-tracker.service` to run the application as a system service on Linux.
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
-No environment variables are required for basic functionality. The app uses mock data for demonstration purposes.
-
-### Customization
-
-- **Colors**: Modify `src/index.css` for color scheme changes
-- **Components**: Extend or modify components in `src/components/`
-- **Layout**: Adjust responsive breakpoints in Tailwind config
-
-## 📊 Data Structure
-
-The application uses TypeScript interfaces for type safety:
-
-```typescript
-interface Account {
-  name: string;
-  value: number;
-  cash: number;
-  profitLoss: number;
-  stocks: Stock[];
-}
-
-interface Currency {
-  pair: string;
-  rate: number;
-  avgCost: number;
-  profitLoss: number;
-  amount: number;
-}
+#### Server (.env)
+```bash
+NODE_ENV=production
+PORT=3002
+JWT_SECRET=your-super-secret-jwt-key
+JWT_EXPIRES_IN=7d
+DATABASE_PATH=./data/investment_tracker.db
+CORS_ORIGIN=https://yourdomain.com
 ```
+
+#### Client (.env)
+```bash
+VITE_API_URL=https://yourdomain.com/api
+```
+
+## 📱 Usage
+
+### Getting Started
+1. **Register** a new account
+2. **Set up 2FA** (optional but recommended)
+3. **Add investment accounts** with different currencies
+4. **Track currency pairs** and exchange rates
+5. **Monitor performance** with analytics dashboard
+
+### 2FA Setup
+1. After login, click "Setup 2FA" in the sidebar
+2. Scan the QR code with your authenticator app
+3. Enter the verification code to enable 2FA
+4. Use your authenticator app for future logins
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-## 📝 License
+## 📄 License
 
-This project is open source and available under the [MIT License](LICENSE).
+This project is licensed under the MIT License.
 
-## 🙋‍♂️ Support
+## 🆘 Support
 
-For support, questions, or feature requests:
-- Open an issue on GitHub
-- Contact the development team
+For issues and questions:
+1. Check the documentation
+2. Review the API endpoints
+3. Check the database schema
+4. Open an issue on GitHub
 
-## 🔗 Links
+## 🔄 Updates
 
-- **Live Demo**: [Investment Tracker App](https://your-deployment-url.com)
-- **Documentation**: This README
-- **Repository**: [GitHub Repository](https://github.com/yourusername/investment-track)
+### Recent Changes
+- ✅ Complete 2FA implementation
+- ✅ Database cleanup and organization
+- ✅ Production deployment scripts
+- ✅ Comprehensive documentation
+- ✅ TypeScript type safety
+- ✅ Security improvements
+- ✅ Single port deployment (port 3002)
+- ✅ Static file serving from Express server
 
 ---
 
-Built with ❤️ using [Lovable](https://lovable.dev) - The fastest way to build web applications with AI assistance.
+**Built with ❤️ for investment tracking**

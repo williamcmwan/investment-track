@@ -1,0 +1,22 @@
+[Unit]
+Description=Investment Tracker Server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/path/to/investment-track/server
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=DATABASE_PATH=/path/to/investment-track/server/data/investment_tracker.db
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=investment-tracker
+
+[Install]
+WantedBy=multi-user.target

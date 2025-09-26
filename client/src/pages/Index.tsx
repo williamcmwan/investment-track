@@ -4,22 +4,30 @@ import Dashboard from "@/components/Dashboard";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
-
-  const handleLogin = () => {
-    setIsLoggedIn(true);
-  };
+  const { user, logout, isLoading } = useAuth();
 
   const handleLogout = () => {
-    setIsLoggedIn(false);
+    logout();
   };
 
-  if (!isLoggedIn) {
-    return <Login onLogin={handleLogin} />;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login onLogin={() => {}} />;
   }
 
   return (

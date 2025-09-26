@@ -9,10 +9,22 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Shield,
+  ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useState } from "react";
+import TwoFactorSetup from "./TwoFactorSetup";
+
+interface User {
+  id: number;
+  email: string;
+  name: string;
+  baseCurrency: string;
+  twoFactorEnabled?: boolean;
+}
 
 interface SidebarProps {
   currentView: string;
@@ -22,10 +34,12 @@ interface SidebarProps {
   onToggle: () => void;
   isCollapsed: boolean;
   onCollapse: () => void;
+  user: User | null;
 }
 
-const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isCollapsed, onCollapse }: SidebarProps) => {
+const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isCollapsed, onCollapse, user }: SidebarProps) => {
   const isMobile = useIsMobile();
+  const [showTwoFactorSetup, setShowTwoFactorSetup] = useState(false);
   const menuItems = [
     { id: "overview", label: "Overview", icon: Home },
     { id: "accounts", label: "Accounts", icon: Wallet },
@@ -34,6 +48,20 @@ const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isColl
 
   return (
     <>
+      {/* 2FA Setup Modal */}
+      {showTwoFactorSetup && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <TwoFactorSetup
+            onComplete={() => {
+              setShowTwoFactorSetup(false);
+              // Refresh user data to show updated 2FA status
+              window.location.reload();
+            }}
+            onCancel={() => setShowTwoFactorSetup(false)}
+          />
+        </div>
+      )}
+
       {/* Mobile backdrop */}
       {isMobile && isOpen && (
         <div 
@@ -135,24 +163,45 @@ const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isColl
       {/* User & Logout */}
       <div className={cn("border-t border-border", isCollapsed ? "p-3" : "p-6")}>
         <div className="space-y-3">
-          {!isCollapsed && (
+          {!isCollapsed && user && (
             <div className="flex items-center gap-3 px-3 py-2">
               <div className="h-8 w-8 bg-gradient-primary rounded-full flex items-center justify-center">
-                <span className="text-sm font-medium text-background">JD</span>
+                <span className="text-sm font-medium text-background">
+                  {user.name.charAt(0).toUpperCase()}
+                </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">John Doe</p>
-                <p className="text-xs text-muted-foreground truncate">john@example.com</p>
+                <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
               </div>
             </div>
           )}
           
-          {isCollapsed && (
+          {isCollapsed && user && (
             <div className="flex justify-center mb-3">
               <div className="h-8 w-8 bg-gradient-primary rounded-full flex items-center justify-center">
-                <span className="text-sm font-medium text-background">JD</span>
+                <span className="text-sm font-medium text-background">
+                  {user.name.charAt(0).toUpperCase()}
+                </span>
               </div>
             </div>
+          )}
+
+          {/* 2FA Setup Button */}
+          {!isCollapsed && user && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground hover:bg-background/50 transition-smooth"
+              onClick={() => setShowTwoFactorSetup(true)}
+            >
+              {user.twoFactorEnabled ? (
+                <ShieldCheck className="h-4 w-4 text-green-500" />
+              ) : (
+                <Shield className="h-4 w-4" />
+              )}
+              {user.twoFactorEnabled ? "2FA Enabled" : "Setup 2FA"}
+            </Button>
           )}
           
           <Button
