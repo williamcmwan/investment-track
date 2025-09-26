@@ -34,7 +34,15 @@ const mockData = {
       currentBalance: 125000,
       lastUpdated: "2024-01-15",
       profitLoss: 25000,
-      profitLossPercent: 25
+      profitLossPercent: 25,
+      history: [
+        { date: "2024-01-15", balance: 125000, note: "Current balance" },
+        { date: "2024-01-10", balance: 122000, note: "Weekly update" },
+        { date: "2024-01-05", balance: 118000, note: "Portfolio rebalance" },
+        { date: "2024-01-01", balance: 115000, note: "New year update" },
+        { date: "2023-12-20", balance: 110000, note: "Year-end position" },
+        { date: "2023-12-01", balance: 100000, note: "Initial deposit" }
+      ]
     },
     {
       id: 2,
@@ -44,7 +52,13 @@ const mockData = {
       currentBalance: 85000,
       lastUpdated: "2024-01-14",
       profitLoss: 5000,
-      profitLossPercent: 6.25
+      profitLossPercent: 6.25,
+      history: [
+        { date: "2024-01-14", balance: 85000, note: "Current balance" },
+        { date: "2024-01-08", balance: 83500, note: "Market adjustment" },
+        { date: "2024-01-02", balance: 82000, note: "New year position" },
+        { date: "2023-12-15", balance: 80000, note: "Initial deposit" }
+      ]
     },
     {
       id: 3,
@@ -54,7 +68,13 @@ const mockData = {
       currentBalance: 485000,
       lastUpdated: "2024-01-15",
       profitLoss: -15000,
-      profitLossPercent: -3
+      profitLossPercent: -3,
+      history: [
+        { date: "2024-01-15", balance: 485000, note: "Current balance" },
+        { date: "2024-01-12", balance: 490000, note: "Market volatility" },
+        { date: "2024-01-08", balance: 495000, note: "Weekly review" },
+        { date: "2024-01-01", balance: 500000, note: "Initial deposit" }
+      ]
     }
   ],
   currencies: [

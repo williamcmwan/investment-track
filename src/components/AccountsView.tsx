@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   PlusCircle, 
   Edit, 
@@ -14,7 +15,10 @@ import {
   DollarSign,
   Calendar,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  ChevronDown,
+  ChevronUp,
+  History
 } from "lucide-react";
 
 interface Account {
@@ -26,6 +30,11 @@ interface Account {
   lastUpdated: string;
   profitLoss: number;
   profitLossPercent: number;
+  history: Array<{
+    date: string;
+    balance: number;
+    note: string;
+  }>;
 }
 
 interface AccountsViewProps {
@@ -35,6 +44,7 @@ interface AccountsViewProps {
 const AccountsView = ({ accounts }: AccountsViewProps) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set());
 
   const formatCurrency = (amount: number, currency = "HKD") => {
     return new Intl.NumberFormat("en-HK", {
@@ -58,6 +68,26 @@ const AccountsView = ({ accounts }: AccountsViewProps) => {
       JPY: "🇯🇵"
     };
     return flags[currency as keyof typeof flags] || "💰";
+  };
+
+  const toggleAccountExpansion = (accountId: number) => {
+    setExpandedAccounts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(accountId)) {
+        newSet.delete(accountId);
+      } else {
+        newSet.add(accountId);
+      }
+      return newSet;
+    });
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-GB", {
+      year: "numeric",
+      month: "short", 
+      day: "numeric"
+    });
   };
 
   const AddAccountDialog = () => (
@@ -281,6 +311,52 @@ const AccountsView = ({ accounts }: AccountsViewProps) => {
                 </div>
               </div>
             </CardContent>
+            
+            {/* Expandable History Section */}
+            <Collapsible open={expandedAccounts.has(account.id)} onOpenChange={() => toggleAccountExpansion(account.id)}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full flex items-center justify-center gap-2 py-3 border-t border-border hover:bg-background/50 transition-smooth"
+                >
+                  <History className="h-4 w-4" />
+                  <span className="text-sm">Balance History</span>
+                  {expandedAccounts.has(account.id) ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="border-t border-border">
+                <div className="p-4 space-y-3">
+                  {account.history
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .map((entry, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between py-2 px-3 bg-background/30 rounded-lg hover:bg-background/50 transition-smooth"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-2 w-2 bg-primary rounded-full"></div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              {formatCurrency(entry.balance, account.currency)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{entry.note}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-muted-foreground">{formatDate(entry.date)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            ≈ {formatCurrency(entry.balance * 7.8)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </Card>
         ))}
       </div>
