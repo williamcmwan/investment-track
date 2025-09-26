@@ -172,8 +172,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           <CardDescription>Investment vs Currency performance</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-background/30 rounded-lg">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+            <div className="flex items-center gap-3 mr-auto">
               <BarChart3 className="h-5 w-5 text-primary" />
               <div>
                 <p className="font-medium text-foreground">Investment P&L</p>
@@ -190,8 +190,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-background/30 rounded-lg">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+            <div className="flex items-center gap-3 mr-auto">
               <ArrowLeftRight className="h-5 w-5 text-primary" />
               <div>
                 <p className="font-medium text-foreground">Currency P&L</p>
@@ -225,8 +225,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         <CardContent>
           <div className="space-y-4">
             {mockData.accounts.slice(0, 3).map((account) => (
-              <div key={account.id} className="flex items-center justify-between p-4 bg-background/30 rounded-lg">
-                <div className="flex items-center gap-3">
+              <div key={account.id} className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+                <div className="flex items-center gap-3 mr-auto">
                   <div className="p-2 bg-primary/20 rounded-lg">
                     <DollarSign className="h-4 w-4 text-primary" />
                   </div>
@@ -241,7 +241,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                   <p className="font-medium text-foreground">
                     {formatCurrency(account.currentBalance, account.currency)}
                   </p>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center justify-end gap-1">
                     {account.profitLoss > 0 ? (
                       <ArrowUpRight className="h-4 w-4 text-profit" />
                     ) : (
