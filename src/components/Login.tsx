@@ -42,7 +42,7 @@ const Login = ({ onLogin }: LoginProps) => {
           </CardHeader>
           
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mx-6">
+            <TabsList className="grid grid-cols-2 w-48 mx-auto">
               <TabsTrigger value="login">Login</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>
