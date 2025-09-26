@@ -234,23 +234,42 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
   };
 
   const calculateProfitLoss = (currency: CurrencyPair) => {
+    const [fromCurrency, toCurrency] = currency.pair.split('/');
+    
+    // Calculate current value and cost basis in the original pair's target currency
     const currentValue = currency.amount * currency.currentRate;
     const costBasis = currency.amount * currency.avgCost;
-    return currentValue - costBasis;
+    const profitLossInOriginalCurrency = currentValue - costBasis;
+    
+    // Convert profit/loss to base currency
+    if (toCurrency === baseCurrency) {
+      // Already in base currency
+      return profitLossInOriginalCurrency;
+    } else if (fromCurrency === baseCurrency) {
+      // The profit/loss is in the target currency, need to convert to base currency
+      // Use the inverse of the current rate to convert from target currency to base currency
+      return profitLossInOriginalCurrency / currency.currentRate;
+    } else {
+      // For cross-currency pairs, we need to convert to base currency
+      // This is a simplified approach - in reality we'd need the rate from toCurrency to baseCurrency
+      return profitLossInOriginalCurrency;
+    }
   };
 
   const calculateCurrentTotalInBaseCurrency = (currency: CurrencyPair) => {
-    // If the currency pair is already in the base currency, return the amount directly
     const [fromCurrency, toCurrency] = currency.pair.split('/');
+    
     if (toCurrency === baseCurrency) {
+      // Already in base currency
+      return currency.amount * currency.currentRate;
+    } else if (fromCurrency === baseCurrency) {
+      // Convert from base currency to target currency
+      return currency.amount;
+    } else {
+      // For cross-currency pairs, we need to convert to base currency
+      // This is a simplified approach - in reality we'd need the rate from toCurrency to baseCurrency
       return currency.amount * currency.currentRate;
     }
-    // If from currency is the base currency, convert the amount
-    if (fromCurrency === baseCurrency) {
-      return currency.amount;
-    }
-    // For other cases, convert through the current rate
-    return currency.amount * currency.currentRate;
   };
 
   const totalProfitLoss = currencies.reduce((sum, curr) => sum + calculateProfitLoss(curr), 0);
