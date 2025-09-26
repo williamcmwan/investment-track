@@ -79,12 +79,4 @@ export class UserModel {
     return userWithoutPassword as User;
   }
   
-  static async updateBaseCurrency(id: number, baseCurrency: string): Promise<User | null> {
-    await dbRun(
-      'UPDATE users SET base_currency = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [baseCurrency, id]
-    );
-    
-    return await this.findById(id);
-  }
 }

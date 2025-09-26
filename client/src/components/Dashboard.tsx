@@ -112,7 +112,7 @@ interface DashboardProps {
 const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) => {
   const [currentView, setCurrentView] = useState("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [baseCurrency, setBaseCurrency] = useState("HKD");
+  const baseCurrency = "HKD"; // Fixed base currency
   const [isRefreshingRates, setIsRefreshingRates] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -522,7 +522,6 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           {currentView === "currency" && (
             <CurrencyView 
               baseCurrency={baseCurrency}
-              onBaseCurrencyChange={setBaseCurrency}
             />
           )}
         </div>

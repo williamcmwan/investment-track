@@ -17,7 +17,6 @@ import {
   ArrowDownRight,
   RefreshCw,
   ArrowLeftRight,
-  Settings,
   Trash2,
   Loader2
 } from "lucide-react";
@@ -34,13 +33,11 @@ interface CurrencyPair {
 
 interface CurrencyViewProps {
   baseCurrency: string;
-  onBaseCurrencyChange: (currency: string) => void;
 }
 
-const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps) => {
+const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
   const [currencies, setCurrencies] = useState<CurrencyPair[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [showBaseCurrencySettings, setShowBaseCurrencySettings] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [popularPairs, setPopularPairs] = useState<string[]>([]);
@@ -58,16 +55,6 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
     loadCurrencies();
     loadPopularPairs();
   }, []);
-
-  // Reload popular pairs when base currency changes
-  useEffect(() => {
-    loadPopularPairs();
-  }, [baseCurrency]);
-
-  // Reload currencies when base currency changes to get updated rates
-  useEffect(() => {
-    loadCurrencies();
-  }, [baseCurrency]);
 
   const loadCurrencies = async () => {
     try {
@@ -357,41 +344,6 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
 
   return (
     <div className="space-y-6">
-      {/* Base Currency Settings - Collapsible */}
-      {showBaseCurrencySettings && (
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader>
-            <CardTitle className="text-foreground">Base Currency Settings</CardTitle>
-            <CardDescription>
-              Set your base currency for portfolio calculations and reporting
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="space-y-2 flex-1">
-                <Label htmlFor="base-currency">Base Currency</Label>
-                <Select value={baseCurrency} onValueChange={onBaseCurrencyChange}>
-                  <SelectTrigger className="bg-background/50 w-full sm:w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="HKD">🇭🇰 HKD - Hong Kong Dollar</SelectItem>
-                    <SelectItem value="USD">🇺🇸 USD - US Dollar</SelectItem>
-                    <SelectItem value="EUR">🇪🇺 EUR - Euro</SelectItem>
-                    <SelectItem value="GBP">🇬🇧 GBP - British Pound</SelectItem>
-                    <SelectItem value="CAD">🇨🇦 CAD - Canadian Dollar</SelectItem>
-                    <SelectItem value="SGD">🇸🇬 SGD - Singapore Dollar</SelectItem>
-                    <SelectItem value="JPY">🇯🇵 JPY - Japanese Yen</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                All portfolio totals and P&L will be displayed in {baseCurrency}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
         <Button 
@@ -406,14 +358,6 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
             <RefreshCw className="h-4 w-4 mr-2" />
           )}
           Refresh Rates
-        </Button>
-        <Button 
-          variant="outline" 
-          className="border-primary text-primary hover:bg-primary/10"
-          onClick={() => setShowBaseCurrencySettings(!showBaseCurrencySettings)}
-        >
-          <Settings className="h-4 w-4 mr-2" />
-          Base Currency
         </Button>
         <AddCurrencyDialog />
       </div>
