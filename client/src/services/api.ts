@@ -167,8 +167,8 @@ class ApiClient {
     });
   }
 
-  async getPopularPairs() {
-    return this.request<string[]>('/currencies/popular-pairs');
+  async getPopularPairs(baseCurrency: string = 'HKD') {
+    return this.request<string[]>(`/currencies/popular-pairs?baseCurrency=${baseCurrency}`);
   }
 
   async getExchangeRate(pair: string) {

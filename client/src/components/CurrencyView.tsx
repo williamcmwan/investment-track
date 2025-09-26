@@ -59,6 +59,11 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
     loadPopularPairs();
   }, []);
 
+  // Reload popular pairs when base currency changes
+  useEffect(() => {
+    loadPopularPairs();
+  }, [baseCurrency]);
+
   const loadCurrencies = async () => {
     try {
       setIsLoading(true);
@@ -87,7 +92,7 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
 
   const loadPopularPairs = async () => {
     try {
-      const response = await apiClient.getPopularPairs();
+      const response = await apiClient.getPopularPairs(baseCurrency);
       if (response.data) {
         setPopularPairs(response.data);
       }

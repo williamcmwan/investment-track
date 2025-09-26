@@ -185,15 +185,30 @@ export class ExchangeRateService {
   }
 
   /**
-   * Get popular currency pairs for suggestions
+   * Get popular currency pairs for suggestions based on base currency
    */
-  static getPopularPairs(): string[] {
-    return [
-      'USD/HKD', 'USD/EUR', 'USD/GBP', 'USD/JPY', 'USD/CAD', 'USD/AUD',
-      'EUR/HKD', 'EUR/USD', 'EUR/GBP', 'EUR/JPY',
-      'GBP/HKD', 'GBP/USD', 'GBP/EUR', 'GBP/JPY',
-      'HKD/USD', 'HKD/EUR', 'HKD/GBP', 'HKD/JPY',
-      'JPY/USD', 'JPY/EUR', 'JPY/GBP', 'JPY/HKD'
-    ];
+  static getPopularPairs(baseCurrency: string = 'HKD'): string[] {
+    const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'SGD', 'HKD'];
+    const pairs: string[] = [];
+    
+    // Generate pairs with base currency as target
+    currencies.forEach(currency => {
+      if (currency !== baseCurrency) {
+        pairs.push(`${currency}/${baseCurrency}`);
+      }
+    });
+    
+    // Add some reverse pairs for common currencies
+    if (baseCurrency !== 'USD') {
+      pairs.push(`${baseCurrency}/USD`);
+    }
+    if (baseCurrency !== 'EUR') {
+      pairs.push(`${baseCurrency}/EUR`);
+    }
+    if (baseCurrency !== 'GBP') {
+      pairs.push(`${baseCurrency}/GBP`);
+    }
+    
+    return pairs;
   }
 }

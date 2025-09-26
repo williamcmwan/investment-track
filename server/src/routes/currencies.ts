@@ -6,6 +6,19 @@ import { ExchangeRateService } from '../services/exchangeRateService.js';
 
 const router = express.Router();
 
+// Get popular currency pairs (public endpoint - no auth required)
+router.get('/popular-pairs', async (req, res) => {
+  try {
+    // Get user's base currency from query parameter or default to HKD
+    const baseCurrency = req.query.baseCurrency as string || 'HKD';
+    const popularPairs = ExchangeRateService.getPopularPairs(baseCurrency);
+    return res.json(popularPairs);
+  } catch (error) {
+    console.error('Get popular pairs error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Apply authentication to all routes
 router.use(authenticateToken);
 
@@ -139,17 +152,6 @@ router.post('/update-rates', async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     console.error('Update exchange rates error:', error);
     return res.status(500).json({ error: 'Failed to update exchange rates' });
-  }
-});
-
-// Get popular currency pairs
-router.get('/popular-pairs', async (req: AuthenticatedRequest, res) => {
-  try {
-    const popularPairs = ExchangeRateService.getPopularPairs();
-    return res.json(popularPairs);
-  } catch (error) {
-    console.error('Get popular pairs error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
