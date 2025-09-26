@@ -105,20 +105,25 @@ const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isColl
           {menuItems.map((item) => {
             const Icon = item.icon;
             return (
-              <Button
-                key={item.id}
-                variant={currentView === item.id ? "default" : "ghost"}
-                size={isCollapsed ? "icon" : "default"}
-                className={cn(
-                  "transition-smooth",
-                  isCollapsed ? "w-10 h-10" : "w-full justify-start gap-3",
-                  currentView === item.id 
-                    ? "bg-gradient-primary text-background shadow-elegant" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                )}
-                onClick={() => onViewChange(item.id)}
-                title={isCollapsed ? item.label : undefined}
-              >
+                <Button
+                  key={item.id}
+                  variant={currentView === item.id ? "default" : "ghost"}
+                  size={isCollapsed ? "icon" : "default"}
+                  className={cn(
+                    "transition-smooth",
+                    isCollapsed ? "w-10 h-10" : "w-full justify-start gap-3",
+                    currentView === item.id 
+                      ? "bg-gradient-primary text-background shadow-elegant" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                  )}
+                  onClick={() => {
+                    onViewChange(item.id);
+                    if (isMobile && isOpen) {
+                      onToggle();
+                    }
+                  }}
+                  title={isCollapsed ? item.label : undefined}
+                >
                 <Icon className="h-4 w-4" />
                 {!isCollapsed && item.label}
               </Button>
