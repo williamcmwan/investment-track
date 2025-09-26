@@ -64,6 +64,11 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
     loadPopularPairs();
   }, [baseCurrency]);
 
+  // Reload currencies when base currency changes to get updated rates
+  useEffect(() => {
+    loadCurrencies();
+  }, [baseCurrency]);
+
   const loadCurrencies = async () => {
     try {
       setIsLoading(true);
@@ -234,7 +239,22 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
     return currentValue - costBasis;
   };
 
+  const calculateCurrentTotalInBaseCurrency = (currency: CurrencyPair) => {
+    // If the currency pair is already in the base currency, return the amount directly
+    const [fromCurrency, toCurrency] = currency.pair.split('/');
+    if (toCurrency === baseCurrency) {
+      return currency.amount * currency.currentRate;
+    }
+    // If from currency is the base currency, convert the amount
+    if (fromCurrency === baseCurrency) {
+      return currency.amount;
+    }
+    // For other cases, convert through the current rate
+    return currency.amount * currency.currentRate;
+  };
+
   const totalProfitLoss = currencies.reduce((sum, curr) => sum + calculateProfitLoss(curr), 0);
+  const totalAmountInBaseCurrency = currencies.reduce((sum, curr) => sum + calculateCurrentTotalInBaseCurrency(curr), 0);
 
   const AddCurrencyDialog = () => (
     <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -416,9 +436,9 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">
-              {formatCurrency(currencies.reduce((sum, curr) => sum + (curr.amount * curr.currentRate), 0))}
+              {formatCurrency(totalAmountInBaseCurrency)}
             </div>
-            <p className="text-xs text-muted-foreground">Total amount in foreign currencies</p>
+            <p className="text-xs text-muted-foreground">Total amount in {baseCurrency}</p>
           </CardContent>
         </Card>
       </div>
@@ -482,7 +502,7 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div className="space-y-2">
                       <p className="text-sm text-muted-foreground">Current Rate</p>
                       <p className="text-lg font-semibold text-foreground">
@@ -517,6 +537,16 @@ const CurrencyView = ({ baseCurrency, onBaseCurrencyChange }: CurrencyViewProps)
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Total foreign currency held
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Current Total ({baseCurrency})</p>
+                      <p className="text-lg font-semibold text-foreground">
+                        {formatCurrency(calculateCurrentTotalInBaseCurrency(currency))}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Current value in {baseCurrency}
                       </p>
                     </div>
                     
