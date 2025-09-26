@@ -110,12 +110,21 @@ interface DashboardProps {
 }
 
 const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) => {
-  const [currentView, setCurrentView] = useState("overview");
+  // Initialize currentView from localStorage or default to "overview"
+  const [currentView, setCurrentView] = useState(() => {
+    const savedView = localStorage.getItem('dashboard-current-view');
+    return savedView || "overview";
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const baseCurrency = user?.baseCurrency || "HKD"; // Use user's base currency
   const [isRefreshingRates, setIsRefreshingRates] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
+  const baseCurrency = user?.baseCurrency || "HKD"; // Use user's base currency
+
+  // Update localStorage whenever currentView changes
+  useEffect(() => {
+    localStorage.setItem('dashboard-current-view', currentView);
+  }, [currentView]);
 
 
   // Function to refresh with enhanced accuracy (multiple sources) - silent
