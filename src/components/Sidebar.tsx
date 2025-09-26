@@ -71,7 +71,7 @@ const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isColl
                 <TrendingUp className="h-5 w-5 text-background" />
               </div>
               {!isCollapsed && (
-                <span className="text-lg font-bold text-foreground">InvestTracker</span>
+                <span className="text-lg font-bold text-foreground">Investment Tracker</span>
               )}
             </div>
             <div className="flex items-center gap-1">
