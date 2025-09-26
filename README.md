@@ -1,73 +1,229 @@
-# Welcome to your Lovable project
+# Investment Tracker
 
-## Project info
+A comprehensive investment portfolio tracking application built with React, TypeScript, and Tailwind CSS. Track your investment accounts, currency exchanges, and portfolio performance with real-time data visualization.
 
-**URL**: https://lovable.dev/projects/0f345264-65a3-4e3b-bdbf-b1c6a6ca71b9
+![Investment Tracker Dashboard](https://via.placeholder.com/800x400/0ea5e9/ffffff?text=Investment+Tracker+Dashboard)
 
-## How can I edit this code?
+## 🚀 Features
 
-There are several ways of editing your application.
+- **Multi-Account Portfolio Tracking**: Monitor multiple investment accounts with detailed breakdowns
+- **Currency Exchange Management**: Track currency pairs and exchange rate fluctuations
+- **Real-time P&L Visualization**: Interactive charts showing profit/loss over time
+- **Responsive Design**: Optimized for both desktop and mobile devices
+- **Collapsible Sidebar**: Clean navigation with mobile-friendly hamburger menu
+- **Multi-Currency Support**: Set your base currency and track foreign exchange positions
+- **Dark/Light Mode**: Adaptive UI theme support
 
-**Use Lovable**
+## 🛠️ Technology Stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/0f345264-65a3-4e3b-bdbf-b1c6a6ca71b9) and start prompting.
+- **Frontend Framework**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS with custom design tokens
+- **UI Components**: shadcn/ui component library
+- **Charts**: Recharts for data visualization
+- **Routing**: React Router DOM
+- **State Management**: React hooks and context
+- **Icons**: Lucide React
+- **Development**: ESLint for code quality
 
-Changes made via Lovable will be committed automatically to this repo.
+## 📁 Project Structure
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+src/
+├── components/
+│   ├── ui/                    # Reusable UI components (shadcn/ui)
+│   │   ├── button.tsx         # Button component with variants
+│   │   ├── card.tsx          # Card container component
+│   │   ├── dialog.tsx        # Modal dialog component
+│   │   ├── input.tsx         # Form input component
+│   │   ├── select.tsx        # Dropdown select component
+│   │   ├── sidebar.tsx       # Sidebar navigation component
+│   │   └── ...               # Other UI primitives
+│   ├── AccountsView.tsx      # Investment accounts management
+│   ├── CurrencyView.tsx      # Currency exchange tracking
+│   ├── Dashboard.tsx         # Main dashboard with charts and overview
+│   ├── Login.tsx            # Authentication/login interface
+│   └── Sidebar.tsx          # Main navigation sidebar
+├── pages/
+│   ├── Index.tsx            # Main application page
+│   └── NotFound.tsx         # 404 error page
+├── hooks/
+│   ├── use-mobile.tsx       # Mobile device detection hook
+│   └── use-toast.ts         # Toast notification hook
+├── lib/
+│   └── utils.ts             # Utility functions and helpers
+├── App.tsx                  # Root application component
+├── main.tsx                 # Application entry point
+├── index.css               # Global styles and design tokens
+└── vite-env.d.ts          # Vite environment type definitions
 ```
 
-**Edit a file directly in GitHub**
+## 🎨 Design System
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+The application uses a comprehensive design system with semantic color tokens:
 
-**Use GitHub Codespaces**
+- **Primary Colors**: Brand blue with gradient variants
+- **Semantic Colors**: Success (green), warning (yellow), destructive (red)
+- **Surface Colors**: Background, card, and border variants
+- **Typography**: Consistent font scaling and weights
+- **Spacing**: Standardized spacing scale
+- **Shadows**: Elegant shadow system with primary color integration
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## 📱 Component Overview
 
-## What technologies are used for this project?
+### Core Components
 
-This project is built with:
+#### `Dashboard.tsx`
+Main dashboard component featuring:
+- Portfolio overview cards showing total value, cash, and P&L
+- Interactive line chart for profit/loss visualization
+- Navigation between different views (accounts, currency)
+- Responsive layout with mobile optimizations
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+#### `AccountsView.tsx`
+Investment account management with:
+- Account listing with expandable details
+- Individual stock holdings display
+- Profit/loss calculations per account
+- Add/edit account functionality
 
-## How can I deploy this project?
+#### `CurrencyView.tsx`
+Currency exchange tracking featuring:
+- Currency pair monitoring (USD/HKD, EUR/HKD, etc.)
+- Real-time exchange rate display
+- Profit/loss from currency fluctuations
+- Base currency configuration (collapsible)
 
-Simply open [Lovable](https://lovable.dev/projects/0f345264-65a3-4e3b-bdbf-b1c6a6ca71b9) and click on Share -> Publish.
+#### `Sidebar.tsx`
+Navigation sidebar with:
+- Collapsible design for desktop
+- Mobile-friendly overlay mode
+- User profile section
+- Active route highlighting
+- Logout functionality
 
-## Can I connect a custom domain to my Lovable project?
+#### `Login.tsx`
+Authentication interface with:
+- Clean, professional design
+- Feature highlights
+- Responsive layout
+- Brand consistency
 
-Yes, you can!
+### UI Components (`src/components/ui/`)
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Built on shadcn/ui, these components provide:
+- Consistent styling and behavior
+- Accessibility compliance
+- Theme integration
+- TypeScript support
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js (v16 or higher)
+- npm or yarn package manager
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/investment-track.git
+   cd investment-track
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Start the development server**
+   ```bash
+   npm run dev
+   ```
+
+4. **Open your browser**
+   Navigate to `http://localhost:5173`
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+## 🎯 Usage
+
+1. **Login**: Start with the login screen to access the dashboard
+2. **Dashboard**: View your portfolio overview and P&L chart
+3. **Accounts**: Manage your investment accounts and holdings
+4. **Currency**: Track currency exchange positions and rates
+5. **Navigation**: Use the collapsible sidebar to switch between views
+
+### Mobile Experience
+
+- Tap the hamburger menu to open the sidebar
+- Sidebar automatically closes when selecting items
+- Charts are optimized for touch interaction
+- Responsive layouts adapt to screen size
+
+## 🔧 Configuration
+
+### Environment Variables
+
+No environment variables are required for basic functionality. The app uses mock data for demonstration purposes.
+
+### Customization
+
+- **Colors**: Modify `src/index.css` for color scheme changes
+- **Components**: Extend or modify components in `src/components/`
+- **Layout**: Adjust responsive breakpoints in Tailwind config
+
+## 📊 Data Structure
+
+The application uses TypeScript interfaces for type safety:
+
+```typescript
+interface Account {
+  name: string;
+  value: number;
+  cash: number;
+  profitLoss: number;
+  stocks: Stock[];
+}
+
+interface Currency {
+  pair: string;
+  rate: number;
+  avgCost: number;
+  profitLoss: number;
+  amount: number;
+}
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📝 License
+
+This project is open source and available under the [MIT License](LICENSE).
+
+## 🙋‍♂️ Support
+
+For support, questions, or feature requests:
+- Open an issue on GitHub
+- Contact the development team
+
+## 🔗 Links
+
+- **Live Demo**: [Investment Tracker App](https://your-deployment-url.com)
+- **Documentation**: This README
+- **Repository**: [GitHub Repository](https://github.com/yourusername/investment-track)
+
+---
+
+Built with ❤️ using [Lovable](https://lovable.dev) - The fastest way to build web applications with AI assistance.
