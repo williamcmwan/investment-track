@@ -172,19 +172,12 @@ const CurrencyView = ({ currencies }: CurrencyViewProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl md:text-2xl font-bold text-foreground">Currency Exchange</h2>
-          <p className="text-muted-foreground">Track exchange rates and currency profit/loss</p>
-        </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-          <Button variant="outline" className="border-primary text-primary hover:bg-primary/10">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh Rates
-          </Button>
-          <AddCurrencyDialog />
-        </div>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+        <Button variant="outline" className="border-primary text-primary hover:bg-primary/10">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh Rates
+        </Button>
+        <AddCurrencyDialog />
       </div>
 
       {/* Summary Cards */}

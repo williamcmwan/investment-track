@@ -170,14 +170,7 @@ const AccountsView = ({ accounts }: AccountsViewProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl md:text-2xl font-bold text-foreground">Investment Accounts</h2>
-          <p className="text-muted-foreground">Manage your broker accounts and track performance</p>
-        </div>
-        <AddAccountDialog />
-      </div>
+      <AddAccountDialog />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
