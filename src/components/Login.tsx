@@ -71,11 +71,11 @@ const Login = ({ onLogin }: LoginProps) => {
                     />
                   </div>
                 </CardContent>
-                <CardFooter className="px-6 pb-6">
+                <CardFooter className="px-6 pb-4 pt-2">
                   <Button 
                     type="submit" 
                     size="sm"
-                    className="w-full bg-gradient-primary hover:opacity-90 transition-smooth"
+                    className="w-full h-8 bg-gradient-primary hover:opacity-90 transition-smooth text-sm"
                     disabled={isLoading}
                   >
                     {isLoading ? "Signing in..." : "Sign In"}
@@ -118,11 +118,11 @@ const Login = ({ onLogin }: LoginProps) => {
                     />
                   </div>
                 </CardContent>
-                <CardFooter className="px-6 pb-6">
+                <CardFooter className="px-6 pb-4 pt-2">
                   <Button 
                     type="submit" 
                     size="sm"
-                    className="w-full bg-gradient-primary hover:opacity-90 transition-smooth"
+                    className="w-full h-8 bg-gradient-primary hover:opacity-90 transition-smooth text-sm"
                     disabled={isLoading}
                   >
                     {isLoading ? "Creating account..." : "Create Account"}
