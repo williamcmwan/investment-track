@@ -60,7 +60,14 @@ const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isColl
         <div className={cn("border-b border-border", isCollapsed ? "p-3" : "p-6")}>
           <div className="flex items-center justify-between">
             <div className={cn("flex items-center", isCollapsed ? "justify-center" : "gap-2")}>
-              <div className="p-2 bg-gradient-primary rounded-lg">
+              <div 
+                className={cn(
+                  "p-2 bg-gradient-primary rounded-lg transition-smooth",
+                  isCollapsed && !isMobile ? "cursor-pointer hover:opacity-80" : ""
+                )}
+                onClick={isCollapsed && !isMobile ? onCollapse : undefined}
+                title={isCollapsed ? "Expand sidebar" : undefined}
+              >
                 <TrendingUp className="h-5 w-5 text-background" />
               </div>
               {!isCollapsed && (
@@ -68,14 +75,14 @@ const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isColl
               )}
             </div>
             <div className="flex items-center gap-1">
-              {!isMobile && (
+              {!isMobile && !isCollapsed && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={onCollapse}
                   className="text-foreground hover:bg-background/50"
                 >
-                  {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                  <ChevronLeft className="h-4 w-4" />
                 </Button>
               )}
               {isMobile && (
