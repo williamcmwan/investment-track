@@ -19,39 +19,101 @@ interface CurrencyPair {
 }
 
 export class EnhancedExchangeRateService {
-  private static readonly CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
-  private static readonly FORCE_UPDATE_DURATION = 30 * 60 * 1000; // 30 minutes
-
-  // Multiple API sources for better accuracy
-  private static readonly API_SOURCES = [
-    {
-      name: 'exchangerate-api',
-      url: 'https://api.exchangerate-api.com/v4/latest/USD',
-      weight: 0.4 // 40% weight
-    },
-    {
-      name: 'currencyapi',
-      url: 'https://api.currencyapi.com/v3/latest?apikey=YOUR_API_KEY&base=USD',
-      weight: 0.3 // 30% weight (requires API key)
-    },
-    {
-      name: 'fixer',
-      url: 'http://data.fixer.io/api/latest?access_key=YOUR_API_KEY&base=USD',
-      weight: 0.3 // 30% weight (requires API key)
-    }
-  ];
+  private static readonly YAHOO_FINANCE_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
+  private static readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes (Yahoo Finance updates frequently)
+  private static readonly FORCE_UPDATE_DURATION = 15 * 60 * 1000; // 15 minutes
 
   /**
-   * Fetch exchange rates from multiple sources and calculate weighted average
+   * Fetch exchange rate from Yahoo Finance for a specific currency pair
+   */
+  static async fetchYahooFinanceRate(fromCurrency: string, toCurrency: string): Promise<number> {
+    try {
+      // Yahoo Finance uses symbols like "USDHKD=X" for USD/HKD
+      const symbol = `${fromCurrency}${toCurrency}=X`;
+      const url = `${this.YAHOO_FINANCE_BASE}/${symbol}`;
+      
+      console.log(`Fetching ${fromCurrency}/${toCurrency} rate from Yahoo Finance...`);
+      
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Yahoo Finance API request failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
+        throw new Error('Invalid Yahoo Finance response format');
+      }
+      
+      const result = data.chart.result[0];
+      const meta = result.meta;
+      
+      if (!meta || typeof meta.regularMarketPrice !== 'number') {
+        throw new Error('No valid price data from Yahoo Finance');
+      }
+      
+      const rate = meta.regularMarketPrice;
+      console.log(`Successfully fetched ${fromCurrency}/${toCurrency} rate: ${rate}`);
+      return rate;
+    } catch (error) {
+      console.error(`Error fetching ${fromCurrency}/${toCurrency} from Yahoo Finance:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch exchange rates from Yahoo Finance with fallbacks for enhanced accuracy
    */
   static async fetchLatestRates(): Promise<Record<string, number>> {
     try {
-      console.log('Fetching latest exchange rates from multiple sources...');
+      console.log('Fetching latest exchange rates from Yahoo Finance with fallbacks...');
       
       const rates: Record<string, number> = {};
       const sourceResults: Array<{ source: string; rates: Record<string, number>; weight: number }> = [];
 
-      // Try to fetch from exchangerate-api (free, no key required)
+      // Primary source: Yahoo Finance for major pairs
+      const yahooPairs = [
+        { from: 'USD', to: 'HKD' },
+        { from: 'USD', to: 'EUR' },
+        { from: 'USD', to: 'GBP' },
+        { from: 'USD', to: 'JPY' },
+        { from: 'USD', to: 'CAD' },
+        { from: 'USD', to: 'AUD' },
+        { from: 'USD', to: 'SGD' },
+        { from: 'EUR', to: 'HKD' },
+        { from: 'GBP', to: 'HKD' },
+        { from: 'JPY', to: 'HKD' }
+      ];
+
+      const yahooRates: Record<string, number> = {};
+      let yahooSuccessCount = 0;
+
+      for (const pair of yahooPairs) {
+        try {
+          const rate = await this.fetchYahooFinanceRate(pair.from, pair.to);
+          yahooRates[`${pair.from}/${pair.to}`] = rate;
+          yahooRates[`${pair.to}/${pair.from}`] = 1 / rate;
+          yahooSuccessCount++;
+        } catch (error) {
+          console.warn(`Yahoo Finance failed for ${pair.from}/${pair.to}:`, error);
+        }
+      }
+
+      if (yahooSuccessCount > 0) {
+        sourceResults.push({
+          source: 'yahoo-finance',
+          rates: yahooRates,
+          weight: 0.7 // High weight for Yahoo Finance
+        });
+        console.log(`✅ Yahoo Finance: ${yahooSuccessCount} pairs successful`);
+      }
+
+      // Fallback source: exchangerate-api
       try {
         const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
         if (response.ok) {
@@ -60,41 +122,13 @@ export class EnhancedExchangeRateService {
             sourceResults.push({
               source: 'exchangerate-api',
               rates: data.rates,
-              weight: 0.6 // Higher weight for free source
+              weight: 0.3 // Lower weight for fallback
             });
             console.log('✅ exchangerate-api: Success');
           }
         }
       } catch (error) {
         console.log('❌ exchangerate-api: Failed', error);
-      }
-
-      // Try to fetch from a backup free source
-      try {
-        const response = await fetch('https://api.exchangerate-api.com/v4/latest/EUR');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.rates) {
-            // Convert EUR-based rates to USD-based
-            const eurToUsd = 1 / data.rates.USD;
-            const convertedRates: Record<string, number> = {};
-            Object.keys(data.rates).forEach(currency => {
-              if (currency !== 'EUR') {
-                convertedRates[currency] = data.rates[currency] * eurToUsd;
-              }
-            });
-            convertedRates.USD = 1;
-            
-            sourceResults.push({
-              source: 'exchangerate-api-eur',
-              rates: convertedRates,
-              weight: 0.4 // Lower weight for converted rates
-            });
-            console.log('✅ exchangerate-api-eur: Success');
-          }
-        }
-      } catch (error) {
-        console.log('❌ exchangerate-api-eur: Failed', error);
       }
 
       if (sourceResults.length === 0) {
@@ -125,6 +159,7 @@ export class EnhancedExchangeRateService {
 
       console.log(`✅ Successfully fetched rates from ${sourceResults.length} sources`);
       console.log(`📊 Calculated weighted average for ${Object.keys(rates).length} currencies`);
+      console.log(`🎯 Yahoo Finance accuracy: ${yahooSuccessCount}/${yahooPairs.length} pairs`);
       
       return rates;
     } catch (error) {
@@ -134,7 +169,7 @@ export class EnhancedExchangeRateService {
   }
 
   /**
-   * Get exchange rate for a specific pair with enhanced accuracy
+   * Get exchange rate for a specific pair with enhanced accuracy using Yahoo Finance
    */
   static async getExchangeRate(fromCurrency: string, toCurrency: string): Promise<number> {
     try {
@@ -149,20 +184,52 @@ export class EnhancedExchangeRateService {
         return cached.rate;
       }
 
-      // Fetch latest rates from multiple sources
-      const rates = await this.fetchLatestRates();
-      
-      // Convert to requested pair
       let rate: number;
-      if (fromCurrency === 'USD') {
-        rate = rates[toCurrency] || 1;
-      } else if (toCurrency === 'USD') {
-        rate = 1 / (rates[fromCurrency] || 1);
-      } else {
-        // Convert through USD
-        const fromToUSD = 1 / (rates[fromCurrency] || 1);
-        const usdToTarget = rates[toCurrency] || 1;
-        rate = fromToUSD * usdToTarget;
+
+      try {
+        // Try Yahoo Finance first for direct pair
+        rate = await this.fetchYahooFinanceRate(fromCurrency, toCurrency);
+      } catch (yahooError) {
+        console.warn(`Yahoo Finance failed for ${fromCurrency}/${toCurrency}, trying fallback...`);
+        
+        // Fallback: try to get rate through USD conversion
+        try {
+          if (fromCurrency === 'USD') {
+            // Try to get USD/toCurrency from Yahoo Finance
+            rate = await this.fetchYahooFinanceRate('USD', toCurrency);
+          } else if (toCurrency === 'USD') {
+            // Try to get fromCurrency/USD from Yahoo Finance
+            rate = await this.fetchYahooFinanceRate(fromCurrency, 'USD');
+          } else {
+            // Convert through USD
+            const fromToUSD = await this.fetchYahooFinanceRate(fromCurrency, 'USD');
+            const usdToTarget = await this.fetchYahooFinanceRate('USD', toCurrency);
+            rate = fromToUSD * usdToTarget;
+          }
+        } catch (fallbackError) {
+          console.warn(`Yahoo Finance fallback failed, using exchangerate-api...`);
+          
+          // Final fallback to exchangerate-api
+          const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.rates) {
+              if (fromCurrency === 'USD') {
+                rate = data.rates[toCurrency] || 1;
+              } else if (toCurrency === 'USD') {
+                rate = 1 / (data.rates[fromCurrency] || 1);
+              } else {
+                const fromToUSD = 1 / (data.rates[fromCurrency] || 1);
+                const usdToTarget = data.rates[toCurrency] || 1;
+                rate = fromToUSD * usdToTarget;
+              }
+            } else {
+              throw new Error('No rates data from fallback API');
+            }
+          } else {
+            throw new Error('Fallback API request failed');
+          }
+        }
       }
 
       // Cache the result
@@ -176,15 +243,15 @@ export class EnhancedExchangeRateService {
   }
 
   /**
-   * Update all currency pairs with latest rates from multiple sources
+   * Update all currency pairs with latest rates using Yahoo Finance enhanced accuracy
    */
   static async updateAllCurrencyPairs(userId: number): Promise<void> {
     try {
-      console.log(`Updating currency pairs for user ${userId} with enhanced accuracy...`);
+      console.log(`Updating currency pairs for user ${userId} with Yahoo Finance enhanced accuracy...`);
       
       // Get all currency pairs for the user
       const pairs = await dbAll(
-        'SELECT id, pair FROM currency_pairs WHERE user_id = ?',
+        'SELECT id, pair, current_rate FROM currency_pairs WHERE user_id = ?',
         [userId]
       ) as CurrencyPair[];
 
@@ -193,25 +260,21 @@ export class EnhancedExchangeRateService {
         return;
       }
 
-      // Fetch latest rates from multiple sources
-      const rates = await this.fetchLatestRates();
-      
-      // Update each pair
+      // Update each pair individually using Yahoo Finance with fallbacks
       for (const pair of pairs) {
         const [fromCurrency, toCurrency] = pair.pair.split('/');
         let newRate: number;
         
         if (fromCurrency === toCurrency) {
           newRate = 1;
-        } else if (fromCurrency === 'USD') {
-          newRate = rates[toCurrency] || pair.currentRate;
-        } else if (toCurrency === 'USD') {
-          newRate = 1 / (rates[fromCurrency] || 1);
         } else {
-          // Convert through USD
-          const fromToUSD = 1 / (rates[fromCurrency] || 1);
-          const usdToTarget = rates[toCurrency] || 1;
-          newRate = fromToUSD * usdToTarget;
+          try {
+            // Use the getExchangeRate method which handles Yahoo Finance + fallbacks
+            newRate = await this.getExchangeRate(fromCurrency, toCurrency);
+          } catch (error) {
+            console.warn(`Failed to update enhanced rate for ${pair.pair}, keeping current rate:`, error);
+            newRate = pair.currentRate; // Keep current rate if update fails
+          }
         }
 
         // Update the pair
@@ -221,7 +284,7 @@ export class EnhancedExchangeRateService {
         );
       }
 
-      console.log(`✅ Updated ${pairs.length} currency pairs with enhanced accuracy`);
+      console.log(`✅ Updated ${pairs.length} currency pairs with Yahoo Finance enhanced accuracy`);
     } catch (error) {
       console.error('Error updating currency pairs with enhanced rates:', error);
       throw error;
