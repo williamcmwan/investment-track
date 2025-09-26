@@ -117,68 +117,29 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Function to refresh exchange rates
-  const handleRefreshRates = async () => {
-    try {
-      setIsRefreshingRates(true);
-      const response = await apiClient.updateExchangeRates();
-      if (response.data) {
-        toast({
-          title: "Success",
-          description: "Exchange rates updated successfully",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: response.error || "Failed to update exchange rates",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error updating rates:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update exchange rates",
-        variant: "destructive",
-      });
-    } finally {
-      setIsRefreshingRates(false);
-    }
-  };
 
-  // Function to refresh with enhanced accuracy (multiple sources)
+  // Function to refresh with enhanced accuracy (multiple sources) - silent
   const handleEnhancedRefreshRates = async () => {
     try {
       setIsRefreshingRates(true);
       const response = await apiClient.updateEnhancedExchangeRates();
       if (response.data) {
-        toast({
-          title: "Enhanced Rates Updated",
-          description: `Exchange rates updated with ${response.data.accuracy}`,
-        });
+        // Silent update - no toast notification
+        console.log('Enhanced exchange rates updated silently');
       } else {
-        toast({
-          title: "Error",
-          description: response.error || "Failed to update enhanced exchange rates",
-          variant: "destructive",
-        });
+        console.error('Failed to update enhanced exchange rates:', response.error);
       }
     } catch (error) {
       console.error('Error updating enhanced rates:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update enhanced exchange rates",
-        variant: "destructive",
-      });
     } finally {
       setIsRefreshingRates(false);
     }
   };
 
-  // Auto-refresh rates when overview page is visited
+  // Auto-refresh rates silently when overview page is visited
   useEffect(() => {
     if (currentView === "overview") {
-      handleRefreshRates();
+      handleEnhancedRefreshRates();
     }
   }, [currentView]);
 
@@ -553,36 +514,6 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                   {currentView === "currency" && "Track currency exchange rates"}
                 </p>
               </div>
-              {currentView === "overview" && (
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    onClick={handleRefreshRates}
-                    disabled={isRefreshingRates}
-                    className="border-primary text-primary hover:bg-primary/10"
-                  >
-                    {isRefreshingRates ? (
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                    )}
-                    Update Rates
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={handleEnhancedRefreshRates}
-                    disabled={isRefreshingRates}
-                    className="border-green-500 text-green-500 hover:bg-green-500/10"
-                  >
-                    {isRefreshingRates ? (
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                    )}
-                    Enhanced Rates
-                  </Button>
-                </div>
-              )}
             </div>
           </div>
 
