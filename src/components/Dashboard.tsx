@@ -182,50 +182,70 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       <div className="space-y-6">
         {/* Performance Chart */}
         <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader>
-            <CardTitle className="text-foreground">Performance Overview</CardTitle>
-            <CardDescription>Profit & Loss trends over time</CardDescription>
+          <CardHeader className="pb-2 md:pb-6">
+            <CardTitle className="text-sm md:text-base text-foreground">Performance Overview</CardTitle>
+            <CardDescription className="text-xs md:text-sm">Profit & Loss trends over time</CardDescription>
           </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px] md:h-[400px]">
-              <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
+          <CardContent className="p-2 md:p-6">
+            <ChartContainer config={chartConfig} className="h-[250px] md:h-[400px] w-full">
+              <LineChart 
+                data={chartData} 
+                margin={{ 
+                  top: 10, 
+                  right: 5, 
+                  left: 0, 
+                  bottom: 10 
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                 <XAxis 
                   dataKey="date" 
-                  tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  fontSize={12}
-                  tickMargin={8}
+                  tickFormatter={(value) => {
+                    const date = new Date(value);
+                    return window.innerWidth < 768 
+                      ? date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
+                      : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                  }}
+                  fontSize={10}
+                  tickMargin={5}
                   interval="preserveStartEnd"
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <YAxis 
-                  tickFormatter={(value) => formatCurrency(value).replace(/[A-Z$€£¥]/g, '')}
-                  fontSize={12}
-                  tickMargin={8}
-                  width={60}
+                  tickFormatter={(value) => {
+                    const formatted = formatCurrency(value).replace(/[A-Z$€£¥]/g, '');
+                    return window.innerWidth < 768 ? formatted.replace(/,/g, '') : formatted;
+                  }}
+                  fontSize={10}
+                  tickMargin={5}
+                  width={window.innerWidth < 768 ? 45 : 60}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <ChartTooltip 
                   content={({ active, payload, label }) => {
                     if (active && payload && payload.length) {
                       return (
-                        <div className="bg-background border border-border rounded-lg p-2 md:p-3 shadow-lg max-w-xs">
-                          <p className="font-medium text-foreground mb-2 text-xs md:text-sm">
+                        <div className="bg-background border border-border rounded-lg p-2 shadow-lg max-w-[280px] md:max-w-xs">
+                          <p className="font-medium text-foreground mb-1 text-[10px] md:text-xs">
                             {new Date(label).toLocaleDateString('en-US', { 
-                              year: 'numeric', 
                               month: 'short', 
-                              day: 'numeric' 
+                              day: 'numeric',
+                              year: window.innerWidth < 768 ? undefined : 'numeric'
                             })}
                           </p>
-                          <div className="space-y-1">
+                          <div className="space-y-0.5">
                             {payload.map((entry, index) => (
-                              <div key={index} className="flex items-center gap-1 md:gap-2">
+                              <div key={index} className="flex items-center gap-1">
                                 <div 
-                                  className="w-2 h-2 md:w-3 md:h-3 rounded-sm flex-shrink-0" 
+                                  className="w-2 h-2 rounded-sm flex-shrink-0" 
                                   style={{ backgroundColor: entry.color }}
                                 />
-                                <span className="text-xs text-muted-foreground truncate">
+                                <span className="text-[10px] md:text-xs text-muted-foreground truncate max-w-[80px] md:max-w-none">
                                   {chartConfig[entry.dataKey as keyof typeof chartConfig]?.label}:
                                 </span>
-                                <span className="text-xs font-medium text-foreground">
+                                <span className="text-[10px] md:text-xs font-medium text-foreground ml-auto">
                                   {formatCurrency(entry.value as number)}
                                 </span>
                               </div>
@@ -237,38 +257,41 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                     return null;
                   }}
                 />
-                <ChartLegend content={<ChartLegendContent className="text-xs" />} />
+                <ChartLegend 
+                  content={<ChartLegendContent className="text-[10px] md:text-xs flex-wrap" />}
+                  wrapperStyle={{ paddingTop: '10px' }}
+                />
                 <Line 
                   type="monotone" 
                   dataKey="totalPL" 
                   stroke="var(--color-totalPL)" 
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: "var(--color-totalPL)" }}
-                  activeDot={{ r: 4, stroke: "var(--color-totalPL)", strokeWidth: 2 }}
+                  strokeWidth={window.innerWidth < 768 ? 1.5 : 2}
+                  dot={{ r: window.innerWidth < 768 ? 2 : 3, fill: "var(--color-totalPL)" }}
+                  activeDot={{ r: window.innerWidth < 768 ? 3 : 4, stroke: "var(--color-totalPL)", strokeWidth: 2 }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="investmentPL" 
                   stroke="var(--color-investmentPL)" 
-                  strokeWidth={2}
-                  dot={{ r: 2, fill: "var(--color-investmentPL)" }}
-                  activeDot={{ r: 3, stroke: "var(--color-investmentPL)", strokeWidth: 2 }}
+                  strokeWidth={window.innerWidth < 768 ? 1.5 : 2}
+                  dot={{ r: window.innerWidth < 768 ? 1.5 : 2, fill: "var(--color-investmentPL)" }}
+                  activeDot={{ r: window.innerWidth < 768 ? 2.5 : 3, stroke: "var(--color-investmentPL)", strokeWidth: 2 }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="currencyPL" 
                   stroke="var(--color-currencyPL)" 
-                  strokeWidth={2}
-                  dot={{ r: 2, fill: "var(--color-currencyPL)" }}
-                  activeDot={{ r: 3, stroke: "var(--color-currencyPL)", strokeWidth: 2 }}
+                  strokeWidth={window.innerWidth < 768 ? 1.5 : 2}
+                  dot={{ r: window.innerWidth < 768 ? 1.5 : 2, fill: "var(--color-currencyPL)" }}
+                  activeDot={{ r: window.innerWidth < 768 ? 2.5 : 3, stroke: "var(--color-currencyPL)", strokeWidth: 2 }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="dailyPL" 
                   stroke="var(--color-dailyPL)" 
-                  strokeWidth={2}
-                  dot={{ r: 2, fill: "var(--color-dailyPL)" }}
-                  activeDot={{ r: 3, stroke: "var(--color-dailyPL)", strokeWidth: 2 }}
+                  strokeWidth={window.innerWidth < 768 ? 1.5 : 2}
+                  dot={{ r: window.innerWidth < 768 ? 1.5 : 2, fill: "var(--color-dailyPL)" }}
+                  activeDot={{ r: window.innerWidth < 768 ? 2.5 : 3, stroke: "var(--color-dailyPL)", strokeWidth: 2 }}
                   strokeDasharray="3 3"
                 />
               </LineChart>
