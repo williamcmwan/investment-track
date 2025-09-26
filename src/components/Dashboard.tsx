@@ -72,6 +72,7 @@ interface DashboardProps {
 
 const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) => {
   const [currentView, setCurrentView] = useState("overview");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const formatCurrency = (amount: number, currency = "HKD") => {
     return new Intl.NumberFormat("en-HK", {
@@ -247,6 +248,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         onLogout={onLogout}
         isOpen={sidebarOpen}
         onToggle={onSidebarToggle}
+        isCollapsed={sidebarCollapsed}
+        onCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
       
       <main className="flex-1 overflow-auto">
