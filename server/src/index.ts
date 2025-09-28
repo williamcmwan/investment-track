@@ -13,6 +13,7 @@ import accountRoutes from './routes/accounts.js';
 import currencyRoutes from './routes/currencies.js';
 import performanceRoutes from './routes/performance.js';
 import twoFactorRoutes from './routes/twoFactor.js';
+import { SchedulerService } from './services/schedulerService.js';
 
 // Load environment variables
 dotenv.config();
@@ -35,15 +36,15 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Rate limiting - more generous for development
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '300000'), // 5 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '1000'), // limit each IP to 1000 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use(limiter);
+// Rate limiting - DISABLED for development
+// const limiter = rateLimit({
+//   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '300000'), // 5 minutes
+//   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '1000'), // limit each IP to 1000 requests per windowMs
+//   message: 'Too many requests from this IP, please try again later.',
+//   standardHeaders: true,
+//   legacyHeaders: false,
+// });
+// app.use(limiter);
 
 // Logging
 app.use(morgan('combined'));
@@ -68,7 +69,7 @@ app.use('/api/currencies', currencyRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/2fa', twoFactorRoutes);
 
-// Serve static files from client build
+// Serve static files from client build (both development and production)
 const clientBuildPath = path.join(__dirname, '../../client/dist');
 app.use(express.static(clientBuildPath));
 
@@ -103,6 +104,9 @@ app.listen(PORT, () => {
   console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
   console.log(`🌐 Frontend: http://localhost:${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Initialize scheduler service
+  SchedulerService.initialize();
 });
 
 export default app;

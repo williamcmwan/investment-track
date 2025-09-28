@@ -13,11 +13,11 @@ if [ ! -d "node_modules" ] || [ ! -d "client/node_modules" ] || [ ! -d "server/n
     exit 1
 fi
 
-# Start both client and server concurrently
-echo "✅ Starting client and server..."
+# Start server (which serves both API and static files)
+echo "✅ Starting server..."
 echo "🌐 Development mode:"
-echo "   Frontend: http://localhost:5173 (Vite dev server)"
-echo "   Backend: http://localhost:3002 (Express server)"
+echo "   Application: http://localhost:3002"
 echo "   API: http://localhost:3002/api"
+echo "   Health: http://localhost:3002/health"
 echo ""
 npm run dev

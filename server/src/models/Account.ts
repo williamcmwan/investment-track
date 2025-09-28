@@ -36,6 +36,7 @@ export interface CreateAccountData {
 
 export interface UpdateAccountData {
   name?: string;
+  originalCapital?: number;
   currentBalance?: number;
 }
 
@@ -87,7 +88,9 @@ export class AccountModel {
     // Add initial balance history entry
     await this.addBalanceHistory(result.lastID, accountData.currentBalance, 'Initial balance');
     
-    return account;
+    // Return account with history
+    const accountWithHistory = await this.getWithHistory(result.lastID, userId);
+    return accountWithHistory || account;
   }
   
   static async update(id: number, userId: number, accountData: UpdateAccountData): Promise<Account | null> {
@@ -97,6 +100,11 @@ export class AccountModel {
     if (accountData.name !== undefined) {
       updateFields.push('name = ?');
       values.push(accountData.name);
+    }
+    
+    if (accountData.originalCapital !== undefined) {
+      updateFields.push('original_capital = ?');
+      values.push(accountData.originalCapital);
     }
     
     if (accountData.currentBalance !== undefined) {
@@ -150,11 +158,45 @@ export class AccountModel {
     
     return history as BalanceHistory[];
   }
+
+  static async getLatestHistoryDate(accountId: number): Promise<string | null> {
+    const result = await dbGet(
+      'SELECT date FROM account_balance_history WHERE account_id = ? ORDER BY date DESC LIMIT 1',
+      [accountId]
+    );
+    
+    return result ? result.date : null;
+  }
   
-  static async addBalanceHistory(accountId: number, balance: number, note: string): Promise<void> {
+  static async addBalanceHistory(accountId: number, balance: number, note: string, date?: string): Promise<void> {
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    // First, try to update existing entry for the same date
+    const updateResult = await dbRun(
+      'UPDATE account_balance_history SET balance = ?, note = ?, created_at = CURRENT_TIMESTAMP WHERE account_id = ? AND DATE(date) = DATE(?)',
+      [balance, note, accountId, targetDate]
+    );
+    
+    // If no rows were updated, insert a new entry
+    if (updateResult.changes === 0) {
+      await dbRun(
+        'INSERT INTO account_balance_history (account_id, balance, note, date) VALUES (?, ?, ?, ?)',
+        [accountId, balance, note, targetDate]
+      );
+    }
+  }
+
+  static async updateBalanceHistory(historyId: number, accountId: number, balance: number, note: string, date: string): Promise<void> {
     await dbRun(
-      'INSERT INTO account_balance_history (account_id, balance, note) VALUES (?, ?, ?)',
-      [accountId, balance, note]
+      'UPDATE account_balance_history SET balance = ?, note = ?, date = ?, created_at = CURRENT_TIMESTAMP WHERE id = ? AND account_id = ?',
+      [balance, note, date, historyId, accountId]
+    );
+  }
+
+  static async deleteBalanceHistory(historyId: number, accountId: number): Promise<void> {
+    await dbRun(
+      'DELETE FROM account_balance_history WHERE id = ? AND account_id = ?',
+      [historyId, accountId]
     );
   }
 }

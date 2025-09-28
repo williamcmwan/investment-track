@@ -1,28 +1,40 @@
 import { dbRun } from './connection.js';
+import { ExchangeRateService } from '../services/exchangeRateService.js';
 
 async function seed() {
   try {
     console.log('Starting database seeding...');
     
-    // Create demo exchange rates
-    const exchangeRates = [
-      { pair: 'USD/HKD', rate: 7.85 },
-      { pair: 'EUR/HKD', rate: 8.45 },
-      { pair: 'GBP/HKD', rate: 9.95 },
-      { pair: 'CAD/HKD', rate: 5.85 },
-      { pair: 'SGD/HKD', rate: 5.75 },
-      { pair: 'JPY/HKD', rate: 0.053 }
+    // Fetch real exchange rates from external APIs
+    console.log('Fetching real exchange rates...');
+    
+    const currencyPairs = [
+      'USD/HKD',
+      'EUR/HKD', 
+      'GBP/HKD',
+      'CAD/HKD',
+      'SGD/HKD',
+      'JPY/HKD'
     ];
     
-    for (const rate of exchangeRates) {
-      await dbRun(
-        'INSERT OR REPLACE INTO exchange_rates (pair, rate) VALUES (?, ?)',
-        [rate.pair, rate.rate]
-      );
+    for (const pair of currencyPairs) {
+      try {
+        const [fromCurrency, toCurrency] = pair.split('/');
+        const rate = await ExchangeRateService.getExchangeRate(fromCurrency, toCurrency);
+        
+        await dbRun(
+          'INSERT OR REPLACE INTO exchange_rates (pair, rate) VALUES (?, ?)',
+          [pair, rate]
+        );
+        
+        console.log(`Seeded ${pair}: ${rate}`);
+      } catch (error) {
+        console.warn(`Failed to fetch rate for ${pair}, skipping...`);
+      }
     }
     
     console.log('Database seeding completed successfully!');
-    console.log('Exchange rates have been seeded.');
+    console.log('Real exchange rates have been seeded.');
     
   } catch (error) {
     console.error('Seeding failed:', error);

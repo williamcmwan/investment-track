@@ -34,6 +34,29 @@ router.get('/last-update', async (req, res) => {
   }
 });
 
+// Get exchange rate for a specific pair (public endpoint - no auth required)
+router.get('/public-rate/:pair', async (req, res) => {
+  try {
+    const encodedPair = req.params.pair;
+    const pair = decodeURIComponent(encodedPair);
+    if (!pair || !pair.includes('/')) {
+      return res.status(400).json({ error: 'Invalid currency pair format' });
+    }
+    
+    const [fromCurrency, toCurrency] = pair.split('/');
+    const rate = await ExchangeRateService.getExchangeRate(fromCurrency, toCurrency);
+    
+    return res.json({ 
+      pair, 
+      rate,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Get exchange rate error:', error);
+    return res.status(500).json({ error: 'Failed to get exchange rate' });
+  }
+});
+
 // Update all currency pairs with enhanced exchange rates (multiple sources)
 router.post('/update-rates-enhanced', async (req: AuthenticatedRequest, res) => {
   try {
@@ -188,26 +211,5 @@ router.post('/update-rates', async (req: AuthenticatedRequest, res) => {
   }
 });
 
-// Get exchange rate for a specific pair
-router.get('/rate/:pair', async (req: AuthenticatedRequest, res) => {
-  try {
-    const pair = req.params.pair;
-    if (!pair || !pair.includes('/')) {
-      return res.status(400).json({ error: 'Invalid currency pair format' });
-    }
-    
-    const [fromCurrency, toCurrency] = pair.split('/');
-    const rate = await ExchangeRateService.getExchangeRate(fromCurrency, toCurrency);
-    
-    return res.json({ 
-      pair, 
-      rate,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Get exchange rate error:', error);
-    return res.status(500).json({ error: 'Failed to get exchange rate' });
-  }
-});
 
 export default router;

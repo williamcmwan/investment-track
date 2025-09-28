@@ -18,6 +18,7 @@ const createAccountSchema = z.object({
 
 const updateAccountSchema = z.object({
   name: z.string().min(1).optional(),
+  originalCapital: z.number().positive().optional(),
   currentBalance: z.number().positive().optional()
 });
 
@@ -25,7 +26,19 @@ const updateAccountSchema = z.object({
 router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
     const accounts = await AccountModel.findByUserId(req.user?.id || 0);
-    return res.json(accounts);
+    
+    // Get history for each account
+    const accountsWithHistory = await Promise.all(
+      accounts.map(async (account) => {
+        const history = await AccountModel.getBalanceHistory(account.id);
+        return {
+          ...account,
+          history
+        };
+      })
+    );
+    
+    return res.json(accountsWithHistory);
   } catch (error) {
     console.error('Get accounts error:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -86,7 +99,27 @@ router.put('/:id', async (req: AuthenticatedRequest, res) => {
     
     // If balance was updated, add to history
     if (validatedData.currentBalance !== undefined) {
-      await AccountModel.addBalanceHistory(accountId, validatedData.currentBalance, 'Balance updated');
+      // Get the date from the request body, default to today if not provided
+      const updateDate = req.body.date || new Date().toISOString().split('T')[0];
+      
+      // Check if this date is older than the latest history entry
+      const latestHistoryDate = await AccountModel.getLatestHistoryDate(accountId);
+      
+      if (latestHistoryDate && new Date(updateDate) < new Date(latestHistoryDate)) {
+        // Don't update the account balance for older dates, just add to history
+        await AccountModel.addBalanceHistory(accountId, validatedData.currentBalance, 'Balance updated', updateDate);
+        
+        // Revert the account balance to the most recent history entry
+        const latestHistory = await AccountModel.getBalanceHistory(accountId);
+        if (latestHistory.length > 0 && latestHistory[0]) {
+          await AccountModel.update(accountId, req.user?.id || 0, { 
+            currentBalance: latestHistory[0].balance 
+          });
+        }
+      } else {
+        // Normal update - update balance and add to history
+        await AccountModel.addBalanceHistory(accountId, validatedData.currentBalance, 'Balance updated', updateDate);
+      }
     }
     
     return res.json(account);
@@ -128,7 +161,7 @@ router.post('/:id/history', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Invalid account ID' });
     }
     
-    const { balance, note } = req.body;
+    const { balance, note, date } = req.body;
     if (typeof balance !== 'number' || !note) {
       return res.status(400).json({ error: 'Balance and note are required' });
     }
@@ -139,10 +172,63 @@ router.post('/:id/history', async (req: AuthenticatedRequest, res) => {
       return res.status(404).json({ error: 'Account not found' });
     }
     
-    await AccountModel.addBalanceHistory(accountId, balance, note);
+    await AccountModel.addBalanceHistory(accountId, balance, note, date);
     return res.status(201).json({ message: 'Balance history entry added' });
   } catch (error) {
     console.error('Add balance history error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update balance history entry
+router.put('/:id/history/:historyId', async (req: AuthenticatedRequest, res) => {
+  try {
+    const accountId = parseInt(req.params.id || '0');
+    const historyId = parseInt(req.params.historyId || '0');
+    
+    if (isNaN(accountId) || isNaN(historyId)) {
+      return res.status(400).json({ error: 'Invalid account or history ID' });
+    }
+    
+    const { balance, note, date } = req.body;
+    if (typeof balance !== 'number' || !note || !date) {
+      return res.status(400).json({ error: 'Balance, note, and date are required' });
+    }
+    
+    // Verify account belongs to user
+    const account = await AccountModel.findById(accountId, req.user?.id || 0);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    
+    await AccountModel.updateBalanceHistory(historyId, accountId, balance, note, date);
+    return res.json({ message: 'Balance history entry updated' });
+  } catch (error) {
+    console.error('Update balance history error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete balance history entry
+router.delete('/:id/history/:historyId', async (req: AuthenticatedRequest, res) => {
+  try {
+    const accountId = parseInt(req.params.id || '0');
+    const historyId = parseInt(req.params.historyId || '0');
+    
+    if (isNaN(accountId) || isNaN(historyId)) {
+      return res.status(400).json({ error: 'Invalid account or history ID' });
+    }
+    
+    // Verify account belongs to user
+    const account = await AccountModel.findById(accountId, req.user?.id || 0);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    
+    await AccountModel.deleteBalanceHistory(historyId, accountId);
+    return res.json({ message: 'Balance history entry deleted' });
+  } catch (error) {
+    console.error('Delete balance history error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

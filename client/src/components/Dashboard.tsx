@@ -24,84 +24,28 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 
-// Mock data
-const mockData = {
-  totalCapital: 1500000, // HKD
-  currentBalance: 1687500, // HKD
-  totalProfitLoss: 187500, // HKD
-  currencyProfitLoss: 25000, // HKD
-  investmentProfitLoss: 162500, // HKD
-  performanceHistory: [
-    { date: "2024-01-01", totalPL: 0, investmentPL: 0, currencyPL: 0, dailyPL: 0 },
-    { date: "2024-01-02", totalPL: 5000, investmentPL: 3500, currencyPL: 1500, dailyPL: 5000 },
-    { date: "2024-01-03", totalPL: 12000, investmentPL: 8500, currencyPL: 3500, dailyPL: 7000 },
-    { date: "2024-01-04", totalPL: 8000, investmentPL: 7000, currencyPL: 1000, dailyPL: -4000 },
-    { date: "2024-01-05", totalPL: 15000, investmentPL: 12000, currencyPL: 3000, dailyPL: 7000 },
-    { date: "2024-01-08", totalPL: 22000, investmentPL: 18000, currencyPL: 4000, dailyPL: 7000 },
-    { date: "2024-01-09", totalPL: 18000, investmentPL: 16000, currencyPL: 2000, dailyPL: -4000 },
-    { date: "2024-01-10", totalPL: 25000, investmentPL: 21000, currencyPL: 4000, dailyPL: 7000 },
-    { date: "2024-01-11", totalPL: 35000, investmentPL: 28000, currencyPL: 7000, dailyPL: 10000 },
-    { date: "2024-01-12", totalPL: 42000, investmentPL: 35000, currencyPL: 7000, dailyPL: 7000 },
-    { date: "2024-01-15", totalPL: 187500, investmentPL: 162500, currencyPL: 25000, dailyPL: 145500 }
-  ],
-  accounts: [
-    {
-      id: 1,
-      name: "Interactive Brokers",
-      currency: "USD",
-      originalCapital: 100000,
-      currentBalance: 125000,
-      lastUpdated: "2024-01-15",
-      profitLoss: 25000,
-      profitLossPercent: 25,
-      history: [
-        { date: "2024-01-15", balance: 125000, note: "Current balance" },
-        { date: "2024-01-10", balance: 122000, note: "Weekly update" },
-        { date: "2024-01-05", balance: 118000, note: "Portfolio rebalance" },
-        { date: "2024-01-01", balance: 115000, note: "New year update" },
-        { date: "2023-12-20", balance: 110000, note: "Year-end position" },
-        { date: "2023-12-01", balance: 100000, note: "Initial deposit" }
-      ]
-    },
-    {
-      id: 2,
-      name: "Saxo Bank",
-      currency: "EUR",
-      originalCapital: 80000,
-      currentBalance: 85000,
-      lastUpdated: "2024-01-14",
-      profitLoss: 5000,
-      profitLossPercent: 6.25,
-      history: [
-        { date: "2024-01-14", balance: 85000, note: "Current balance" },
-        { date: "2024-01-08", balance: 83500, note: "Market adjustment" },
-        { date: "2024-01-02", balance: 82000, note: "New year position" },
-        { date: "2023-12-15", balance: 80000, note: "Initial deposit" }
-      ]
-    },
-    {
-      id: 3,
-      name: "Futu Securities",
-      currency: "HKD",
-      originalCapital: 500000,
-      currentBalance: 485000,
-      lastUpdated: "2024-01-15",
-      profitLoss: -15000,
-      profitLossPercent: -3,
-      history: [
-        { date: "2024-01-15", balance: 485000, note: "Current balance" },
-        { date: "2024-01-12", balance: 490000, note: "Market volatility" },
-        { date: "2024-01-08", balance: 495000, note: "Weekly review" },
-        { date: "2024-01-01", balance: 500000, note: "Initial deposit" }
-      ]
-    }
-  ],
-  currencies: [
-    { pair: "USD/HKD", rate: 7.85, avgCost: 7.75, profitLoss: 12800, amount: 128000 },
-    { pair: "EUR/HKD", rate: 8.45, avgCost: 8.50, profitLoss: -4000, amount: 80000 },
-    { pair: "GBP/HKD", rate: 9.95, avgCost: 9.80, profitLoss: 3000, amount: 20000 }
-  ]
-};
+// Interface definitions
+interface Account {
+  id: number;
+  userId: number;
+  name: string;
+  currency: string;
+  originalCapital: number;
+  currentBalance: number;
+  lastUpdated: string;
+  createdAt: string;
+  updatedAt: string;
+  profitLoss: number;
+  profitLossPercent: number;
+  history?: Array<{
+    id: number;
+    accountId: number;
+    balance: number;
+    note: string;
+    date: string;
+    createdAt: string;
+  }>;
+}
 
 interface DashboardProps {
   onLogout: () => void;
@@ -110,6 +54,10 @@ interface DashboardProps {
 }
 
 const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) => {
+  // Call hooks first, before any conditional logic
+  const { user } = useAuth();
+  const { toast } = useToast();
+  
   // Initialize currentView from localStorage or default to "overview"
   const [currentView, setCurrentView] = useState(() => {
     const savedView = localStorage.getItem('dashboard-current-view');
@@ -117,8 +65,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isRefreshingRates, setIsRefreshingRates] = useState(false);
-  const { user } = useAuth();
-  const { toast } = useToast();
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
+  const [currencies, setCurrencies] = useState<any[]>([]);
+  const [performanceHistory, setPerformanceHistory] = useState<any[]>([]);
+  const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
   const baseCurrency = user?.baseCurrency || "HKD"; // Use user's base currency
 
   // Update localStorage whenever currentView changes
@@ -126,6 +78,205 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     localStorage.setItem('dashboard-current-view', currentView);
   }, [currentView]);
 
+  // Load accounts when component mounts and user is authenticated
+  useEffect(() => {
+    if (user) {
+      loadAccounts();
+      loadCurrencies();
+    }
+  }, [user]);
+
+  // Fetch exchange rates when accounts change and user is authenticated
+  useEffect(() => {
+    if (accounts.length > 0 && user) {
+      fetchExchangeRates();
+    }
+  }, [accounts, baseCurrency, user]);
+
+  // Auto-refresh rates silently when overview page is visited
+  useEffect(() => {
+    if (currentView === "overview") {
+      handleEnhancedRefreshRates();
+    }
+  }, [currentView]);
+
+  // Load performance history function
+  const loadPerformanceHistory = async () => {
+    try {
+      setIsLoadingPerformance(true);
+      const response = await apiClient.getPerformanceChartData(30); // Last 30 days
+      if (response.data) {
+        setPerformanceHistory(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading performance history:', error);
+      // Fallback to generating on-the-fly if no stored data
+      generatePerformanceHistoryOnTheFly();
+    } finally {
+      setIsLoadingPerformance(false);
+    }
+  };
+
+  // Load performance history when component mounts or when user changes
+  useEffect(() => {
+    if (user) {
+      loadPerformanceHistory();
+    }
+  }, [user]);
+
+  // Load accounts from API
+  const loadAccounts = async () => {
+    setIsLoadingAccounts(true);
+    try {
+      const response = await apiClient.getAccounts();
+      if (response.data) {
+        setAccounts(response.data);
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to load accounts",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load accounts",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingAccounts(false);
+    }
+  };
+
+  // Load currencies data
+  const loadCurrencies = async () => {
+    try {
+      const response = await apiClient.getCurrencyPairs();
+      if (response.data) {
+        setCurrencies(response.data);
+      } else {
+        console.error('Failed to load currencies:', response.error);
+      }
+    } catch (error) {
+      console.error('Error loading currencies:', error);
+    }
+  };
+
+  // Calculate currency P&L using the same logic as CurrencyView
+  const calculateCurrencyPL = () => {
+    const totalPL = currencies.reduce((sum, currency) => {
+      const [fromCurrency, toCurrency] = currency.pair.split('/');
+      
+      // Calculate current value and cost basis in the original pair's target currency
+      const currentValue = currency.amount * currency.currentRate;
+      const costBasis = currency.amount * currency.avgCost;
+      const profitLossInOriginalCurrency = currentValue - costBasis;
+      
+      // Convert profit/loss to base currency
+      if (toCurrency === baseCurrency) {
+        // Already in base currency
+        return sum + profitLossInOriginalCurrency;
+      } else if (fromCurrency === baseCurrency) {
+        // The profit/loss is in the target currency, need to convert to base currency
+        // Use the inverse of the current rate to convert from target currency to base currency
+        return sum + (profitLossInOriginalCurrency / currency.currentRate);
+      } else {
+        // For cross-currency pairs, we need to convert to base currency
+        // This is a simplified approach - in reality we'd need the rate from toCurrency to baseCurrency
+        return sum + profitLossInOriginalCurrency;
+      }
+    }, 0);
+    
+    
+    return totalPL;
+  };
+
+  // Fetch exchange rates for currency conversion
+  const fetchExchangeRates = async () => {
+    try {
+      // Get unique currencies from accounts
+      const currencies = [...new Set(accounts.map(acc => acc.currency))];
+      
+      // Fetch real exchange rates from API
+      const ratePromises = currencies.map(async (currency) => {
+        if (currency === baseCurrency) {
+          return { currency, rate: 1 };
+        }
+        
+        try {
+          const pair = `${currency}/${baseCurrency}`;
+          const response = await apiClient.getExchangeRate(pair);
+          return { currency, rate: response.data?.rate || 1 };
+        } catch (error) {
+          console.warn(`Failed to fetch rate for ${currency}/${baseCurrency}, using fallback rate 1`);
+          return { currency, rate: 1 };
+        }
+      });
+      
+      const rates = await Promise.all(ratePromises);
+      const rateMap = rates.reduce((acc, { currency, rate }) => {
+        acc[currency] = rate;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      setExchangeRates(rateMap);
+    } catch (error) {
+      console.error("Failed to fetch exchange rates:", error);
+    }
+  };
+
+  // Currency conversion function
+  const convertToBaseCurrency = (amount: number, fromCurrency: string): number => {
+    if (fromCurrency === baseCurrency) {
+      return amount;
+    }
+    const rate = exchangeRates[fromCurrency] || 1;
+    return amount * rate;
+  };
+
+  // Calculate summary data from accounts
+  const calculateSummaryData = () => {
+    if (accounts.length === 0) {
+      return {
+        totalCapital: 0,
+        currentBalance: 0,
+        totalProfitLoss: 0,
+        totalProfitLossPercent: 0,
+        investmentProfitLoss: 0,
+        currencyProfitLoss: 0
+      };
+    }
+
+    const totalCapital = accounts.reduce((sum, acc) => 
+      sum + convertToBaseCurrency(acc.originalCapital, acc.currency), 0
+    );
+    
+    const currentBalance = accounts.reduce((sum, acc) => 
+      sum + convertToBaseCurrency(acc.currentBalance, acc.currency), 0
+    );
+    
+    // Get the Total P&L from Investment Accounts page (this is the main total)
+    const totalProfitLoss = accounts.reduce((sum, acc) => 
+      sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0
+    );
+    
+    // Get Currency P&L from Currency Exchange page
+    const currencyProfitLoss = calculateCurrencyPL();
+    
+    // Investment P&L = Total P&L - Currency P&L
+    const investmentProfitLoss = totalProfitLoss - currencyProfitLoss;
+    const totalProfitLossPercent = totalCapital > 0 ? (totalProfitLoss / totalCapital) * 100 : 0;
+
+    return {
+      totalCapital,
+      currentBalance,
+      totalProfitLoss,
+      totalProfitLossPercent,
+      investmentProfitLoss,
+      currencyProfitLoss
+    };
+  };
 
   // Function to refresh with enhanced accuracy (multiple sources) - silent
   const handleEnhancedRefreshRates = async () => {
@@ -145,34 +296,6 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     }
   };
 
-  // Auto-refresh rates silently when overview page is visited
-  useEffect(() => {
-    if (currentView === "overview") {
-      handleEnhancedRefreshRates();
-    }
-  }, [currentView]);
-
-  // Exchange rates for currency conversion (mock data - in real app, fetch from API)
-  const exchangeRates: { [key: string]: number } = {
-    "USD": 7.85, // USD to HKD
-    "EUR": 8.45, // EUR to HKD  
-    "GBP": 9.95, // GBP to HKD
-    "CAD": 5.85, // CAD to HKD
-    "SGD": 5.75, // SGD to HKD
-    "JPY": 0.053, // JPY to HKD
-    "HKD": 1.0
-  };
-
-  const convertToBaseCurrency = (amount: number, fromCurrency: string) => {
-    if (fromCurrency === baseCurrency) return amount;
-    
-    // Convert to HKD first, then to base currency
-    const amountInHKD = fromCurrency === "HKD" ? amount : amount * exchangeRates[fromCurrency];
-    const baseRate = exchangeRates[baseCurrency];
-    
-    return baseCurrency === "HKD" ? amountInHKD : amountInHKD / baseRate;
-  };
-
   const formatCurrency = (amount: number, currency = baseCurrency) => {
     return new Intl.NumberFormat("en-HK", {
       style: "currency",
@@ -185,21 +308,89 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   };
 
   const renderOverview = () => {
-    // Convert all amounts to base currency
-    const totalCapitalConverted = convertToBaseCurrency(mockData.totalCapital, "HKD");
-    const currentBalanceConverted = convertToBaseCurrency(mockData.currentBalance, "HKD");
-    const totalProfitLossConverted = convertToBaseCurrency(mockData.totalProfitLoss, "HKD");
-    const currencyProfitLossConverted = convertToBaseCurrency(mockData.currencyProfitLoss, "HKD");
-    const investmentProfitLossConverted = convertToBaseCurrency(mockData.investmentProfitLoss, "HKD");
+    const summaryData = calculateSummaryData();
 
-    // Convert historical data to base currency
-    const chartData = mockData.performanceHistory.map(item => ({
-      date: item.date,
-      totalPL: convertToBaseCurrency(item.totalPL, "HKD"),
-      investmentPL: convertToBaseCurrency(item.investmentPL, "HKD"),
-      currencyPL: convertToBaseCurrency(item.currencyPL, "HKD"),
-      dailyPL: convertToBaseCurrency(item.dailyPL, "HKD")
-    }));
+    const generatePerformanceHistoryOnTheFly = () => {
+      // Create a Map to store aggregated data by date
+      const dateMap = new Map<string, {
+        date: string;
+        totalPL: number;
+        investmentPL: number;
+        currencyPL: number;
+        dailyPL: number;
+      }>();
+      
+      // Process all accounts and aggregate data by date
+      accounts.forEach(account => {
+        (account.history || []).forEach(entry => {
+          if (entry.date) {
+            // Extract date part from timestamp (handle both 'YYYY-MM-DD' and 'YYYY-MM-DD HH:MM:SS' formats)
+            let dateStr = entry.date;
+            if (dateStr.includes(' ')) {
+              // Handle 'YYYY-MM-DD HH:MM:SS' format
+              dateStr = dateStr.split(' ')[0];
+            } else if (dateStr.includes('T')) {
+              // Handle 'YYYY-MM-DDTHH:MM:SS' format
+              dateStr = dateStr.split('T')[0];
+            }
+            // If already in 'YYYY-MM-DD' format, keep as is
+            
+            // Get or create entry for this date
+            let dateEntry = dateMap.get(dateStr);
+            if (!dateEntry) {
+              dateEntry = {
+                date: dateStr,
+                totalPL: 0,
+                investmentPL: 0,
+                currencyPL: 0,
+                dailyPL: 0
+              };
+              dateMap.set(dateStr, dateEntry);
+            }
+            
+            // Add this account's contribution to the date
+            // Calculate P&L based on the balance at this date vs original capital
+            const currentBalance = convertToBaseCurrency(entry.balance, account.currency);
+            const originalCapital = convertToBaseCurrency(account.originalCapital, account.currency);
+            const accountPL = currentBalance - originalCapital;
+            
+            dateEntry.totalPL += accountPL;
+            dateEntry.investmentPL += accountPL;
+          }
+        });
+      });
+      
+      // Convert map to array and calculate actual currency P&L
+      const history = Array.from(dateMap.values()).map(entry => {
+        // Calculate actual currency P&L from currency pairs
+        const currencyPL = calculateCurrencyPL();
+        
+        return {
+          date: entry.date,
+          totalPL: entry.totalPL + currencyPL,
+          investmentPL: entry.investmentPL,
+          currencyPL: currencyPL,
+          dailyPL: 0
+        };
+      });
+      
+      // Sort by date to ensure proper chronological order
+      history.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      setPerformanceHistory(history);
+    };
+
+    const calculateAndStoreTodaySnapshot = async () => {
+      try {
+        await apiClient.calculateTodaySnapshot();
+        // Reload performance history after storing today's snapshot
+        loadPerformanceHistory();
+      } catch (error) {
+        console.error('Error calculating today snapshot:', error);
+      }
+    };
+    
+    
 
     const chartConfig = {
       totalPL: {
@@ -219,6 +410,14 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         color: "hsl(var(--chart-4))",
       },
     };
+
+    // Calculate converted values for display
+    const totalCapitalConverted = summaryData.totalCapital;
+    const currentBalanceConverted = summaryData.currentBalance;
+    const totalProfitLossConverted = summaryData.totalProfitLoss;
+    const investmentProfitLossConverted = summaryData.investmentProfitLoss;
+    const currencyProfitLossConverted = summaryData.currencyProfitLoss;
+    const chartData = performanceHistory;
 
     return (
       <div className="space-y-6">
@@ -242,26 +441,47 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                 <XAxis 
                   dataKey="date" 
-                  tickFormatter={(value) => {
+                  type="category"
+                  tickFormatter={(value, index) => {
+                    // Handle date string properly - value should already be in YYYY-MM-DD format
+                    if (!value) return '';
+                    
+                    try {
+                      // Parse the date string (YYYY-MM-DD format)
                     const date = new Date(value);
+                      
+                      // Check if date is valid
+                      if (isNaN(date.getTime())) {
+                        return value; // Return original value if parsing fails
+                      }
+                      
+                      // Show fewer ticks to avoid overcrowding
+                      const shouldShow = index === 0 || index === Math.floor(chartData.length / 2) || index === chartData.length - 1;
+                      if (!shouldShow) return '';
+                      
                     return window.innerWidth < 768 
                       ? date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
                       : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    } catch (error) {
+                      return value; // Return original value if there's an error
+                    }
                   }}
                   fontSize={10}
                   tickMargin={5}
-                  interval="preserveStartEnd"
+                  interval={0}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis 
                   tickFormatter={(value) => {
-                    const formatted = formatCurrency(value).replace(/[A-Z$€£¥]/g, '');
-                    return window.innerWidth < 768 ? formatted.replace(/,/g, '') : formatted;
+                    return value.toLocaleString('en-US', {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0
+                    });
                   }}
                   fontSize={10}
                   tickMargin={5}
-                  width={window.innerWidth < 768 ? 45 : 60}
+                  width={window.innerWidth < 768 ? 80 : 120}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -271,11 +491,21 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                       return (
                         <div className="bg-background border border-border rounded-lg p-2 shadow-lg max-w-[280px] md:max-w-xs">
                           <p className="font-medium text-foreground mb-1 text-[10px] md:text-xs">
-                            {new Date(label).toLocaleDateString('en-US', { 
+                            {(() => {
+                              try {
+                                const date = new Date(label);
+                                if (isNaN(date.getTime())) {
+                                  return label; // Return original if invalid
+                                }
+                                return date.toLocaleDateString('en-US', { 
                               month: 'short', 
                               day: 'numeric',
                               year: window.innerWidth < 768 ? undefined : 'numeric'
-                            })}
+                                });
+                              } catch (error) {
+                                return label; // Return original if error
+                              }
+                            })()}
                           </p>
                           <div className="space-y-0.5">
                             {payload.map((entry, index) => (
@@ -288,7 +518,13 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                                   {chartConfig[entry.dataKey as keyof typeof chartConfig]?.label}:
                                 </span>
                                 <span className="text-[10px] md:text-xs font-medium text-foreground ml-auto">
-                                  {formatCurrency(entry.value as number)}
+                                  {(() => {
+                                    const value = entry.value as number;
+                                    return value.toLocaleString('en-US', {
+                                      minimumFractionDigits: 0,
+                                      maximumFractionDigits: 2
+                                    });
+                                  })()}
                                 </span>
                               </div>
                             ))}
@@ -341,7 +577,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           </CardContent>
         </Card>
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
           <Card className="bg-gradient-card border-border shadow-card">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Capital</CardTitle>
@@ -365,37 +601,6 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               </div>
             </CardContent>
           </Card>
-
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total P&L</CardTitle>
-              {totalProfitLossConverted > 0 ? (
-                <TrendingUp className="h-4 w-4 text-profit" />
-              ) : (
-                <TrendingDown className="h-4 w-4 text-loss" />
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${totalProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
-                {formatCurrency(totalProfitLossConverted)}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {formatPercent((totalProfitLossConverted / totalCapitalConverted) * 100)}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Currency P&L</CardTitle>
-              <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${currencyProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
-                {formatCurrency(currencyProfitLossConverted)}
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
       {/* Profit/Loss Breakdown */}
@@ -405,6 +610,24 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           <CardDescription>Investment vs Currency performance</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+            <div className="flex items-center gap-3 mr-auto">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <div>
+                <p className="font-medium text-foreground">Total P&L</p>
+                <p className="text-sm text-muted-foreground">Overall portfolio performance</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className={`font-bold ${totalProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
+                {formatCurrency(totalProfitLossConverted)}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {formatPercent((totalProfitLossConverted / totalCapitalConverted) * 100)}
+              </p>
+            </div>
+          </div>
+
           <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
             <div className="flex items-center gap-3 mr-auto">
               <BarChart3 className="h-5 w-5 text-primary" />
@@ -440,24 +663,30 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         </CardContent>
       </Card>
 
-      {/* Recent Accounts */}
+      {/* All Investment Accounts */}
       <Card className="bg-gradient-card border-border shadow-card">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-foreground">Investment Accounts</CardTitle>
-            <CardDescription>Recent account balances</CardDescription>
+            <CardDescription>All account balances</CardDescription>
           </div>
           <Button 
             variant="outline" 
             onClick={() => setCurrentView("accounts")}
             className="border-primary text-primary hover:bg-primary/10"
           >
-            View All
+            Manage Accounts
           </Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {mockData.accounts.slice(0, 3).map((account) => (
+            {accounts
+              .sort((a, b) => {
+                const aTotal = convertToBaseCurrency(a.currentBalance, a.currency);
+                const bTotal = convertToBaseCurrency(b.currentBalance, b.currency);
+                return bTotal - aTotal; // Sort by total amount descending
+              })
+              .map((account) => (
               <div key={account.id} className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
                 <div className="flex items-center gap-3 mr-auto">
                   <div className="p-2 bg-primary/20 rounded-lg">
@@ -472,6 +701,9 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                 </div>
                 <div className="text-right">
                   <p className="font-medium text-foreground">
+                    {formatCurrency(convertToBaseCurrency(account.currentBalance, account.currency))}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
                     {formatCurrency(account.currentBalance, account.currency)}
                   </p>
                   <div className="flex items-center justify-end gap-1">
@@ -494,6 +726,19 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     );
   };
 
+  // Safety check - if user is not available, show loading
+  // Temporarily disabled for testing
+  // if (!user) {
+  //   return (
+  //     <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
+  //       <div className="text-center">
+  //         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+  //         <p className="text-muted-foreground">Loading...</p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
+
   return (
     <div className="flex flex-1 bg-background">
       <Sidebar 
@@ -512,22 +757,30 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           <div className="mb-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
-                  {currentView === "overview" && "Dashboard Overview"}
-                  {currentView === "accounts" && "Investment Accounts"}
-                  {currentView === "currency" && "Currency Exchange"}
-                </h1>
-                <p className="text-muted-foreground">
-                  {currentView === "overview" && "Monitor your investment performance"}
-                  {currentView === "accounts" && "Manage your broker accounts"}
-                  {currentView === "currency" && "Track currency exchange rates"}
-                </p>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
+              {currentView === "overview" && "Dashboard Overview"}
+              {currentView === "accounts" && "Investment Accounts"}
+              {currentView === "currency" && "Currency Exchange"}
+            </h1>
+            <p className="text-muted-foreground">
+              {currentView === "overview" && "Monitor your investment performance"}
+              {currentView === "accounts" && "Manage your broker accounts"}
+              {currentView === "currency" && "Track currency exchange rates"}
+            </p>
               </div>
             </div>
           </div>
 
           {currentView === "overview" && renderOverview()}
-          {currentView === "accounts" && <AccountsView accounts={mockData.accounts} />}
+          {currentView === "accounts" && (
+            <AccountsView 
+              accounts={accounts} 
+              baseCurrency={baseCurrency}
+              exchangeRates={exchangeRates}
+              convertToBaseCurrency={convertToBaseCurrency}
+              onAccountUpdate={loadAccounts}
+            />
+          )}
           {currentView === "currency" && (
             <CurrencyView 
               baseCurrency={baseCurrency}

@@ -102,7 +102,9 @@ class ApiClient {
 
   async updateAccount(id: number, accountData: {
     name?: string;
+    originalCapital?: number;
     currentBalance?: number;
+    date?: string;
   }) {
     return this.request<any>(`/accounts/${id}`, {
       method: 'PUT',
@@ -116,10 +118,23 @@ class ApiClient {
     });
   }
 
-  async addBalanceHistory(accountId: number, balance: number, note: string) {
+  async addBalanceHistory(accountId: number, balance: number, note: string, date?: string) {
     return this.request<{ message: string }>(`/accounts/${accountId}/history`, {
       method: 'POST',
-      body: JSON.stringify({ balance, note }),
+      body: JSON.stringify({ balance, note, date }),
+    });
+  }
+
+  async updateBalanceHistory(accountId: number, historyId: number, balance: number, note: string, date: string) {
+    return this.request<{ message: string }>(`/accounts/${accountId}/history/${historyId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ balance, note, date }),
+    });
+  }
+
+  async deleteBalanceHistory(accountId: number, historyId: number) {
+    return this.request<{ message: string }>(`/accounts/${accountId}/history/${historyId}`, {
+      method: 'DELETE',
     });
   }
 
@@ -178,7 +193,8 @@ class ApiClient {
   }
 
   async getExchangeRate(pair: string) {
-    return this.request<{ pair: string; rate: number; timestamp: string }>(`/currencies/rate/${pair}`);
+    const encodedPair = encodeURIComponent(pair);
+    return this.request<{ pair: string; rate: number; timestamp: string }>(`/currencies/public-rate/${encodedPair}`);
   }
 
   // Performance endpoints
@@ -206,6 +222,41 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  async calculateTodaySnapshot() {
+    return this.request<any>('/performance/calculate-today', {
+      method: 'POST',
+    });
+  }
+
+  async calculateSnapshot(date: string) {
+    return this.request<any>('/performance/calculate-snapshot', {
+      method: 'POST',
+      body: JSON.stringify({ date }),
+    });
+  }
+
+  async backfillPerformanceHistory(startDate: string, endDate: string) {
+    return this.request<{ message: string }>('/performance/backfill', {
+      method: 'POST',
+      body: JSON.stringify({ startDate, endDate }),
+    });
+  }
+
+  async getPerformanceChartData(limit?: number) {
+    const query = limit ? `?limit=${limit}` : '';
+    return this.request<any[]>(`/performance/chart${query}`);
+  }
+
+  async triggerDailyCalculation() {
+    return this.request<{ message: string }>('/performance/trigger-daily-calculation', {
+      method: 'POST',
+    });
+  }
+
+  async getSchedulerStatus() {
+    return this.request<{ isRunning: boolean; tasks: number; nextRun: string }>('/performance/scheduler-status');
   }
 
   // Two-Factor Authentication endpoints
