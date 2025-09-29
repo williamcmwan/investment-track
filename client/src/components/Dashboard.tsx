@@ -71,6 +71,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const [currencies, setCurrencies] = useState<any[]>([]);
   const [performanceHistory, setPerformanceHistory] = useState<any[]>([]);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
+  const [showPerformanceDetails, setShowPerformanceDetails] = useState(false);
   const baseCurrency = user?.baseCurrency || "HKD"; // Use user's base currency
 
   // Update localStorage whenever currentView changes
@@ -106,7 +107,13 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       setIsLoadingPerformance(true);
       const response = await apiClient.getPerformanceChartData(30); // Last 30 days
       if (response.data) {
-        setPerformanceHistory(response.data);
+        // Ensure x-axis is chronological: oldest on left, newest on right
+        const sorted = [...response.data].sort((a: any, b: any) => {
+          const da = new Date(a.date).getTime();
+          const db = new Date(b.date).getTime();
+          return da - db;
+        });
+        setPerformanceHistory(sorted);
       }
     } catch (error) {
       console.error('Error loading performance history:', error);
@@ -146,6 +153,17 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       });
     } finally {
       setIsLoadingAccounts(false);
+    }
+  };
+
+  // After an account change, force server to compute today's snapshot then reload chart
+  const handlePostAccountUpdate = async () => {
+    try {
+      await apiClient.calculateTodaySnapshot();
+    } catch (e) {
+      console.warn('Failed to calculate today snapshot on server, will still refresh chart.');
+    } finally {
+      await loadPerformanceHistory();
     }
   };
 
@@ -423,9 +441,19 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       <div className="space-y-6">
         {/* Performance Chart */}
         <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="pb-2 md:pb-6">
+          <CardHeader className="pb-2 md:pb-6 flex flex-row items-start md:items-center justify-between gap-3">
             <CardTitle className="text-sm md:text-base text-foreground">Performance Overview</CardTitle>
-            <CardDescription className="text-xs md:text-sm">Profit & Loss trends over time</CardDescription>
+            <div className="flex items-center gap-2 ml-auto">
+              <CardDescription className="text-xs md:text-sm hidden md:block">Profit & Loss trends over time</CardDescription>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-primary text-primary hover:bg-primary/10"
+                onClick={() => setShowPerformanceDetails(v => !v)}
+              >
+                {showPerformanceDetails ? 'Hide Details' : 'View Details'}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="p-2 md:p-6">
             <ChartContainer config={chartConfig} className="h-[250px] md:h-[400px] w-full">
@@ -575,6 +603,79 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               </LineChart>
             </ChartContainer>
           </CardContent>
+          {showPerformanceDetails && (
+            <CardContent className="pt-0 pb-4 md:pb-6">
+              <div className="overflow-x-auto border-t border-border/50 mt-2 pt-4">
+                <table className="w-full text-xs md:text-sm">
+                  <thead>
+                    <tr className="text-muted-foreground text-left border-b border-border/50">
+                      <th className="py-2 pr-3">Date</th>
+                      <th className="py-2 pr-3 text-right">Total P&L</th>
+                      <th className="py-2 pr-3 text-right">Investment P&L</th>
+                      <th className="py-2 pr-3 text-right">Currency P&L</th>
+                      <th className="py-2 pr-3 text-right">Daily P&L</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {performanceHistory.map((row, idx) => {
+                      const prev = idx > 0 ? performanceHistory[idx - 1] : null;
+                      const pct = (curr: number, prevVal: number) => {
+                        if (prev === null || prevVal === 0 || prevVal === undefined || prevVal === null) return '-';
+                        const v = ((curr - prevVal) / Math.abs(prevVal)) * 100;
+                        if (!isFinite(v)) return '-';
+                        return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+                      };
+                      const pctClass = (curr: number, prevVal: number) => {
+                        if (prev === null || prevVal === 0 || prevVal === undefined || prevVal === null) return 'text-muted-foreground';
+                        const v = curr - prevVal;
+                        return v >= 0 ? 'text-profit' : 'text-loss';
+                      };
+                      return (
+                        <tr key={row.date} className="border-b border-border/30">
+                          <td className="py-2 pr-3 text-foreground">
+                            {(() => {
+                              try {
+                                const d = new Date(row.date);
+                                return isNaN(d.getTime()) ? row.date : d.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
+                              } catch {
+                                return row.date;
+                              }
+                            })()}
+                          </td>
+                          <td className="py-2 pr-3 text-right">
+                            <div className="font-medium">{Number(row.totalPL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            <div className={`text-[10px] md:text-xs ${prev ? pctClass(Number(row.totalPL), Number(prev.totalPL)) : 'text-muted-foreground'}`}>
+                              {prev ? pct(Number(row.totalPL), Number(prev.totalPL)) : '-'}
+                            </div>
+                          </td>
+                          <td className="py-2 pr-3 text-right">
+                            <div className="font-medium">{Number(row.investmentPL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            <div className={`text-[10px] md:text-xs ${prev ? pctClass(Number(row.investmentPL), Number(prev.investmentPL)) : 'text-muted-foreground'}`}>
+                              {prev ? pct(Number(row.investmentPL), Number(prev.investmentPL)) : '-'}
+                            </div>
+                          </td>
+                          <td className="py-2 pr-3 text-right">
+                            <div className="font-medium">{Number(row.currencyPL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            <div className={`text-[10px] md:text-xs ${prev ? pctClass(Number(row.currencyPL), Number(prev.currencyPL)) : 'text-muted-foreground'}`}>
+                              {prev ? pct(Number(row.currencyPL), Number(prev.currencyPL)) : '-'}
+                            </div>
+                          </td>
+                          <td className="py-2 pr-3 text-right">
+                            {Number(row.dailyPL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {performanceHistory.length === 0 && (
+                      <tr>
+                        <td className="py-3 text-muted-foreground" colSpan={5}>No performance data available</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          )}
         </Card>
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
@@ -778,7 +879,10 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               baseCurrency={baseCurrency}
               exchangeRates={exchangeRates}
               convertToBaseCurrency={convertToBaseCurrency}
-              onAccountUpdate={loadAccounts}
+              onAccountUpdate={async () => {
+                await loadAccounts();
+                await handlePostAccountUpdate();
+              }}
             />
           )}
           {currentView === "currency" && (

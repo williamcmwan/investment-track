@@ -94,8 +94,9 @@ export class PerformanceHistoryService {
         previousDateStr
       );
       
-      const previousTotalPL = previousSnapshot.length > 0 ? previousSnapshot[0].totalPL : 0;
-      const dailyPL = totalPL - previousTotalPL;
+      // Daily P&L should reflect change in Investment P&L (exclude currency effects)
+      const previousInvestmentPL = previousSnapshot.length > 0 ? previousSnapshot[0].investmentPL : 0;
+      const dailyPL = investmentPLCalculated - previousInvestmentPL;
       
       // Store the snapshot
       const snapshot: PerformanceSnapshot = {

@@ -130,6 +130,13 @@ router.put('/:id', async (req: AuthenticatedRequest, res) => {
       }
     }
     
+    // Recalculate today's performance snapshot after any account update
+    try {
+      await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+    } catch (e) {
+      console.warn('Performance snapshot update failed after account update');
+    }
+    
     return res.json(account);
   } catch (error) {
     if (error instanceof z.ZodError) {
