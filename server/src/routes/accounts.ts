@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { AccountModel, CreateAccountData, UpdateAccountData } from '../models/Account.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
+import { PerformanceHistoryService } from '../services/performanceHistoryService.js';
 
 const router = express.Router();
 
@@ -58,6 +59,13 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
       return res.status(404).json({ error: 'Account not found' });
     }
     
+    // Recalculate today's performance snapshot after successful update
+    try {
+      await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+    } catch (e) {
+      console.warn('Performance snapshot update failed after account update');
+    }
+
     return res.json(account);
   } catch (error) {
     console.error('Get account error:', error);
@@ -173,6 +181,14 @@ router.post('/:id/history', async (req: AuthenticatedRequest, res) => {
     }
     
     await AccountModel.addBalanceHistory(accountId, balance, note, date);
+
+    // Recalculate today's performance snapshot after history add
+    try {
+      await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+    } catch (e) {
+      console.warn('Performance snapshot update failed after adding history');
+    }
+
     return res.status(201).json({ message: 'Balance history entry added' });
   } catch (error) {
     console.error('Add balance history error:', error);
@@ -202,6 +218,14 @@ router.put('/:id/history/:historyId', async (req: AuthenticatedRequest, res) => 
     }
     
     await AccountModel.updateBalanceHistory(historyId, accountId, balance, note, date);
+
+    // Recalculate today's performance snapshot after history update
+    try {
+      await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+    } catch (e) {
+      console.warn('Performance snapshot update failed after updating history');
+    }
+
     return res.json({ message: 'Balance history entry updated' });
   } catch (error) {
     console.error('Update balance history error:', error);
@@ -226,6 +250,14 @@ router.delete('/:id/history/:historyId', async (req: AuthenticatedRequest, res) 
     }
     
     await AccountModel.deleteBalanceHistory(historyId, accountId);
+
+    // Recalculate today's performance snapshot after history delete
+    try {
+      await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+    } catch (e) {
+      console.warn('Performance snapshot update failed after deleting history');
+    }
+
     return res.json({ message: 'Balance history entry deleted' });
   } catch (error) {
     console.error('Delete balance history error:', error);

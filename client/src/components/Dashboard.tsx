@@ -152,7 +152,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Load currencies data
   const loadCurrencies = async () => {
     try {
-      const response = await apiClient.getCurrencyPairs();
+      const response = await apiClient.getCurrencyPairs(true);
       if (response.data) {
         setCurrencies(response.data);
       } else {

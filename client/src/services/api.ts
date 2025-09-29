@@ -139,8 +139,9 @@ class ApiClient {
   }
 
   // Currency endpoints
-  async getCurrencyPairs() {
-    return this.request<any[]>('/currencies');
+  async getCurrencyPairs(refresh: boolean = false) {
+    const query = refresh ? '?refresh=1' : '';
+    return this.request<any[]>(`/currencies${query}`);
   }
 
   async getCurrencyPair(id: number) {

@@ -65,7 +65,7 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
   const loadCurrencies = async () => {
     try {
       setIsLoading(true);
-      const response = await apiClient.getCurrencyPairs();
+      const response = await apiClient.getCurrencyPairs(true);
       if (response.data) {
         setCurrencies(response.data);
       } else {

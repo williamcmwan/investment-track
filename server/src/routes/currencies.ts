@@ -57,13 +57,17 @@ router.get('/public-rate/:pair', async (req, res) => {
   }
 });
 
+// Apply authentication to all routes after this point
+router.use(authenticateToken);
+
 // Update all currency pairs with enhanced exchange rates (multiple sources)
 router.post('/update-rates-enhanced', async (req: AuthenticatedRequest, res) => {
   try {
-    await EnhancedExchangeRateService.updateAllCurrencyPairs(req.user?.id || 0);
+    const userId = req.user?.id || 0;
+    await EnhancedExchangeRateService.updateAllCurrencyPairs(userId);
     
-    // Return updated pairs
-    const pairs = await CurrencyPairModel.findByUserId(req.user?.id || 0);
+    // Return updated pairs for the authenticated user
+    const pairs = await CurrencyPairModel.findByUserId(userId);
     return res.json({ 
       message: 'Enhanced exchange rates updated successfully',
       pairs,
@@ -74,9 +78,6 @@ router.post('/update-rates-enhanced', async (req: AuthenticatedRequest, res) => 
     return res.status(500).json({ error: 'Failed to update enhanced exchange rates' });
   }
 });
-
-// Apply authentication to all routes
-router.use(authenticateToken);
 
 // Validation schemas
 const createCurrencyPairSchema = z.object({
@@ -94,7 +95,19 @@ const updateCurrencyPairSchema = z.object({
 // Get all currency pairs for user
 router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
-    const pairs = await CurrencyPairModel.findByUserId(req.user?.id || 0);
+    const userId = req.user?.id || 0;
+    const refresh = (req.query.refresh === '1' || req.query.refresh === 'true');
+
+    // If refresh requested, update all pairs first (multi-source enhanced accuracy)
+    if (refresh) {
+      try {
+        await EnhancedExchangeRateService.updateAllCurrencyPairs(userId);
+      } catch (e) {
+        console.warn('Currency refresh failed, returning cached pairs instead');
+      }
+    }
+
+    const pairs = await CurrencyPairModel.findByUserId(userId);
     return res.json(pairs);
   } catch (error) {
     console.error('Get currency pairs error:', error);
