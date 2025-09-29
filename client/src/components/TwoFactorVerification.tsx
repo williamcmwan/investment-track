@@ -55,7 +55,8 @@ const TwoFactorVerification: React.FC<TwoFactorVerificationProps> = ({
   };
 
   return (
-    <Card className="w-full max-w-md">
+    <div className="min-h-screen w-full bg-gradient-hero flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>Two-Factor Authentication</CardTitle>
         <CardDescription>
@@ -95,7 +96,8 @@ const TwoFactorVerification: React.FC<TwoFactorVerificationProps> = ({
           </Button>
         </div>
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 };
 

@@ -50,7 +50,7 @@ const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isColl
     <>
       {/* 2FA Setup Modal */}
       {showTwoFactorSetup && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-gradient-hero z-50 flex items-center justify-center p-4">
           <TwoFactorSetup
             onComplete={() => {
               setShowTwoFactorSetup(false);

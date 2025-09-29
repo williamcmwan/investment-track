@@ -75,7 +75,7 @@ const TwoFactorSetup: React.FC<TwoFactorSetupProps> = ({ onComplete, onCancel })
       console.error('2FA verification error:', error);
       toast({
         title: "Verification Failed",
-        description: response.error || "Invalid verification code. Please try again.",
+        description: "Invalid verification code. Please try again.",
         variant: "destructive",
       });
     } finally {

@@ -35,7 +35,7 @@ NODE_ENV=production
 DATABASE_PATH=./data/investment_tracker.db
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 JWT_EXPIRES_IN=7d
-CORS_ORIGIN=http://localhost:3002
+CORS_ORIGIN=https://yourdomain.com
 RATE_LIMIT_WINDOW_MS=900000
 RATE_LIMIT_MAX_REQUESTS=100
 EOF

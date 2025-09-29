@@ -143,19 +143,17 @@ const Login = ({ onLogin }: LoginProps) => {
 
   if (showTwoFactor && twoFactorUserId) {
     return (
-      <div className="min-h-screen bg-gradient-hero flex items-center justify-center p-4">
-        <TwoFactorVerification
-          userId={twoFactorUserId}
-          onSuccess={handleTwoFactorSuccess}
-          onCancel={handleTwoFactorCancel}
-        />
-      </div>
+      <TwoFactorVerification
+        userId={twoFactorUserId}
+        onSuccess={handleTwoFactorSuccess}
+        onCancel={handleTwoFactorCancel}
+      />
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-hero flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen w-full bg-gradient-hero flex items-center justify-center p-4">
+      <div className="w-full max-w-md mx-auto">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-4">
             <div className="p-2 bg-gradient-primary rounded-lg">
