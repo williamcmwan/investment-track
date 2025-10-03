@@ -5,6 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -15,7 +18,8 @@ import {
   ArrowDownRight,
   Wallet,
   ArrowLeftRight,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
@@ -72,6 +76,9 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const [performanceHistory, setPerformanceHistory] = useState<any[]>([]);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
   const [showPerformanceDetails, setShowPerformanceDetails] = useState(false);
+  const [showQuickUpdateDialog, setShowQuickUpdateDialog] = useState(false);
+  const [quickUpdateAmounts, setQuickUpdateAmounts] = useState<Record<number, string>>({});
+  const [isUpdatingBalances, setIsUpdatingBalances] = useState(false);
   const baseCurrency = user?.baseCurrency || "HKD"; // Use user's base currency
 
   // Update localStorage whenever currentView changes
@@ -165,6 +172,76 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     } finally {
       await loadPerformanceHistory();
     }
+  };
+
+  // Handle Quick Update of account balances
+  const handleQuickUpdate = async () => {
+    setIsUpdatingBalances(true);
+    try {
+      const updates = [];
+      
+      // Process each account with a non-empty amount
+      for (const account of accounts) {
+        const amountStr = quickUpdateAmounts[account.id];
+        if (amountStr && amountStr.trim() !== '') {
+          const amount = parseFloat(amountStr);
+          if (!isNaN(amount)) {
+            // Update the account's current balance (this will also add a history entry)
+            const response = await apiClient.updateAccount(account.id, {
+              currentBalance: amount,
+              date: new Date().toISOString().split('T')[0] // Today's date in YYYY-MM-DD format
+            });
+            
+            if (response.error) {
+              toast({
+                title: "Error",
+                description: `Failed to update ${account.name}: ${response.error}`,
+                variant: "destructive",
+              });
+            } else {
+              updates.push(account.name);
+            }
+          }
+        }
+      }
+      
+      if (updates.length > 0) {
+        toast({
+          title: "Success",
+          description: `Updated balances for ${updates.length} account(s): ${updates.join(', ')}`,
+        });
+        
+        // Reload accounts and update performance data
+        await loadAccounts();
+        await handlePostAccountUpdate();
+        
+        // Clear the form and close dialog
+        setQuickUpdateAmounts({});
+        setShowQuickUpdateDialog(false);
+      } else {
+        toast({
+          title: "No Updates",
+          description: "Please enter valid amounts for at least one account.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update account balances",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingBalances(false);
+    }
+  };
+
+  // Handle amount input change
+  const handleAmountChange = (accountId: number, value: string) => {
+    setQuickUpdateAmounts(prev => ({
+      ...prev,
+      [accountId]: value
+    }));
   };
 
   // Load currencies data
@@ -869,6 +946,69 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               {currentView === "currency" && "Track currency exchange rates"}
             </p>
               </div>
+              {currentView === "overview" && (
+                <Dialog open={showQuickUpdateDialog} onOpenChange={setShowQuickUpdateDialog}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="flex items-center gap-2">
+                      <Zap className="h-4 w-4" />
+                      Quick Update
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Quick Update Account Balances</DialogTitle>
+                      <DialogDescription>
+                        Update the current balance for your investment accounts. Leave empty to skip an account.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      {accounts.map((account) => (
+                        <div key={account.id} className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor={`account-${account.id}`} className="text-right font-medium">
+                            {account.name}
+                          </Label>
+                          <div className="col-span-2">
+                            <Input
+                              id={`account-${account.id}`}
+                              type="number"
+                              step="0.01"
+                              placeholder="Enter new balance"
+                              value={quickUpdateAmounts[account.id] || ''}
+                              onChange={(e) => handleAmountChange(account.id, e.target.value)}
+                              className="w-full"
+                            />
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {account.currency}
+                          </div>
+                        </div>
+                      ))}
+                      {accounts.length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          No investment accounts found. Create an account first.
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setQuickUpdateAmounts({});
+                          setShowQuickUpdateDialog(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleQuickUpdate}
+                        disabled={isUpdatingBalances || accounts.length === 0}
+                      >
+                        {isUpdatingBalances ? "Updating..." : "Update Balances"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
             </div>
           </div>
 

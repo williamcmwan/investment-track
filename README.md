@@ -30,10 +30,9 @@ investment-track/
 │   │   ├── routes/         # API routes
 │   │   ├── services/       # Business logic
 │   │   └── middleware/     # Express middleware
-├── scripts/                # Deployment scripts
+├── scripts/                # Management scripts
 │   ├── deploy.sh           # Full deployment script
-│   ├── start-dev.sh        # Development mode
-│   └── start-production.sh # Production mode
+│   └── app.sh              # Unified application management
 ├── config/                 # Configuration files
 │   ├── nginx-production.conf # Nginx configuration
 │   └── investment-tracker.service # Systemd service
@@ -106,23 +105,36 @@ investment-track/
 
 ## 🔧 Development
 
-### Development Mode
+### Application Management
 ```bash
-# Start both client and server in development mode
-./scripts/start-dev.sh
-# Frontend: http://localhost:5173 (Vite dev server)
-# Backend: http://localhost:3002 (Express server)
+# Start application (auto-detects dev/production mode)
+./scripts/app.sh start
+
+# Check application status
+./scripts/app.sh status
+
+# View application logs
+./scripts/app.sh logs
+
+# Stop application
+./scripts/app.sh stop
+
+# Or use npm scripts
+npm run app:start
+npm run app:status
+npm run app:logs
+npm run app:stop
 ```
+
+### Development Mode
+- **Auto-detected** when built files don't exist
+- Frontend: http://localhost:5173 (Vite dev server)
+- Backend: http://localhost:3002 (Express server)
 
 ### Production Mode
-```bash
-# Deploy everything
-./scripts/deploy.sh
-
-# Start production server (single port)
-./scripts/start-production.sh
-# Application: http://localhost:3002
-```
+- **Auto-detected** when built files are present
+- Application: http://localhost:3002 (single port)
+- Deploy first: `./scripts/deploy.sh`
 
 ### Database Management
 ```bash
@@ -258,6 +270,28 @@ VITE_API_URL=https://yourdomain.com/api
 4. **Track currency pairs** and exchange rates
 5. **Monitor performance** with analytics dashboard
 
+### Quick Update Feature
+The Dashboard Overview page includes a "Quick Update" button for efficiently updating account balances:
+
+#### How to Use:
+1. Navigate to the **Dashboard Overview** page
+2. Click the **"Quick Update"** button next to the page title
+3. Enter new balance amounts for accounts you want to update (leave empty to skip)
+4. Click **"Update Balances"** to save changes
+
+#### What Happens:
+- **Account Balance Update**: Current balance is updated to the new amount
+- **Automatic History**: Balance history entry is created with today's date
+- **Performance Recalculation**: Dashboard analytics are automatically updated
+- **Selective Updates**: Only accounts with entered amounts are updated
+- **Validation**: Only accepts valid numeric values with proper error handling
+
+#### Features:
+- **Currency Display**: Shows each account's currency next to input fields
+- **Real-time Feedback**: Success/error messages with specific details
+- **Automatic Refresh**: Dashboard data refreshes immediately after updates
+- **Form Validation**: Prevents invalid inputs and provides clear error messages
+
 ### 2FA Setup
 1. After login, click "Setup 2FA" in the sidebar
 2. Scan the QR code with your authenticator app
@@ -276,13 +310,20 @@ VITE_API_URL=https://yourdomain.com/api
 
 This project is licensed under the MIT License.
 
+## 📚 Documentation
+
+- **[Application Management](APPLICATION_MANAGEMENT.md)** - Comprehensive guide to the unified app management script
+- **API Endpoints** - See the API section above
+- **Database Schema** - See the database section above
+
 ## 🆘 Support
 
 For issues and questions:
 1. Check the documentation
-2. Review the API endpoints
-3. Check the database schema
-4. Open an issue on GitHub
+2. Review the [Application Management guide](APPLICATION_MANAGEMENT.md)
+3. Review the API endpoints
+4. Check the database schema
+5. Open an issue on GitHub
 
 ## 🔄 Updates
 
@@ -295,6 +336,10 @@ For issues and questions:
 - ✅ Security improvements
 - ✅ Single port deployment (port 3002)
 - ✅ Static file serving from Express server
+- ✅ **Quick Update Feature**: Efficient account balance updates from dashboard
+- ✅ **Unified App Management**: Single `scripts/app.sh` script for all operations
+- ✅ **Enhanced Process Management**: PID tracking, graceful shutdown, status monitoring
+- ✅ **Centralized Logging**: Structured logs with configurable viewing
 
 ---
 

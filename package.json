@@ -18,8 +18,12 @@
     "install:all": "npm install && cd client && npm install && cd ../server && npm install",
     "lint": "cd client && npm run lint",
     "deploy": "./scripts/deploy.sh",
-    "start:dev": "./scripts/start-dev.sh",
-    "start:prod": "./scripts/start-production.sh"
+    "app": "./scripts/app.sh",
+    "app:start": "./scripts/app.sh start",
+    "app:stop": "./scripts/app.sh stop",
+    "app:restart": "./scripts/app.sh restart",
+    "app:status": "./scripts/app.sh status",
+    "app:logs": "./scripts/app.sh logs"
   },
   "dependencies": {
     "concurrently": "^8.2.2"
