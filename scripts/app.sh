@@ -56,15 +56,23 @@ is_running() {
     local component=$1
     local pid_file="$PID_DIR/${component}.pid"
     
+    # First check PID file if it exists
     if [ -f "$pid_file" ]; then
         local pid=$(cat "$pid_file")
         if kill -0 "$pid" 2>/dev/null; then
             return 0
         else
             rm -f "$pid_file"
-            return 1
         fi
     fi
+    
+    # Also check for processes running on port 3002 (for server)
+    if [ "$component" = "server" ]; then
+        if lsof -i :3002 >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    
     return 1
 }
 
@@ -73,8 +81,24 @@ get_pid() {
     local component=$1
     local pid_file="$PID_DIR/${component}.pid"
     
+    # First try PID file
     if [ -f "$pid_file" ]; then
-        cat "$pid_file"
+        local pid=$(cat "$pid_file")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "$pid"
+            return
+        else
+            rm -f "$pid_file"
+        fi
+    fi
+    
+    # For server, try to find process on port 3002
+    if [ "$component" = "server" ]; then
+        local port_pid=$(lsof -ti :3002 2>/dev/null | head -1)
+        if [ -n "$port_pid" ]; then
+            echo "$port_pid"
+            return
+        fi
     fi
 }
 
@@ -120,6 +144,16 @@ start_server() {
     
     log_info "Starting server in $MODE mode..."
     
+    # In development mode, ensure client is built for single-port serving
+    if [ "$MODE" = "development" ]; then
+        if [ ! -f "$CLIENT_DIR/dist/index.html" ]; then
+            log_info "Building client for development mode..."
+            cd "$CLIENT_DIR"
+            npm run build
+            cd "$SERVER_DIR"
+        fi
+    fi
+    
     cd "$SERVER_DIR"
     
     if [ "$MODE" = "production" ]; then
@@ -152,18 +186,9 @@ start_client() {
         return 0
     fi
     
-    if is_running "client"; then
-        log_warning "Client is already running (PID: $(get_pid client))"
-        return 0
-    fi
-    
-    log_info "Starting client in development mode..."
-    
-    cd "$CLIENT_DIR"
-    nohup npm run dev > "$LOG_DIR/client.log" 2>&1 &
-    echo $! > "$PID_DIR/client.pid"
-    log_success "Client started (PID: $!)"
-    log_info "Client logs: $LOG_DIR/client.log"
+    log_info "In development mode, client is served through server on port 3002"
+    log_info "For live reloading, the server runs with tsx watch"
+    return 0
 }
 
 # Stop process
@@ -177,7 +202,28 @@ stop_process() {
     fi
     
     local pid=$(get_pid "$component")
+    if [ -z "$pid" ]; then
+        log_warning "Could not find PID for $component"
+        return 1
+    fi
+    
     log_info "Stopping $component (PID: $pid)..."
+    
+    # For server, also try to stop parent npm process if it exists
+    if [ "$component" = "server" ]; then
+        local parent_pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+        if [ -n "$parent_pid" ] && [ "$parent_pid" != "1" ]; then
+            local parent_cmd=$(ps -o command= -p "$parent_pid" 2>/dev/null)
+            if echo "$parent_cmd" | grep -q "npm"; then
+                log_info "Also stopping parent npm process (PID: $parent_pid)..."
+                if [ "$force" = true ]; then
+                    kill -9 "$parent_pid" 2>/dev/null || true
+                else
+                    kill -TERM "$parent_pid" 2>/dev/null || true
+                fi
+            fi
+        fi
+    fi
     
     if [ "$force" = true ]; then
         kill -9 "$pid" 2>/dev/null || true
@@ -233,12 +279,7 @@ show_status() {
             if [ "$MODE" = "production" ]; then
                 echo -e "${BLUE}Client: Production (served by server)${NC}"
             else
-                if is_running "client"; then
-                    echo -e "${GREEN}Client: Running${NC} (PID: $(get_pid client))"
-                    echo "  URL: http://localhost:5173"
-                else
-                    echo -e "${RED}Client: Stopped${NC}"
-                fi
+                echo -e "${BLUE}Client: Development (served by server on port 3002)${NC}"
             fi
             ;;
     esac
@@ -262,24 +303,12 @@ show_logs() {
             fi
             ;;
         "client")
-            if [ "$MODE" = "production" ]; then
-                log_info "Client logs are included in server logs in production mode"
-                show_logs "server" "$lines"
-            else
-                if [ -f "$LOG_DIR/client.log" ]; then
-                    log_info "Client logs (last $lines lines):"
-                    tail -n "$lines" "$LOG_DIR/client.log"
-                else
-                    log_warning "Client log file not found"
-                fi
-            fi
+            log_info "Client logs are included in server logs (single-port mode)"
+            show_logs "server" "$lines"
             ;;
         "all")
             show_logs "server" "$lines"
-            if [ "$MODE" = "development" ]; then
-                echo ""
-                show_logs "client" "$lines"
-            fi
+            # In single-port mode, all logs are in server.log
             ;;
     esac
 }
@@ -300,20 +329,19 @@ show_help() {
     echo "  help                         Show this help message"
     echo ""
     echo "Examples:"
-    echo "  ./scripts/app.sh start                     # Start both server and client"
-    echo "  ./scripts/app.sh start server              # Start only server"
-    echo "  ./scripts/app.sh stop                      # Stop both server and client"
-    echo "  ./scripts/app.sh restart client            # Restart only client"
-    echo "  ./scripts/app.sh status                    # Show status of both components"
+    echo "  ./scripts/app.sh start                     # Start application (single port)"
+    echo "  ./scripts/app.sh start server              # Start server"
+    echo "  ./scripts/app.sh stop                      # Stop application"
+    echo "  ./scripts/app.sh restart                   # Restart application"
+    echo "  ./scripts/app.sh status                    # Show application status"
     echo "  ./scripts/app.sh logs server 100           # Show last 100 lines of server log"
     echo ""
     echo "Environment Detection:"
-    echo "  - Development: Uses npm run dev for live reloading"
+    echo "  - Development: Server hot reloading, client served from build"
     echo "  - Production: Uses built files (requires npm run build first)"
     echo ""
     echo "URLs:"
-    echo "  - Development: Client at http://localhost:5173, Server at http://localhost:3002"
-    echo "  - Production: Application at http://localhost:3002"
+    echo "  - Application: http://localhost:3002 (single port for all modes)"
     echo "  - API: http://localhost:3002/api"
     echo "  - Health: http://localhost:3002/health"
 }
@@ -341,10 +369,7 @@ main() {
                     ;;
                 "all")
                     start_server
-                    if [ "$MODE" = "development" ]; then
-                        sleep 2  # Give server time to start
-                        start_client
-                    fi
+                    # In single-port mode, client is served by server
                     ;;
                 *)
                     log_error "Invalid component: $component"
@@ -368,8 +393,8 @@ main() {
                     stop_process "client"
                     ;;
                 "all")
-                    stop_process "client"
                     stop_process "server"
+                    # In single-port mode, stopping server stops everything
                     ;;
                 *)
                     log_error "Invalid component: $component"
@@ -381,8 +406,18 @@ main() {
             
         "force-stop")
             log_header "Force stopping all processes"
-            stop_process "client" true
             stop_process "server" true
+            
+            # Also kill any remaining processes on port 3002
+            local remaining_pids=$(lsof -ti :3002 2>/dev/null)
+            if [ -n "$remaining_pids" ]; then
+                log_warning "Force killing remaining processes on port 3002..."
+                echo "$remaining_pids" | xargs kill -9 2>/dev/null || true
+            fi
+            
+            # Clean up any stale PID files
+            rm -f "$PID_DIR"/*.pid
+            log_success "Force stop completed"
             ;;
             
         "restart")
@@ -402,15 +437,11 @@ main() {
                     start_client
                     ;;
                 "all")
-                    stop_process "client"
                     stop_process "server"
                     sleep 2
-                    check_dependencies "all"
+                    check_dependencies "server"
                     start_server
-                    if [ "$MODE" = "development" ]; then
-                        sleep 2
-                        start_client
-                    fi
+                    # In single-port mode, server handles everything
                     ;;
                 *)
                     log_error "Invalid component: $component"

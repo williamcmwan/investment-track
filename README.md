@@ -100,7 +100,7 @@ investment-track/
 
 5. **Access the application**
    - Application: http://localhost:3002
-   - Backend API: http://localhost:3002/api
+   - API: http://localhost:3002/api
    - Health check: http://localhost:3002/health
 
 ## 🔧 Development
@@ -126,15 +126,13 @@ npm run app:logs
 npm run app:stop
 ```
 
-### Development Mode
-- **Auto-detected** when built files don't exist
-- Frontend: http://localhost:5173 (Vite dev server)
-- Backend: http://localhost:3002 (Express server)
+### Single Port Architecture
+The application uses **port 3002** for all functionality in both development and production modes:
 
-### Production Mode
-- **Auto-detected** when built files are present
-- Application: http://localhost:3002 (single port)
-- Deploy first: `./scripts/deploy.sh`
+- **Development Mode**: Server hot reloading with client served from build
+- **Production Mode**: Optimized builds served from single process
+- **Auto-detection**: Environment automatically detected based on build files
+- **Deploy first**: `./scripts/deploy.sh` for production setup
 
 ### Database Management
 ```bash
@@ -231,9 +229,10 @@ cd server && npx tsx src/database/seed.ts
    ./scripts/deploy.sh
    ```
 
-3. **Start production server**
+3. **Start application**
    ```bash
-   ./scripts/start-production.sh
+   ./scripts/app.sh start
+   # Or using npm: npm run app:start
    ```
 
 ### Nginx Configuration
@@ -260,6 +259,90 @@ CORS_ORIGIN=https://yourdomain.com
 ```bash
 VITE_API_URL=https://yourdomain.com/api
 ```
+
+## 🎛️ Application Management
+
+### Unified App Management Script
+The `scripts/app.sh` provides comprehensive application management with automatic environment detection and robust process control.
+
+#### Commands Available:
+```bash
+./scripts/app.sh COMMAND [OPTIONS]
+
+Commands:
+  start [server|client|all]    # Start application components [default: all]
+  stop [server|client|all]     # Stop application components [default: all]
+  force-stop                   # Force stop all processes (emergency)
+  restart [server|client|all]  # Restart application components [default: all]
+  status                       # Show current application status
+  logs [server|client|all] [lines]  # View logs [default: all, 50 lines]
+  help                         # Show usage information
+```
+
+#### Usage Examples:
+```bash
+# Start application (auto-detects environment)
+./scripts/app.sh start
+
+# Check application status
+./scripts/app.sh status
+
+# View application logs
+./scripts/app.sh logs server 100
+
+# Stop application
+./scripts/app.sh stop
+
+# Emergency force stop
+./scripts/app.sh force-stop
+
+# Or use npm scripts
+npm run app:start
+npm run app:status
+npm run app:logs
+npm run app:stop
+```
+
+#### Environment Detection:
+- **Development Mode**: Auto-detected when built files don't exist
+  - Server runs with `tsx watch` for hot reloading
+  - Client built automatically and served through server
+  - Single port 3002 for all functionality
+
+- **Production Mode**: Auto-detected when built files are present
+  - Server runs optimized built application
+  - Client served as static files by server
+  - Single port 3002 for all functionality
+
+#### Process Management Features:
+- **PID Tracking**: Proper process identification and management
+- **Graceful Shutdown**: Attempts clean shutdown before force killing
+- **Port Detection**: Finds processes running on port 3002 even if started externally
+- **Parent Process Handling**: Stops npm parent processes along with child processes
+- **Centralized Logging**: All logs stored in `logs/` directory with configurable viewing
+- **Status Monitoring**: Real-time application status reporting
+
+#### Troubleshooting:
+```bash
+# Check what's running
+./scripts/app.sh status
+
+# View recent logs for debugging
+./scripts/app.sh logs all 100
+
+# Force clean restart if issues occur
+./scripts/app.sh force-stop
+./scripts/app.sh start
+
+# Emergency cleanup (kills any process on port 3002)
+./scripts/app.sh force-stop
+```
+
+#### Common Issues:
+1. **"Dependencies not installed"**: Run `npm run setup`
+2. **"Production build not found"**: Run `npm run build`
+3. **"Database not found"**: Run `npm run db:migrate`
+4. **Process won't stop**: Use `./scripts/app.sh force-stop`
 
 ## 📱 Usage
 
@@ -310,19 +393,13 @@ The Dashboard Overview page includes a "Quick Update" button for efficiently upd
 
 This project is licensed under the MIT License.
 
-## 📚 Documentation
-
-- **[Application Management](APPLICATION_MANAGEMENT.md)** - Comprehensive guide to the unified app management script
-- **API Endpoints** - See the API section above
-- **Database Schema** - See the database section above
-
 ## 🆘 Support
 
 For issues and questions:
-1. Check the documentation
-2. Review the [Application Management guide](APPLICATION_MANAGEMENT.md)
-3. Review the API endpoints
-4. Check the database schema
+1. Check the Application Management section above
+2. Review the API endpoints
+3. Check the database schema
+4. Use `./scripts/app.sh help` for command reference
 5. Open an issue on GitHub
 
 ## 🔄 Updates
@@ -339,6 +416,7 @@ For issues and questions:
 - ✅ **Quick Update Feature**: Efficient account balance updates from dashboard
 - ✅ **Unified App Management**: Single `scripts/app.sh` script for all operations
 - ✅ **Enhanced Process Management**: PID tracking, graceful shutdown, status monitoring
+- ✅ **Robust Stop Command**: Detects and stops processes regardless of how they were started
 - ✅ **Centralized Logging**: Structured logs with configurable viewing
 
 ---
