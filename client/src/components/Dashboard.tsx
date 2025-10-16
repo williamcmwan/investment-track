@@ -82,11 +82,34 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Pagination constants
   const ITEMS_PER_PAGE = 30;
   
-  // Get paginated performance data
+  // Get paginated performance data with previous day data
   const getPaginatedPerformanceData = () => {
     const startIndex = performancePage * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
-    return allPerformanceData.slice(startIndex, endIndex);
+    
+    // Create a map for quick lookup of previous day data
+    const dataByDate = new Map();
+    allPerformanceData.forEach(item => {
+      dataByDate.set(item.date, item);
+    });
+    
+    return allPerformanceData.slice(startIndex, endIndex).map(row => {
+      // Find the chronologically previous day
+      const currentDate = new Date(row.date);
+      let prev = null;
+      
+      // Look for the most recent previous day in the data
+      for (const item of allPerformanceData) {
+        const itemDate = new Date(item.date);
+        if (itemDate.getTime() < currentDate.getTime()) {
+          if (!prev || new Date(item.date).getTime() > new Date(prev.date).getTime()) {
+            prev = item;
+          }
+        }
+      }
+      
+      return { ...row, prev };
+    });
   };
   
   const totalPages = Math.ceil(allPerformanceData.length / ITEMS_PER_PAGE);
@@ -728,16 +751,16 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                   </thead>
                   <tbody>
                     {getPaginatedPerformanceData().map((row, idx) => {
-                      const paginatedData = getPaginatedPerformanceData();
-                      const prev = idx > 0 ? paginatedData[idx - 1] : null;
+                      const prev = row.prev; // Use pre-calculated previous day data
+                      
                       const pct = (curr: number, prevVal: number) => {
-                        if (prev === null || prevVal === 0 || prevVal === undefined || prevVal === null) return '-';
+                        if (!prev || prevVal === 0 || prevVal === undefined || prevVal === null) return '-';
                         const v = ((curr - prevVal) / Math.abs(prevVal)) * 100;
                         if (!isFinite(v)) return '-';
                         return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
                       };
                       const pctClass = (curr: number, prevVal: number) => {
-                        if (prev === null || prevVal === 0 || prevVal === undefined || prevVal === null) return 'text-muted-foreground';
+                        if (!prev || prevVal === 0 || prevVal === undefined || prevVal === null) return 'text-muted-foreground';
                         const v = curr - prevVal;
                         return v >= 0 ? 'text-profit' : 'text-loss';
                       };
