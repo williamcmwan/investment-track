@@ -109,6 +109,7 @@ export class AccountModel {
     
     if (accountData.currentBalance !== undefined) {
       updateFields.push('current_balance = ?');
+      updateFields.push('last_updated = CURRENT_TIMESTAMP');
       values.push(accountData.currentBalance);
     }
     

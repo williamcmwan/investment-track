@@ -157,7 +157,7 @@ cd server && npx tsx src/database/seed.ts
 - Optional 2FA setup after login
 
 ### Security Features
-- JWT token authentication
+- JWT token authentication with unlimited duration (valid until logout)
 - Password hashing with bcrypt
 - CORS protection
 - Rate limiting
@@ -381,6 +381,25 @@ The Dashboard Overview page includes a "Quick Update" button for efficiently upd
 3. Enter the verification code to enable 2FA
 4. Use your authenticator app for future logins
 
+### Performance Overview
+The Dashboard includes an enhanced Performance Overview section with:
+
+#### Features:
+- **Detailed Table View**: Shows by default with comprehensive P&L data
+- **Chronological Sorting**: Most recent entries displayed first
+- **Clean Date Format**: Month and day only (e.g., "Dec 15") for better readability
+- **Pagination**: 30 entries per page with Previous/Next navigation
+- **Toggle View**: Click "Hide Details" to show chart-only view
+- **Real-time Data**: Automatically updates when account balances change
+
+#### Data Displayed:
+- **Date**: When the performance snapshot was recorded
+- **Total P&L**: Overall profit/loss across all investments
+- **Investment P&L**: Profit/loss from account balance changes
+- **Currency P&L**: Profit/loss from currency exchange rate fluctuations
+- **Daily P&L**: Day-over-day change in performance
+- **Percentage Changes**: Color-coded percentage changes for each metric
+
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -418,6 +437,13 @@ For issues and questions:
 - ✅ **Enhanced Process Management**: PID tracking, graceful shutdown, status monitoring
 - ✅ **Robust Stop Command**: Detects and stops processes regardless of how they were started
 - ✅ **Centralized Logging**: Structured logs with configurable viewing
+- ✅ **Unlimited Token Duration**: JWT tokens now valid indefinitely until manual logout
+- ✅ **Performance Overview Enhancements**: 
+  - Dates sorted in descending order (newest first)
+  - Year removed from date display for cleaner UI
+  - Pagination with 30 entries per page and Previous/Next navigation
+  - Details shown by default for better user experience
+- ✅ **Account Timestamp Fix**: Last updated timestamp now properly reflects balance changes
 
 ---
 

@@ -75,7 +75,24 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const [currencies, setCurrencies] = useState<any[]>([]);
   const [performanceHistory, setPerformanceHistory] = useState<any[]>([]);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
-  const [showPerformanceDetails, setShowPerformanceDetails] = useState(false);
+  const [showPerformanceDetails, setShowPerformanceDetails] = useState(true);
+  const [performancePage, setPerformancePage] = useState(0);
+  const [allPerformanceData, setAllPerformanceData] = useState<any[]>([]);
+  
+  // Pagination constants
+  const ITEMS_PER_PAGE = 30;
+  
+  // Get paginated performance data
+  const getPaginatedPerformanceData = () => {
+    const startIndex = performancePage * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return allPerformanceData.slice(startIndex, endIndex);
+  };
+  
+  const totalPages = Math.ceil(allPerformanceData.length / ITEMS_PER_PAGE);
+  const canGoPrevious = performancePage > 0;
+  const canGoNext = performancePage < totalPages - 1;
+  
   const [showQuickUpdateDialog, setShowQuickUpdateDialog] = useState(false);
   const [quickUpdateAmounts, setQuickUpdateAmounts] = useState<Record<number, string>>({});
   const [isUpdatingBalances, setIsUpdatingBalances] = useState(false);
@@ -112,15 +129,23 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const loadPerformanceHistory = async () => {
     try {
       setIsLoadingPerformance(true);
-      const response = await apiClient.getPerformanceChartData(30); // Last 30 days
+      const response = await apiClient.getPerformanceChartData(); // Get all data
       if (response.data) {
-        // Ensure x-axis is chronological: oldest on left, newest on right
-        const sorted = [...response.data].sort((a: any, b: any) => {
+        // Sort in descending order (newest first) for table display
+        const sortedDesc = [...response.data].sort((a: any, b: any) => {
           const da = new Date(a.date).getTime();
           const db = new Date(b.date).getTime();
-          return da - db;
+          return db - da; // Descending order
         });
-        setPerformanceHistory(sorted);
+        setAllPerformanceData(sortedDesc);
+        
+        // For chart, we still want chronological order (oldest to newest)
+        const sortedAsc = [...response.data].sort((a: any, b: any) => {
+          const da = new Date(a.date).getTime();
+          const db = new Date(b.date).getTime();
+          return da - db; // Ascending order for chart
+        });
+        setPerformanceHistory(sortedAsc.slice(-30)); // Last 30 days for chart
       }
     } catch (error) {
       console.error('Error loading performance history:', error);
@@ -137,6 +162,11 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       loadPerformanceHistory();
     }
   }, [user]);
+
+  // Reset page when performance data changes
+  useEffect(() => {
+    setPerformancePage(0);
+  }, [allPerformanceData.length]);
 
   // Load accounts from API
   const loadAccounts = async () => {
@@ -469,10 +499,13 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         };
       });
       
-      // Sort by date to ensure proper chronological order
-      history.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      // Sort by date to ensure proper chronological order for chart
+      const sortedAsc = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      setPerformanceHistory(sortedAsc.slice(-30)); // Last 30 days for chart
       
-      setPerformanceHistory(history);
+      // Sort in descending order for table display
+      const sortedDesc = [...history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setAllPerformanceData(sortedDesc);
     };
 
     const calculateAndStoreTodaySnapshot = async () => {
@@ -694,8 +727,9 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                     </tr>
                   </thead>
                   <tbody>
-                    {performanceHistory.map((row, idx) => {
-                      const prev = idx > 0 ? performanceHistory[idx - 1] : null;
+                    {getPaginatedPerformanceData().map((row, idx) => {
+                      const paginatedData = getPaginatedPerformanceData();
+                      const prev = idx > 0 ? paginatedData[idx - 1] : null;
                       const pct = (curr: number, prevVal: number) => {
                         if (prev === null || prevVal === 0 || prevVal === undefined || prevVal === null) return '-';
                         const v = ((curr - prevVal) / Math.abs(prevVal)) * 100;
@@ -713,7 +747,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                             {(() => {
                               try {
                                 const d = new Date(row.date);
-                                return isNaN(d.getTime()) ? row.date : d.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
+                                return isNaN(d.getTime()) ? row.date : d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
                               } catch {
                                 return row.date;
                               }
@@ -743,7 +777,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                         </tr>
                       );
                     })}
-                    {performanceHistory.length === 0 && (
+                    {allPerformanceData.length === 0 && (
                       <tr>
                         <td className="py-3 text-muted-foreground" colSpan={5}>No performance data available</td>
                       </tr>
@@ -751,6 +785,37 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                   </tbody>
                 </table>
               </div>
+              {/* Pagination Controls */}
+              {allPerformanceData.length > ITEMS_PER_PAGE && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-border/30">
+                  <div className="text-xs text-muted-foreground">
+                    Showing {performancePage * ITEMS_PER_PAGE + 1} to {Math.min((performancePage + 1) * ITEMS_PER_PAGE, allPerformanceData.length)} of {allPerformanceData.length} entries
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPerformancePage(p => p - 1)}
+                      disabled={!canGoPrevious}
+                      className="h-8 px-3"
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs text-muted-foreground px-2">
+                      Page {performancePage + 1} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPerformancePage(p => p + 1)}
+                      disabled={!canGoNext}
+                      className="h-8 px-3"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           )}
         </Card>
