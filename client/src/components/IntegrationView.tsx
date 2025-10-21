@@ -564,22 +564,17 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
       {/* Account Overview & Portfolio */}
       <Card className="bg-gradient-card border-border shadow-card">
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <CardTitle className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-primary" />
                 Interactive Broker Portfolio
               </CardTitle>
-              <CardDescription>
-                Account summary and holdings
-              </CardDescription>
-            </div>
-            <div className="flex flex-col items-end gap-2">
               <Button
                 onClick={handleRefreshAll}
                 disabled={isConnecting || isLoadingPortfolio}
                 size="sm"
-                className="flex items-center gap-2 w-full sm:w-auto"
+                className="flex items-center gap-2 w-fit"
               >
                 {(isConnecting || isLoadingPortfolio) ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />
@@ -588,12 +583,10 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
                 )}
                 {(isConnecting || isLoadingPortfolio) ? 'Refreshing...' : 'Refresh Portfolio'}
               </Button>
-              {lastUpdated && (
-                <p className="text-xs text-muted-foreground">
-                  Last updated: {lastUpdated}
-                </p>
-              )}
             </div>
+            <CardDescription>
+              Account summary and holdings{lastUpdated && ` (Last updated: ${lastUpdated})`}
+            </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-6 px-4 sm:px-6">
