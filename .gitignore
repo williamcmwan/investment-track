@@ -10,10 +10,16 @@ build/
 
 # Environment variables
 .env
+.env.*
+*.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.bak
+.env.backup
+*.env.bak
+*.env.backup
 
 # Database files
 *.sqlite
