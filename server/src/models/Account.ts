@@ -109,7 +109,7 @@ export class AccountModel {
     
     if (accountData.currentBalance !== undefined) {
       updateFields.push('current_balance = ?');
-      updateFields.push('last_updated = CURRENT_TIMESTAMP');
+      updateFields.push("last_updated = datetime('now', 'localtime')");
       values.push(accountData.currentBalance);
     }
     
@@ -117,7 +117,7 @@ export class AccountModel {
       return await this.findById(id, userId);
     }
     
-    updateFields.push('updated_at = CURRENT_TIMESTAMP');
+    updateFields.push("updated_at = datetime('now', 'localtime')");
     values.push(id, userId);
     
     await dbRun(

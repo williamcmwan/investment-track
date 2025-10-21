@@ -39,12 +39,19 @@ interface CachedData<T> {
 export class IBService {
   private static ibApi: IBApi | null = null;
   private static isConnected = false;
+  private static isConnecting = false;
+  private static connectionPromise: Promise<void> | null = null;
+  private static lastConnectionAttempt = 0;
+  private static connectionRetryDelay = 5000; // 5 seconds between retry attempts
   private static accountSummaryData: Map<string, string> = new Map();
   private static activeReqId: number | null = null;
   private static isRequestInProgress = false;
   private static lastReqId = 0;
   private static portfolioPositions: PortfolioPosition[] = [];
   private static isPortfolioRequestInProgress = false;
+  private static keepAliveInterval: NodeJS.Timeout | null = null;
+  private static lastActivityTime = 0;
+  private static readonly IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes idle timeout
 
   // Cache storage (in-memory for fast access)
   private static balanceCache: CachedData<AccountSummary> | null = null;
@@ -65,6 +72,25 @@ export class IBService {
       port: parseInt(process.env.IB_PORT || '4001'),
       clientId: parseInt(process.env.IB_CLIENT_ID || '1')
     };
+  }
+
+  // Initialize connection on server startup (optional - connection will be created on first use)
+  static async initialize(): Promise<void> {
+    try {
+      console.log('🚀 Initializing IB Service...');
+      // Don't connect immediately, let it connect on first request
+      // This avoids connection issues if IB Gateway isn't running at startup
+      console.log('✅ IB Service initialized (connection will be established on first request)');
+    } catch (error) {
+      console.error('❌ Failed to initialize IB Service:', error);
+    }
+  }
+
+  // Graceful shutdown
+  static async shutdown(): Promise<void> {
+    console.log('🛑 Shutting down IB Service...');
+    await this.disconnect();
+    console.log('✅ IB Service shutdown complete');
   }
 
   // Cache management methods
@@ -204,68 +230,164 @@ export class IBService {
   }
 
   private static async connect(): Promise<void> {
+    // If already connected, update activity time and return
     if (this.isConnected && this.ibApi) {
+      console.log('✅ Already connected to IB Gateway, reusing persistent connection');
+      this.lastActivityTime = Date.now();
       return;
     }
 
-    // If there's an existing connection, disconnect first
-    if (this.ibApi) {
+    // If already connecting, wait for that connection to complete
+    if (this.isConnecting && this.connectionPromise) {
+      console.log('⏳ Connection in progress, waiting...');
+      return this.connectionPromise;
+    }
+
+    // Enforce delay between connection attempts to avoid rate limiting
+    const timeSinceLastAttempt = Date.now() - this.lastConnectionAttempt;
+    if (timeSinceLastAttempt < this.connectionRetryDelay) {
+      const waitTime = this.connectionRetryDelay - timeSinceLastAttempt;
+      console.log(`⏱️  Waiting ${waitTime}ms before reconnection attempt...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+
+    this.lastConnectionAttempt = Date.now();
+    this.isConnecting = true;
+
+    // If there's an existing API instance but not connected, clean it up
+    if (this.ibApi && !this.isConnected) {
       try {
-        console.log('Disconnecting existing IB API connection...');
+        console.log('🧹 Cleaning up disconnected IB API instance...');
+        this.ibApi.removeAllListeners();
         this.ibApi.disconnect();
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (err) {
-        console.error('Error disconnecting:', err);
+        console.error('Error cleaning up:', err);
       }
       this.ibApi = null;
-      this.isConnected = false;
     }
 
     const settings = this.getConnectionSettings();
-    console.log(`Connecting to IB Gateway with client ID ${settings.clientId}...`);
+    console.log(`🔌 Connecting to IB Gateway at ${settings.host}:${settings.port} with client ID ${settings.clientId}...`);
     
-    this.ibApi = new IBApi({
-      host: settings.host,
-      port: settings.port,
-      clientId: settings.clientId
-    });
+    this.connectionPromise = new Promise((resolve, reject) => {
+      this.ibApi = new IBApi({
+        host: settings.host,
+        port: settings.port,
+        clientId: settings.clientId
+      });
 
-    return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
+        console.error('❌ Connection timeout - cleaning up...');
+        this.cleanupConnection();
+        this.isConnecting = false;
+        this.connectionPromise = null;
         reject(new Error('Connection timeout - ensure TWS/Gateway is running'));
-      }, 10000);
+      }, 20000);
 
       this.ibApi!.on(EventName.connected, () => {
         this.isConnected = true;
+        this.isConnecting = false;
+        this.lastActivityTime = Date.now();
         clearTimeout(timeout);
-        console.log('Successfully connected to IB Gateway');
+        console.log('✅ Successfully connected to IB Gateway - maintaining persistent connection');
+        
+        // Start keep-alive mechanism
+        this.startKeepAlive();
+        
         resolve();
       });
 
       this.ibApi!.on(EventName.disconnected, () => {
-        console.log('Disconnected from IB Gateway');
+        console.log('⚠️  Disconnected from IB Gateway');
         this.isConnected = false;
+        this.isConnecting = false;
+        this.stopKeepAlive();
       });
 
       this.ibApi!.on(EventName.error, (err: Error, code: ErrorCode, reqId: number) => {
-        console.error(`IB API Error [${code}]:`, err.message);
+        console.error(`❌ IB API Error [${code}]:`, err.message);
         
         // Handle "client id already in use" error
         if (err.message.includes('client id is already in use')) {
           clearTimeout(timeout);
+          this.cleanupConnection();
+          this.isConnecting = false;
+          this.connectionPromise = null;
           reject(new Error('Client ID already in use. Please disconnect other applications or change IB_CLIENT_ID in .env'));
-        } else if (!this.isConnected) {
+        } else if (!this.isConnected && this.isConnecting) {
           clearTimeout(timeout);
+          this.cleanupConnection();
+          this.isConnecting = false;
+          this.connectionPromise = null;
           reject(new Error(`IB API Error: ${err.message}`));
         }
       });
 
-      this.ibApi!.connect();
+      try {
+        this.ibApi!.connect();
+      } catch (err) {
+        clearTimeout(timeout);
+        console.error('❌ Error calling connect():', err);
+        this.cleanupConnection();
+        this.isConnecting = false;
+        this.connectionPromise = null;
+        reject(err);
+      }
     });
+
+    return this.connectionPromise;
+  }
+
+  // Clean up connection without disconnecting (for error cases)
+  private static cleanupConnection(): void {
+    if (this.ibApi) {
+      this.ibApi.removeAllListeners();
+      try {
+        this.ibApi.disconnect();
+      } catch (e) {
+        // Ignore
+      }
+    }
+    this.ibApi = null;
+    this.isConnected = false;
+    this.stopKeepAlive();
+  }
+
+  // Start keep-alive mechanism to maintain connection
+  private static startKeepAlive(): void {
+    if (this.keepAliveInterval) {
+      return;
+    }
+
+    console.log('🔄 Starting keep-alive mechanism');
+    
+    // Check connection health every 5 minutes
+    this.keepAliveInterval = setInterval(() => {
+      const idleTime = Date.now() - this.lastActivityTime;
+      
+      if (idleTime > this.IDLE_TIMEOUT) {
+        console.log(`⏰ Connection idle for ${Math.round(idleTime / 60000)} minutes, disconnecting...`);
+        this.disconnect();
+      } else {
+        console.log(`💓 Connection alive, idle for ${Math.round(idleTime / 60000)} minutes`);
+      }
+    }, 5 * 60 * 1000);
+  }
+
+  // Stop keep-alive mechanism
+  private static stopKeepAlive(): void {
+    if (this.keepAliveInterval) {
+      clearInterval(this.keepAliveInterval);
+      this.keepAliveInterval = null;
+      console.log('🛑 Stopped keep-alive mechanism');
+    }
   }
 
   static async disconnect(): Promise<void> {
-    console.log('Disconnecting from IB Gateway...');
+    console.log('🔌 Disconnecting from IB Gateway...');
+    
+    this.stopKeepAlive();
     
     if (this.ibApi) {
       // Cancel any active account summary request
@@ -280,9 +402,10 @@ export class IBService {
       
       if (this.isConnected) {
         try {
+          this.ibApi.removeAllListeners();
           this.ibApi.disconnect();
           // Wait a bit for clean disconnect
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
         } catch (err) {
           console.error('Error during disconnect:', err);
         }
@@ -292,7 +415,21 @@ export class IBService {
       this.ibApi = null;
     }
     
-    console.log('Disconnected from IB Gateway');
+    this.isConnecting = false;
+    this.connectionPromise = null;
+    
+    console.log('✅ Disconnected from IB Gateway');
+  }
+
+  // Check if connection is healthy and reconnect if needed
+  private static async ensureConnection(): Promise<void> {
+    if (!this.isConnected || !this.ibApi) {
+      console.log('⚠️  Connection not healthy, reconnecting...');
+      await this.connect();
+    } else {
+      // Update activity time
+      this.lastActivityTime = Date.now();
+    }
   }
 
   // Public method with caching
@@ -351,7 +488,7 @@ export class IBService {
     this.isRequestInProgress = true;
 
     try {
-      await this.connect();
+      await this.ensureConnection();
 
       if (!this.ibApi) {
         throw new Error('IB API not initialized');
@@ -611,7 +748,7 @@ export class IBService {
     this.isPortfolioRequestInProgress = true;
 
     try {
-      await this.connect();
+      await this.ensureConnection();
 
       if (!this.ibApi) {
         throw new Error('IB API not initialized');

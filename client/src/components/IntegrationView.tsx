@@ -265,6 +265,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
   // Helper function to update the Interactive Broker account balance
   const updateIBAccountBalance = async (balance: number, currency: string) => {
     try {
+      console.log('🔄 Updating Interactive Broker HK account balance...');
       // Get all accounts to find the Interactive Broker HK account
       const accountsResponse = await apiClient.getAccounts();
       if (accountsResponse.data) {
@@ -275,24 +276,29 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
         );
         
         if (ibAccount) {
-          // Update the account balance
-          await apiClient.updateAccount(ibAccount.id, {
-            currentBalance: balance,
-            date: new Date().toISOString().split('T')[0]
+          console.log(`📝 Found IB account (ID: ${ibAccount.id}), current balance: ${ibAccount.currentBalance}, new balance: ${balance}`);
+          console.log(`📅 Current lastUpdated: ${ibAccount.lastUpdated}`);
+          
+          // Update the account balance (this will automatically update last_updated timestamp)
+          const updateResponse = await apiClient.updateAccount(ibAccount.id, {
+            currentBalance: balance
           });
           
           console.log(`✅ Updated Interactive Broker HK account balance to ${balance} ${currency}`);
+          console.log(`📅 New lastUpdated: ${updateResponse.data?.lastUpdated}`);
           
           // Trigger account update callback if provided
           if (onAccountUpdate) {
-            onAccountUpdate();
+            console.log('🔄 Triggering account update callback...');
+            await onAccountUpdate();
+            console.log('✅ Account update callback completed');
           }
         } else {
           console.log('ℹ️ Interactive Broker HK account not found in accounts list');
         }
       }
     } catch (error) {
-      console.error('Failed to update Interactive Broker account balance:', error);
+      console.error('❌ Failed to update Interactive Broker account balance:', error);
       // Don't show error toast as this is a background operation
     }
   };

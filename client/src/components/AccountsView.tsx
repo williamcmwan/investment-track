@@ -626,7 +626,17 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                   <p className="text-sm text-muted-foreground">Last Updated</p>
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <p className="text-sm text-foreground">{account.lastUpdated}</p>
+                    <p className="text-sm text-foreground">
+                      {new Date(account.lastUpdated).toLocaleString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                      })}
+                    </p>
                   </div>
                 </div>
               </div>
