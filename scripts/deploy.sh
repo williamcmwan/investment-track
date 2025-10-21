@@ -51,6 +51,9 @@ if [ ! -d "server/data" ]; then
     mkdir -p server/data
 fi
 
+echo "🔄 Pulling latest code from repository..."
+git pull origin main || echo "⚠️  Git pull skipped (not in a git repository or already up to date)"
+
 echo "📦 Installing dependencies..."
 
 # Install root dependencies
@@ -96,14 +99,23 @@ cd ..
 
 echo "✅ Deployment completed successfully!"
 echo ""
+echo "🔄 Restarting application..."
+
+# Stop any running instances
+./scripts/app.sh force-stop || true
+
+# Wait a moment for processes to fully stop
+sleep 2
+
+# Start the application
+./scripts/app.sh start
+
+echo ""
 echo "🌐 Application is now ready:"
 echo "   Application: http://localhost:3002"
 echo "   API: http://localhost:3002/api"
 echo "   Health Check: http://localhost:3002/health"
 echo "   Database: SQLite database created"
-echo ""
-echo "🚀 To start the application:"
-echo "   Production: ./scripts/start-production.sh"
 echo ""
 echo "📊 Demo credentials:"
 echo "   Email: demo@example.com"
@@ -113,3 +125,4 @@ echo "⚠️  Remember to:"
 echo "   1. Update JWT_SECRET in server/.env"
 echo "   2. Configure proper CORS_ORIGIN for production"
 echo "   3. Configure proper database backups"
+echo "   4. Configure IB_HOST, IB_PORT, IB_CLIENT_ID in server/.env"

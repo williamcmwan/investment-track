@@ -324,6 +324,7 @@ show_help() {
     echo "  stop [server|client|all]     Stop application components [default: all]"
     echo "  force-stop                   Force stop all processes (production emergency)"
     echo "  restart [server|client|all]  Restart application components [default: all]"
+    echo "  deploy                       Pull latest code, rebuild, and restart"
     echo "  status                       Show application status"
     echo "  logs [server|client|all] [lines]  Show logs [default: all, 50 lines]"
     echo "  help                         Show this help message"
@@ -461,6 +462,43 @@ main() {
         "logs")
             local lines=${option3:-$DEFAULT_LOG_LINES}
             show_logs "$component" "$lines"
+            ;;
+            
+        "deploy")
+            log_header "Deploying latest code"
+            
+            # Stop all processes
+            log_info "Stopping all processes..."
+            stop_process "server" true
+            
+            # Pull latest code
+            log_info "Pulling latest code from repository..."
+            cd "$PROJECT_ROOT"
+            git pull origin main || log_warning "Git pull failed or not in a git repository"
+            
+            # Install dependencies
+            log_info "Installing dependencies..."
+            npm install
+            cd "$CLIENT_DIR" && npm install && cd "$PROJECT_ROOT"
+            cd "$SERVER_DIR" && npm install && cd "$PROJECT_ROOT"
+            
+            # Build client
+            log_info "Building client..."
+            cd "$CLIENT_DIR"
+            npm run build
+            cd "$PROJECT_ROOT"
+            
+            # Wait a moment
+            sleep 2
+            
+            # Start server
+            log_info "Starting server..."
+            check_dependencies "server"
+            start_server
+            
+            echo ""
+            show_status
+            log_success "Deployment completed!"
             ;;
             
         "help"|"--help"|"-h")
