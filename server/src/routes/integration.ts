@@ -19,7 +19,8 @@ router.get('/ib/settings', authenticateToken, async (req, res) => {
 router.post('/ib/balance', authenticateToken, async (req, res) => {
   try {
     const result = await IBService.getAccountBalance();
-    res.json(result);
+    const timestamp = IBService.getBalanceTimestamp();
+    res.json({ ...result, timestamp });
   } catch (error) {
     console.error('Error getting IB balance:', error);
     res.status(500).json({ error: 'Failed to get IB account balance' });
@@ -31,10 +32,13 @@ router.post('/ib/balance/refresh', authenticateToken, async (req, res) => {
   try {
     console.log('🔄 Force refresh balance endpoint called');
     const result = await IBService.forceRefreshAccountBalance();
-    res.json(result);
+    const timestamp = IBService.getBalanceTimestamp();
+    console.log('✅ Balance refresh successful, returning data');
+    res.json({ ...result, timestamp });
   } catch (error) {
-    console.error('Error refreshing IB balance:', error);
-    res.status(500).json({ error: 'Failed to refresh IB account balance' });
+    console.error('❌ Error refreshing IB balance:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to refresh IB account balance';
+    res.status(500).json({ error: errorMessage });
   }
 });
 
@@ -54,10 +58,12 @@ router.post('/ib/portfolio/refresh', authenticateToken, async (req, res) => {
   try {
     console.log('🔄 Force refresh portfolio endpoint called');
     const result = await IBService.forceRefreshPortfolio();
+    console.log('✅ Portfolio refresh successful, returning data');
     res.json(result);
   } catch (error) {
-    console.error('Error refreshing IB portfolio:', error);
-    res.status(500).json({ error: 'Failed to refresh IB portfolio' });
+    console.error('❌ Error refreshing IB portfolio:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to refresh IB portfolio';
+    res.status(500).json({ error: errorMessage });
   }
 });
 

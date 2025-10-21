@@ -707,4 +707,14 @@ export class IBService {
       portfolio: portfolioAge ? `${Math.round(portfolioAge / 1000)}s old` : 'No cache'
     };
   }
+
+  // Get balance timestamp
+  static getBalanceTimestamp(): number | null {
+    return this.balanceCache ? this.balanceCache.timestamp : null;
+  }
+
+  // Get portfolio timestamp
+  static getPortfolioTimestamp(): number | null {
+    return this.portfolioCache ? this.portfolioCache.timestamp : null;
+  }
 }

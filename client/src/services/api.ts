@@ -307,6 +307,7 @@ class ApiClient {
       currency: string;
       netLiquidation?: number;
       totalCashValue?: number;
+      timestamp?: number;
     }>('/integration/ib/balance', {
       method: 'POST',
     });
@@ -340,6 +341,7 @@ class ApiClient {
       currency: string;
       netLiquidation?: number;
       totalCashValue?: number;
+      timestamp?: number;
     }>('/integration/ib/balance/refresh', {
       method: 'POST',
     });

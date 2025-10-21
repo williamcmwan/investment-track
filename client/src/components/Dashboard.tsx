@@ -1124,6 +1124,10 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           {currentView === "integration" && (
             <IntegrationView 
               baseCurrency={baseCurrency}
+              onAccountUpdate={async () => {
+                await loadAccounts();
+                await handlePostAccountUpdate();
+              }}
             />
           )}
         </div>

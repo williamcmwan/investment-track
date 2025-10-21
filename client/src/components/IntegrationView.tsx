@@ -22,6 +22,7 @@ import { apiClient } from "@/services/api";
 
 interface IntegrationViewProps {
   baseCurrency: string;
+  onAccountUpdate?: () => void;
 }
 
 interface PortfolioPosition {
@@ -45,7 +46,7 @@ interface PortfolioPosition {
 type SortField = 'symbol' | 'secType' | 'currency' | 'position' | 'averageCost' | 'marketPrice' | 'pnlPercent' | 'unrealizedPNL' | 'marketValue' | 'country' | 'industry' | 'category';
 type SortDirection = 'asc' | 'desc';
 
-const IntegrationView = ({ baseCurrency }: IntegrationViewProps) => {
+const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps) => {
   const { toast } = useToast();
   const [isConnecting, setIsConnecting] = useState(false);
   const [accountBalance, setAccountBalance] = useState<number | null>(null);
@@ -93,7 +94,10 @@ const IntegrationView = ({ baseCurrency }: IntegrationViewProps) => {
           setNetLiquidation(balanceResponse.data.netLiquidation ?? null);
           setTotalCashValue(balanceResponse.data.totalCashValue ?? null);
           setAccountCurrency(balanceResponse.data.currency);
-          setLastUpdated(new Date().toLocaleString());
+          // Use timestamp from cache if available
+          if (balanceResponse.data.timestamp) {
+            setLastUpdated(new Date(balanceResponse.data.timestamp).toLocaleString());
+          }
         } else {
           console.log('❌ No cached balance data returned');
         }
@@ -152,7 +156,10 @@ const IntegrationView = ({ baseCurrency }: IntegrationViewProps) => {
         setNetLiquidation(response.data.netLiquidation ?? null);
         setTotalCashValue(response.data.totalCashValue ?? null);
         setAccountCurrency(response.data.currency);
-        setLastUpdated(new Date().toLocaleString());
+        // Use timestamp from cache if available
+        if (response.data.timestamp) {
+          setLastUpdated(new Date(response.data.timestamp).toLocaleString());
+        }
       } else {
         throw new Error(response.error || "Failed to get account balance");
       }
@@ -174,54 +181,116 @@ const IntegrationView = ({ baseCurrency }: IntegrationViewProps) => {
         apiClient.forceRefreshIBPortfolio()
       ]);
       
-      // Update balance
-      if (balanceResponse.data) {
-        setAccountBalance(balanceResponse.data.balance);
-        setNetLiquidation(balanceResponse.data.netLiquidation ?? null);
-        setTotalCashValue(balanceResponse.data.totalCashValue ?? null);
-        setAccountCurrency(balanceResponse.data.currency);
-        setLastUpdated(new Date().toLocaleString());
+      console.log('Balance response:', balanceResponse);
+      console.log('Portfolio response:', portfolioResponse);
+      
+      // Check for errors in responses - check error first before checking data
+      if (balanceResponse.error) {
+        console.error('Balance error detected:', balanceResponse.error);
+        throw new Error(balanceResponse.error);
       }
       
+      if (portfolioResponse.error) {
+        console.error('Portfolio error detected:', portfolioResponse.error);
+        throw new Error(portfolioResponse.error);
+      }
+      
+      // Verify we have data
+      if (!balanceResponse.data) {
+        throw new Error("No balance data received from server");
+      }
+      
+      if (!portfolioResponse.data) {
+        throw new Error("No portfolio data received from server");
+      }
+      
+      // Update balance
+      setAccountBalance(balanceResponse.data.balance);
+      setNetLiquidation(balanceResponse.data.netLiquidation ?? null);
+      setTotalCashValue(balanceResponse.data.totalCashValue ?? null);
+      setAccountCurrency(balanceResponse.data.currency);
+      // Use timestamp from cache if available
+      if (balanceResponse.data.timestamp) {
+        setLastUpdated(new Date(balanceResponse.data.timestamp).toLocaleString());
+      }
+      
+      // Update the Interactive Broker HK account in the Accounts page
+      await updateIBAccountBalance(balanceResponse.data.netLiquidation ?? balanceResponse.data.balance, balanceResponse.data.currency);
+      
       // Update portfolio
-      if (portfolioResponse.data) {
-        setPortfolio(portfolioResponse.data);
-        
-        // Fetch exchange rates for all currencies in portfolio
-        const uniqueCurrencies = [...new Set(portfolioResponse.data.map(p => p.currency))];
-        const rates: Record<string, number> = {};
-        
-        for (const currency of uniqueCurrencies) {
-          if (currency !== baseCurrency) {
-            try {
-              const pair = `${currency}/${baseCurrency}`;
-              const rateResponse = await apiClient.getExchangeRate(pair);
-              rates[currency] = rateResponse.data?.rate || 1;
-            } catch (error) {
-              console.error(`Failed to fetch rate for ${currency}:`, error);
-              rates[currency] = 1;
-            }
-          } else {
+      setPortfolio(portfolioResponse.data);
+      
+      // Fetch exchange rates for all currencies in portfolio
+      const uniqueCurrencies = [...new Set(portfolioResponse.data.map(p => p.currency))];
+      const rates: Record<string, number> = {};
+      
+      for (const currency of uniqueCurrencies) {
+        if (currency !== baseCurrency) {
+          try {
+            const pair = `${currency}/${baseCurrency}`;
+            const rateResponse = await apiClient.getExchangeRate(pair);
+            rates[currency] = rateResponse.data?.rate || 1;
+          } catch (error) {
+            console.error(`Failed to fetch rate for ${currency}:`, error);
             rates[currency] = 1;
           }
+        } else {
+          rates[currency] = 1;
         }
-        
-        setExchangeRates(rates);
       }
+      
+      setExchangeRates(rates);
       
       toast({
         title: "Success",
         description: "Portfolio refreshed successfully with latest market data",
       });
     } catch (error) {
+      console.error('Refresh error caught:', error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to refresh portfolio data";
       toast({
         title: "Error",
-        description: "Failed to refresh portfolio data",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
       setIsConnecting(false);
       setIsLoadingPortfolio(false);
+    }
+  };
+
+  // Helper function to update the Interactive Broker account balance
+  const updateIBAccountBalance = async (balance: number, currency: string) => {
+    try {
+      // Get all accounts to find the Interactive Broker HK account
+      const accountsResponse = await apiClient.getAccounts();
+      if (accountsResponse.data) {
+        // Find the Interactive Broker HK account (case-insensitive search)
+        const ibAccount = accountsResponse.data.find((acc: any) => 
+          acc.name.toLowerCase().includes('interactive broker') && 
+          acc.name.toLowerCase().includes('hk')
+        );
+        
+        if (ibAccount) {
+          // Update the account balance
+          await apiClient.updateAccount(ibAccount.id, {
+            currentBalance: balance,
+            date: new Date().toISOString().split('T')[0]
+          });
+          
+          console.log(`✅ Updated Interactive Broker HK account balance to ${balance} ${currency}`);
+          
+          // Trigger account update callback if provided
+          if (onAccountUpdate) {
+            onAccountUpdate();
+          }
+        } else {
+          console.log('ℹ️ Interactive Broker HK account not found in accounts list');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update Interactive Broker account balance:', error);
+      // Don't show error toast as this is a background operation
     }
   };
 
