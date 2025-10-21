@@ -384,7 +384,38 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
       return sum + convertToHKD(position.marketValue, position.currency);
     }, 0);
     
-    return { totalPnLHKD, totalMarketValueHKD };
+    const totalDayChangeHKD = portfolio.reduce((sum, position) => {
+      if (position.dayChange !== undefined) {
+        return sum + convertToHKD(position.dayChange, position.currency);
+      }
+      return sum;
+    }, 0);
+    
+    // Calculate total day change percentage
+    // Formula: Sum of ((currentPrice - previousClose) * qty in HKD) / Sum of (previousClose * qty in HKD)
+    let totalDayChangeAmountHKD = 0;
+    let totalPreviousValueHKD = 0;
+    
+    portfolio.forEach(position => {
+      if (position.closePrice !== undefined && position.closePrice > 0) {
+        // (currentPrice - previousClose) * qty converted to HKD
+        const dayChangeAmount = (position.marketPrice - position.closePrice) * position.position;
+        const dayChangeAmountHKD = convertToHKD(dayChangeAmount, position.currency);
+        
+        // previousClose * qty converted to HKD
+        const previousValue = position.closePrice * position.position;
+        const previousValueHKD = convertToHKD(previousValue, position.currency);
+        
+        totalDayChangeAmountHKD += dayChangeAmountHKD;
+        totalPreviousValueHKD += previousValueHKD;
+      }
+    });
+    
+    const totalDayChangePercent = totalPreviousValueHKD > 0 
+      ? (totalDayChangeAmountHKD / totalPreviousValueHKD) * 100 
+      : 0;
+    
+    return { totalPnLHKD, totalMarketValueHKD, totalDayChangeHKD, totalDayChangePercent };
   };
 
   const getSortedPortfolio = () => {
@@ -732,7 +763,28 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
                   })}
                     {/* Totals Row */}
                     <TableRow className="bg-muted/50 font-semibold border-t-2 text-xs sm:text-sm">
-                      <TableCell colSpan={13} className="text-right whitespace-nowrap">Total:</TableCell>
+                      <TableCell className="text-left whitespace-nowrap font-bold">Total:</TableCell>
+                      <TableCell className={`text-right font-bold whitespace-nowrap ${calculateTotals().totalDayChangeHKD >= 0 ? 'text-profit' : 'text-loss'}`}>
+                        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                          {calculateTotals().totalDayChangeHKD >= 0 ? (
+                            <TrendingUp className="h-4 w-4" />
+                          ) : (
+                            <TrendingDown className="h-4 w-4" />
+                          )}
+                          {formatCurrency(calculateTotals().totalDayChangeHKD, baseCurrency)}
+                        </div>
+                      </TableCell>
+                      <TableCell className={`text-right font-bold whitespace-nowrap ${calculateTotals().totalDayChangePercent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                          {calculateTotals().totalDayChangePercent >= 0 ? (
+                            <TrendingUp className="h-4 w-4" />
+                          ) : (
+                            <TrendingDown className="h-4 w-4" />
+                          )}
+                          {calculateTotals().totalDayChangePercent.toFixed(2)}%
+                        </div>
+                      </TableCell>
+                      <TableCell colSpan={10}></TableCell>
                       <TableCell className={`text-right font-bold whitespace-nowrap ${calculateTotals().totalPnLHKD >= 0 ? 'text-profit' : 'text-loss'}`}>
                         {formatCurrency(calculateTotals().totalPnLHKD, baseCurrency)}
                       </TableCell>
