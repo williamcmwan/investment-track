@@ -13,6 +13,7 @@ import accountRoutes from './routes/accounts.js';
 import currencyRoutes from './routes/currencies.js';
 import performanceRoutes from './routes/performance.js';
 import twoFactorRoutes from './routes/twoFactor.js';
+import integrationRoutes from './routes/integration.js';
 import { SchedulerService } from './services/schedulerService.js';
 
 // Load environment variables
@@ -81,6 +82,7 @@ app.use('/api/accounts', accountRoutes);
 app.use('/api/currencies', currencyRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/2fa', twoFactorRoutes);
+app.use('/api/integration', integrationRoutes);
 
 // Serve static files from client build (both development and production)
 const clientBuildPath = path.join(__dirname, '../../client/dist');

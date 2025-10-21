@@ -74,6 +74,25 @@ CREATE TABLE IF NOT EXISTS exchange_rates (
     UNIQUE(pair)
 );
 
+-- Interactive Brokers connections table
+CREATE TABLE IF NOT EXISTS ib_connections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    host TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    client_id INTEGER NOT NULL,
+    is_connected BOOLEAN DEFAULT FALSE,
+    last_connected DATETIME,
+    account_balance REAL,
+    account_currency TEXT,
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, client_id)
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_account_balance_history_account_id ON account_balance_history(account_id);
@@ -81,3 +100,4 @@ CREATE INDEX IF NOT EXISTS idx_currency_pairs_user_id ON currency_pairs(user_id)
 CREATE INDEX IF NOT EXISTS idx_performance_history_user_id ON performance_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_performance_history_date ON performance_history(date);
 CREATE INDEX IF NOT EXISTS idx_exchange_rates_pair ON exchange_rates(pair);
+CREATE INDEX IF NOT EXISTS idx_ib_connections_user_id ON ib_connections(user_id);

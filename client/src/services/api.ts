@@ -38,7 +38,7 @@ class ApiClient {
       const data = await response.json();
 
       if (!response.ok) {
-        return { 
+        return {
           error: data.error || 'Request failed',
           details: data.details || null
         };
@@ -275,11 +275,11 @@ class ApiClient {
   }
 
   async verifyTwoFactorLogin(userId: number, token: string) {
-    return this.request<{ 
-      message: string; 
-      verified: boolean; 
-      user?: any; 
-      token?: string; 
+    return this.request<{
+      message: string;
+      verified: boolean;
+      user?: any;
+      token?: string;
     }>('/2fa/verify-login', {
       method: 'POST',
       body: JSON.stringify({ userId, token }),
@@ -292,6 +292,77 @@ class ApiClient {
 
   async disableTwoFactor() {
     return this.request<{ message: string }>('/2fa/disable', {
+      method: 'POST',
+    });
+  }
+
+  // Interactive Brokers Integration endpoints
+  async getIBSettings() {
+    return this.request<{ host: string; port: number; clientId: number }>('/integration/ib/settings');
+  }
+
+  async getIBBalance() {
+    return this.request<{
+      balance: number;
+      currency: string;
+      netLiquidation?: number;
+      totalCashValue?: number;
+    }>('/integration/ib/balance', {
+      method: 'POST',
+    });
+  }
+
+  async getIBPortfolio() {
+    return this.request<Array<{
+      symbol: string;
+      secType: string;
+      currency: string;
+      position: number;
+      averageCost: number;
+      marketPrice: number;
+      marketValue: number;
+      unrealizedPNL: number;
+      realizedPNL: number;
+      exchange?: string;
+      primaryExchange?: string;
+      conId?: number;
+      industry?: string;
+      category?: string;
+      country?: string;
+    }>>('/integration/ib/portfolio', {
+      method: 'POST',
+    });
+  }
+
+  async forceRefreshIBBalance() {
+    return this.request<{
+      balance: number;
+      currency: string;
+      netLiquidation?: number;
+      totalCashValue?: number;
+    }>('/integration/ib/balance/refresh', {
+      method: 'POST',
+    });
+  }
+
+  async forceRefreshIBPortfolio() {
+    return this.request<Array<{
+      symbol: string;
+      secType: string;
+      currency: string;
+      position: number;
+      averageCost: number;
+      marketPrice: number;
+      marketValue: number;
+      unrealizedPNL: number;
+      realizedPNL: number;
+      exchange?: string;
+      primaryExchange?: string;
+      conId?: number;
+      industry?: string;
+      category?: string;
+      country?: string;
+    }>>('/integration/ib/portfolio/refresh', {
       method: 'POST',
     });
   }

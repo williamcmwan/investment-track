@@ -11,7 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
-  ShieldCheck
+  ShieldCheck,
+  Plug
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -44,6 +45,7 @@ const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isColl
     { id: "overview", label: "Overview", icon: Home },
     { id: "accounts", label: "Accounts", icon: Wallet },
     { id: "currency", label: "Currency", icon: ArrowLeftRight },
+    { id: "integration", label: "Portfolio", icon: Plug },
   ];
 
   return (

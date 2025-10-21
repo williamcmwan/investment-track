@@ -163,6 +163,27 @@ cd server && npx tsx src/database/seed.ts
 - Rate limiting
 - Input validation with Zod
 
+## 🔌 Interactive Brokers Integration
+
+The application supports real-time integration with Interactive Brokers using `@stoqey/ib` for account data retrieval.
+
+### Setup
+1. **Install TWS or IB Gateway** from Interactive Brokers
+2. **Enable API connections**: File → Global Configuration → API → Settings
+   - Check "Enable ActiveX and Socket Clients"
+   - Note the Socket port number
+3. **Configure environment** in `server/.env`:
+   ```bash
+   IB_HOST=localhost
+   IB_PORT=4001  # 7497 for TWS paper, 4001 for IB Gateway, 4002 for Gateway paper
+   IB_CLIENT_ID=1
+   ```
+4. **Start TWS/Gateway** before using the integration features
+
+### Port Reference
+- TWS Live: 7496 | TWS Paper: 7497
+- IB Gateway Live: 4001 | IB Gateway Paper: 4002
+
 ## 📊 API Endpoints
 
 ### Authentication
@@ -187,6 +208,10 @@ cd server && npx tsx src/database/seed.ts
 ### Performance
 - `GET /api/performance` - Get performance data
 - `POST /api/performance` - Create performance record
+
+### Interactive Brokers Integration
+- `GET /api/integration/ib/settings` - Get IB connection settings
+- `POST /api/integration/ib/balance` - Get account balance from IB
 
 ## 🗄️ Database Schema
 
@@ -444,6 +469,7 @@ For issues and questions:
   - Pagination with 30 entries per page and Previous/Next navigation
   - Details shown by default for better user experience
 - ✅ **Account Timestamp Fix**: Last updated timestamp now properly reflects balance changes
+- ✅ **Interactive Brokers Integration**: Real IB API implementation using `@stoqey/ib`
 
 ---
 

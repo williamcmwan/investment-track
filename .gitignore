@@ -21,6 +21,9 @@ build/
 server/data/
 client/data/
 
+# Cache files
+cache/
+
 # Logs
 logs/
 *.log
