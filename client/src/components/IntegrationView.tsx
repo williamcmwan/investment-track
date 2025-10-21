@@ -41,9 +41,12 @@ interface PortfolioPosition {
   industry?: string;
   category?: string;
   country?: string;
+  closePrice?: number;
+  dayChange?: number;
+  dayChangePercent?: number;
 }
 
-type SortField = 'symbol' | 'secType' | 'currency' | 'position' | 'averageCost' | 'marketPrice' | 'pnlPercent' | 'unrealizedPNL' | 'marketValue' | 'country' | 'industry' | 'category';
+type SortField = 'symbol' | 'secType' | 'currency' | 'position' | 'averageCost' | 'marketPrice' | 'pnlPercent' | 'unrealizedPNL' | 'marketValue' | 'country' | 'industry' | 'category' | 'dayChange' | 'dayChangePercent';
 type SortDirection = 'asc' | 'desc';
 
 const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps) => {
@@ -414,6 +417,14 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
           aValue = a.category || 'N/A';
           bValue = b.category || 'N/A';
           break;
+        case 'dayChange':
+          aValue = a.dayChange || 0;
+          bValue = b.dayChange || 0;
+          break;
+        case 'dayChangePercent':
+          aValue = a.dayChangePercent || 0;
+          bValue = b.dayChangePercent || 0;
+          break;
 
         default:
           aValue = a[sortField];
@@ -614,6 +625,12 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
                 <TableHeader>
                   <TableRow className="text-xs sm:text-sm">
                     <SortableHeader field="symbol">Symbol</SortableHeader>
+                    <SortableHeader field="dayChange">
+                      <div className="text-right w-full">Chg</div>
+                    </SortableHeader>
+                    <SortableHeader field="dayChangePercent">
+                      <div className="text-right w-full">Chg %</div>
+                    </SortableHeader>
                     <SortableHeader field="secType">Type</SortableHeader>
                     <SortableHeader field="country">Country</SortableHeader>
                     <SortableHeader field="industry">Industry</SortableHeader>
@@ -646,10 +663,39 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
                     const pnlInHKD = convertToHKD(position.unrealizedPNL, position.currency);
                     const marketValueInHKD = convertToHKD(position.marketValue, position.currency);
                     const isPositive = position.unrealizedPNL >= 0;
+                    const isDayChangePositive = (position.dayChange || 0) >= 0;
                     
                     return (
                       <TableRow key={index} className="text-xs sm:text-sm">
                         <TableCell className="font-medium whitespace-nowrap">{position.symbol}</TableCell>
+                        <TableCell className={`text-right font-medium whitespace-nowrap ${isDayChangePositive ? 'text-profit' : 'text-loss'}`}>
+                          {position.dayChange !== undefined ? (
+                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                              {isDayChangePositive ? (
+                                <TrendingUp className="h-3 w-3" />
+                              ) : (
+                                <TrendingDown className="h-3 w-3" />
+                              )}
+                              {formatCurrency(position.dayChange, position.currency)}
+                            </div>
+                          ) : (
+                            'N/A'
+                          )}
+                        </TableCell>
+                        <TableCell className={`text-right font-medium whitespace-nowrap ${isDayChangePositive ? 'text-profit' : 'text-loss'}`}>
+                          {position.dayChangePercent !== undefined ? (
+                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                              {isDayChangePositive ? (
+                                <TrendingUp className="h-3 w-3" />
+                              ) : (
+                                <TrendingDown className="h-3 w-3" />
+                              )}
+                              {position.dayChangePercent.toFixed(2)}%
+                            </div>
+                          ) : (
+                            'N/A'
+                          )}
+                        </TableCell>
                         <TableCell className="font-medium">{position.secType}</TableCell>
                         <TableCell className="whitespace-nowrap">{getCountryFromExchange(position)}</TableCell>
                         <TableCell className="text-xs sm:text-sm max-w-[120px] truncate" title={position.industry || 'N/A'}>{position.industry || 'N/A'}</TableCell>
@@ -686,7 +732,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
                   })}
                     {/* Totals Row */}
                     <TableRow className="bg-muted/50 font-semibold border-t-2 text-xs sm:text-sm">
-                      <TableCell colSpan={11} className="text-right whitespace-nowrap">Total:</TableCell>
+                      <TableCell colSpan={13} className="text-right whitespace-nowrap">Total:</TableCell>
                       <TableCell className={`text-right font-bold whitespace-nowrap ${calculateTotals().totalPnLHKD >= 0 ? 'text-profit' : 'text-loss'}`}>
                         {formatCurrency(calculateTotals().totalPnLHKD, baseCurrency)}
                       </TableCell>

@@ -25,6 +25,9 @@ interface PortfolioPosition {
   industry?: string;
   category?: string;
   country?: string;
+  closePrice?: number;
+  dayChange?: number;
+  dayChangePercent?: number;
 }
 
 interface CachedData<T> {
@@ -459,13 +462,11 @@ export class IBService {
       }, 5000);
 
       const reqId = Math.floor(Math.random() * 10000) + 1000;
+      let contractDetailsData: any = null;
 
       const detailsHandler = (reqId_: number, contractDetails: any) => {
         if (reqId_ === reqId) {
-          clearTimeout(timeout);
-          this.ibApi!.off(EventName.contractDetails, detailsHandler);
-          this.ibApi!.off(EventName.contractDetailsEnd, endHandler);
-          resolve(contractDetails);
+          contractDetailsData = contractDetails;
         }
       };
 
@@ -474,7 +475,7 @@ export class IBService {
           clearTimeout(timeout);
           this.ibApi!.off(EventName.contractDetails, detailsHandler);
           this.ibApi!.off(EventName.contractDetailsEnd, endHandler);
-          resolve(null);
+          resolve(contractDetailsData);
         }
       };
 
@@ -483,6 +484,68 @@ export class IBService {
 
       // Request contract details by conId
       this.ibApi!.reqContractDetails(reqId, { conId });
+    });
+  }
+
+  private static async getHistoricalClose(contract: any): Promise<number | undefined> {
+    if (!this.ibApi) {
+      throw new Error('IB API not initialized');
+    }
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        console.log(`Timeout getting historical data for ${contract.symbol}`);
+        this.ibApi!.removeAllListeners('historicalData' as any);
+        resolve(undefined);
+      }, 5000);
+
+      const reqId = Math.floor(Math.random() * 10000) + 1000;
+      const closePrices: number[] = [];
+      let isComplete = false;
+
+      const historicalDataHandler = (reqId_: number, time: string, open: number, high: number, low: number, close: number, volume: number, count: number, WAP: number) => {
+        if (reqId_ === reqId) {
+          // Check if this is the completion signal (time will be 'finished')
+          if (time.includes('finished')) {
+            if (!isComplete) {
+              isComplete = true;
+              clearTimeout(timeout);
+              this.ibApi!.removeListener('historicalData' as any, historicalDataHandler);
+              
+              // Return the first close price (oldest, which should be previous day's close)
+              const closePrice = closePrices.length > 0 ? closePrices[0] : undefined;
+              console.log(`Final close price for ${contract.symbol}: ${closePrice} (from ${closePrices.length} bars)`);
+              resolve(closePrice);
+            }
+          } else if (close > 0) {
+            // Collect all close prices
+            closePrices.push(close);
+            console.log(`Historical bar for ${contract.symbol}: date=${time}, close=${close}`);
+          }
+        }
+      };
+
+      this.ibApi!.on('historicalData' as any, historicalDataHandler);
+
+      // Request 2 days of historical data to get previous close
+      try {
+        this.ibApi!.reqHistoricalData(
+          reqId,
+          contract,
+          '', // endDateTime - empty means now
+          '2 D', // duration - get 2 days
+          '1 day' as any, // bar size - daily bars
+          'TRADES', // what to show
+          1, // useRTH - regular trading hours
+          1, // formatDate
+          false // keepUpToDate
+        );
+      } catch (error) {
+        console.error(`Error requesting historical data for ${contract.symbol}:`, error);
+        clearTimeout(timeout);
+        this.ibApi!.removeListener('historicalData' as any, historicalDataHandler);
+        resolve(undefined);
+      }
     });
   }
 
@@ -646,6 +709,24 @@ export class IBService {
                         category: details.category || '',
                         country: details.contract?.primaryExchange || position.primaryExchange || ''
                       };
+                      
+                      // Get historical close price
+                      const closePrice = await this.getHistoricalClose(details.contract);
+                      if (closePrice && closePrice > 0) {
+                        enrichedPosition.closePrice = closePrice;
+                        
+                        // Calculate day change: (marketPrice - closePrice) * qty
+                        const dayChange = (position.marketPrice - closePrice) * position.position;
+                        // Calculate day change percent: ((marketPrice - closePrice) / closePrice) * 100
+                        const dayChangePercent = ((position.marketPrice - closePrice) / closePrice) * 100;
+                        
+                        enrichedPosition.dayChange = dayChange;
+                        enrichedPosition.dayChangePercent = dayChangePercent;
+                        
+                        console.log(`${position.symbol}: closePrice=${closePrice}, marketPrice=${position.marketPrice}, dayChange=${dayChange}, dayChangePercent=${dayChangePercent.toFixed(2)}%`);
+                      } else {
+                        console.log(`${position.symbol}: Could not get historical close price`);
+                      }
                     }
 
                   }
