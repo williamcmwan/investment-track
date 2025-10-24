@@ -66,11 +66,12 @@ export class IBService {
   private static readonly BALANCE_CACHE_FILE = path.join(IBService.CACHE_DIR, 'balance.json');
   private static readonly PORTFOLIO_CACHE_FILE = path.join(IBService.CACHE_DIR, 'portfolio.json');
 
-  static getConnectionSettings(): { host: string; port: number; clientId: number } {
+  // Get user-specific connection settings
+  static getUserConnectionSettings(userSettings: { host: string; port: number; client_id: number }): { host: string; port: number; clientId: number } {
     return {
-      host: process.env.IB_HOST || 'localhost',
-      port: parseInt(process.env.IB_PORT || '4001'),
-      clientId: parseInt(process.env.IB_CLIENT_ID || '1')
+      host: userSettings.host,
+      port: userSettings.port,
+      clientId: userSettings.client_id
     };
   }
 
@@ -229,7 +230,7 @@ export class IBService {
     }
   }
 
-  private static async connect(): Promise<void> {
+  private static async connect(userSettings?: { host: string; port: number; client_id: number }): Promise<void> {
     // If already connected, update activity time and return
     if (this.isConnected && this.ibApi) {
       console.log('✅ Already connected to IB Gateway, reusing persistent connection');
@@ -267,7 +268,7 @@ export class IBService {
       this.ibApi = null;
     }
 
-    const settings = this.getConnectionSettings();
+    const settings = this.getUserConnectionSettings(userSettings);
     console.log(`🔌 Connecting to IB Gateway at ${settings.host}:${settings.port} with client ID ${settings.clientId}...`);
     
     this.connectionPromise = new Promise((resolve, reject) => {
@@ -422,18 +423,18 @@ export class IBService {
   }
 
   // Check if connection is healthy and reconnect if needed
-  private static async ensureConnection(): Promise<void> {
+  private static async ensureConnection(userSettings?: { host: string; port: number; client_id: number }): Promise<void> {
     if (!this.isConnected || !this.ibApi) {
       console.log('⚠️  Connection not healthy, reconnecting...');
-      await this.connect();
+      await this.connect(userSettings);
     } else {
       // Update activity time
       this.lastActivityTime = Date.now();
     }
   }
 
-  // Public method with caching
-  static async getAccountBalance(): Promise<AccountSummary> {
+  // Public method with caching (requires user settings)
+  static async getAccountBalance(userSettings: { host: string; port: number; client_id: number }): Promise<AccountSummary> {
     console.log('🏦 getAccountBalance called');
     
     // Return cached data if available
@@ -445,22 +446,22 @@ export class IBService {
       if (cacheAge > 3 * 60 * 1000 && !this.balanceCache!.isRefreshing) {
         console.log('Starting background refresh for account balance');
         this.balanceCache!.isRefreshing = true;
-        this.refreshAccountBalanceBackground().catch(console.error);
+        this.refreshAccountBalanceBackground(userSettings).catch(console.error);
       }
       return cached;
     }
 
     // No cache available, fetch fresh data and save to cache
     console.log('❌ No cached balance available, fetching fresh data');
-    const freshData = await this.fetchAccountBalanceFresh();
+    const freshData = await this.fetchAccountBalanceFresh(userSettings);
     this.setCachedBalance(freshData);
     return freshData;
   }
 
   // Background refresh method
-  private static async refreshAccountBalanceBackground(): Promise<void> {
+  private static async refreshAccountBalanceBackground(userSettings: { host: string; port: number; client_id: number }): Promise<void> {
     try {
-      const freshData = await this.fetchAccountBalanceFresh();
+      const freshData = await this.fetchAccountBalanceFresh(userSettings);
       this.setCachedBalance(freshData);
     } catch (error) {
       console.error('Background balance refresh failed:', error);
@@ -471,15 +472,15 @@ export class IBService {
   }
 
   // Force refresh method (for manual refresh button)
-  static async forceRefreshAccountBalance(): Promise<AccountSummary> {
+  static async forceRefreshAccountBalance(userSettings?: { host: string; port: number; client_id: number }): Promise<AccountSummary> {
     console.log('Force refreshing account balance');
-    const freshData = await this.fetchAccountBalanceFresh();
+    const freshData = await this.fetchAccountBalanceFresh(userSettings);
     this.setCachedBalance(freshData);
     return freshData;
   }
 
   // Internal method that actually fetches from IB
-  private static async fetchAccountBalanceFresh(): Promise<AccountSummary> {
+  private static async fetchAccountBalanceFresh(userSettings?: { host: string; port: number; client_id: number }): Promise<AccountSummary> {
     // Wait if another request is in progress
     while (this.isRequestInProgress) {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -488,7 +489,7 @@ export class IBService {
     this.isRequestInProgress = true;
 
     try {
-      await this.ensureConnection();
+      await this.ensureConnection(userSettings);
 
       if (!this.ibApi) {
         throw new Error('IB API not initialized');
@@ -686,8 +687,8 @@ export class IBService {
     });
   }
 
-  // Public method with caching
-  static async getPortfolio(): Promise<PortfolioPosition[]> {
+  // Public method with caching (requires user settings)
+  static async getPortfolio(userSettings: { host: string; port: number; client_id: number }): Promise<PortfolioPosition[]> {
     console.log('📈 getPortfolio called');
     
     // Return cached data if available
@@ -699,22 +700,22 @@ export class IBService {
       if (cacheAge > 10 * 60 * 1000 && !this.portfolioCache!.isRefreshing) {
         console.log('Starting background refresh for portfolio');
         this.portfolioCache!.isRefreshing = true;
-        this.refreshPortfolioBackground().catch(console.error);
+        this.refreshPortfolioBackground(userSettings).catch(console.error);
       }
       return cached;
     }
 
     // No cache available, fetch fresh data and save to cache
     console.log('❌ No cached portfolio available, fetching fresh data');
-    const freshData = await this.fetchPortfolioFresh();
+    const freshData = await this.fetchPortfolioFresh(userSettings);
     this.setCachedPortfolio(freshData);
     return freshData;
   }
 
   // Background refresh method
-  private static async refreshPortfolioBackground(): Promise<void> {
+  private static async refreshPortfolioBackground(userSettings: { host: string; port: number; client_id: number }): Promise<void> {
     try {
-      const freshData = await this.fetchPortfolioFresh();
+      const freshData = await this.fetchPortfolioFresh(userSettings);
       this.setCachedPortfolio(freshData);
     } catch (error) {
       console.error('Background portfolio refresh failed:', error);
@@ -725,15 +726,15 @@ export class IBService {
   }
 
   // Force refresh method (for manual refresh button)
-  static async forceRefreshPortfolio(): Promise<PortfolioPosition[]> {
+  static async forceRefreshPortfolio(userSettings?: { host: string; port: number; client_id: number }): Promise<PortfolioPosition[]> {
     console.log('Force refreshing portfolio');
-    const freshData = await this.fetchPortfolioFresh();
+    const freshData = await this.fetchPortfolioFresh(userSettings);
     this.setCachedPortfolio(freshData);
     return freshData;
   }
 
   // Internal method that actually fetches from IB
-  private static async fetchPortfolioFresh(): Promise<PortfolioPosition[]> {
+  private static async fetchPortfolioFresh(userSettings?: { host: string; port: number; client_id: number }): Promise<PortfolioPosition[]> {
     // Wait if another request is in progress
     while (this.isPortfolioRequestInProgress || this.isRequestInProgress) {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -748,7 +749,7 @@ export class IBService {
     this.isPortfolioRequestInProgress = true;
 
     try {
-      await this.ensureConnection();
+      await this.ensureConnection(userSettings);
 
       if (!this.ibApi) {
         throw new Error('IB API not initialized');
@@ -894,22 +895,22 @@ export class IBService {
   }
 
   // Combined method for frontend (returns cached data immediately, refreshes in background)
-  static async getAccountData(): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
+  static async getAccountData(userSettings: { host: string; port: number; client_id: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
     const [balance, portfolio] = await Promise.all([
-      this.getAccountBalance(),
-      this.getPortfolio()
+      this.getAccountBalance(userSettings),
+      this.getPortfolio(userSettings)
     ]);
 
     return { balance, portfolio };
   }
 
   // Force refresh both balance and portfolio
-  static async forceRefreshAll(): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
+  static async forceRefreshAll(userSettings: { host: string; port: number; client_id: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
     console.log('Force refreshing all account data');
     
     const [balance, portfolio] = await Promise.all([
-      this.forceRefreshAccountBalance(),
-      this.forceRefreshPortfolio()
+      this.forceRefreshAccountBalance(userSettings),
+      this.forceRefreshPortfolio(userSettings)
     ]);
 
     return { balance, portfolio };

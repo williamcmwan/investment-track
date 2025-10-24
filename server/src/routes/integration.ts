@@ -1,24 +1,72 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { IBService } from '../services/ibService.js';
+import { IBConnectionService } from '../services/ibConnectionService.js';
 
 const router = express.Router();
 
-// Get IB connection settings
+// Get IB connection settings (user-specific)
 router.get('/ib/settings', authenticateToken, async (req, res) => {
   try {
-    const settings = IBService.getConnectionSettings();
-    res.json(settings);
+    const userId = (req as any).user.id;
+    
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    
+    if (userSettings) {
+      res.json(userSettings);
+    } else {
+      // Return default settings for first-time setup
+      res.json({
+        host: 'localhost',
+        port: 7497,
+        client_id: 1,
+        target_account_id: null
+      });
+    }
   } catch (error) {
     console.error('Error getting IB settings:', error);
     res.status(500).json({ error: 'Failed to get IB settings' });
   }
 });
 
+// Save IB connection settings (user-specific)
+router.post('/ib/settings', authenticateToken, async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { host, port, client_id, target_account_id } = req.body;
+    
+    // Validate required fields
+    if (!host || !port || !client_id) {
+      return res.status(400).json({ error: 'Host, port, and client ID are required' });
+    }
+    
+    await IBConnectionService.saveUserIBSettings(userId, {
+      host,
+      port: parseInt(port),
+      client_id: parseInt(client_id),
+      target_account_id: target_account_id === "none" ? undefined : parseInt(target_account_id)
+    });
+    
+    res.json({ success: true, message: 'IB settings saved successfully' });
+  } catch (error) {
+    console.error('Error saving IB settings:', error);
+    res.status(500).json({ error: 'Failed to save IB settings' });
+  }
+});
+
 // Get IB account balance (cached)
 router.post('/ib/balance', authenticateToken, async (req, res) => {
   try {
-    const result = await IBService.getAccountBalance();
+    const userId = (req as any).user.id;
+    
+    // Get user's IB settings
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    
+    if (!userSettings) {
+      return res.status(400).json({ error: 'IB connection not configured. Please configure your IB settings first.' });
+    }
+    
+    const result = await IBService.getAccountBalance(userSettings);
     const timestamp = IBService.getBalanceTimestamp();
     res.json({ ...result, timestamp });
   } catch (error) {
@@ -31,7 +79,16 @@ router.post('/ib/balance', authenticateToken, async (req, res) => {
 router.post('/ib/balance/refresh', authenticateToken, async (req, res) => {
   try {
     console.log('🔄 Force refresh balance endpoint called');
-    const result = await IBService.forceRefreshAccountBalance();
+    const userId = (req as any).user.id;
+    
+    // Get user's IB settings
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    
+    if (!userSettings) {
+      return res.status(400).json({ error: 'IB connection not configured. Please configure your IB settings first.' });
+    }
+    
+    const result = await IBService.forceRefreshAccountBalance(userSettings);
     const timestamp = IBService.getBalanceTimestamp();
     console.log('✅ Balance refresh successful, returning data');
     res.json({ ...result, timestamp });
@@ -45,7 +102,16 @@ router.post('/ib/balance/refresh', authenticateToken, async (req, res) => {
 // Get IB portfolio positions (cached)
 router.post('/ib/portfolio', authenticateToken, async (req, res) => {
   try {
-    const result = await IBService.getPortfolio();
+    const userId = (req as any).user.id;
+    
+    // Get user's IB settings
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    
+    if (!userSettings) {
+      return res.status(400).json({ error: 'IB connection not configured. Please configure your IB settings first.' });
+    }
+    
+    const result = await IBService.getPortfolio(userSettings);
     res.json(result);
   } catch (error) {
     console.error('Error getting IB portfolio:', error);
@@ -57,7 +123,16 @@ router.post('/ib/portfolio', authenticateToken, async (req, res) => {
 router.post('/ib/portfolio/refresh', authenticateToken, async (req, res) => {
   try {
     console.log('🔄 Force refresh portfolio endpoint called');
-    const result = await IBService.forceRefreshPortfolio();
+    const userId = (req as any).user.id;
+    
+    // Get user's IB settings
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    
+    if (!userSettings) {
+      return res.status(400).json({ error: 'IB connection not configured. Please configure your IB settings first.' });
+    }
+    
+    const result = await IBService.forceRefreshPortfolio(userSettings);
     console.log('✅ Portfolio refresh successful, returning data');
     res.json(result);
   } catch (error) {
@@ -70,7 +145,16 @@ router.post('/ib/portfolio/refresh', authenticateToken, async (req, res) => {
 // Get all account data (cached)
 router.post('/ib/account-data', authenticateToken, async (req, res) => {
   try {
-    const result = await IBService.getAccountData();
+    const userId = (req as any).user.id;
+    
+    // Get user's IB settings
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    
+    if (!userSettings) {
+      return res.status(400).json({ error: 'IB connection not configured. Please configure your IB settings first.' });
+    }
+    
+    const result = await IBService.getAccountData(userSettings);
     res.json(result);
   } catch (error) {
     console.error('Error getting IB account data:', error);
@@ -81,7 +165,16 @@ router.post('/ib/account-data', authenticateToken, async (req, res) => {
 // Force refresh all account data
 router.post('/ib/refresh-all', authenticateToken, async (req, res) => {
   try {
-    const result = await IBService.forceRefreshAll();
+    const userId = (req as any).user.id;
+    
+    // Get user's IB settings
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    
+    if (!userSettings) {
+      return res.status(400).json({ error: 'IB connection not configured. Please configure your IB settings first.' });
+    }
+    
+    const result = await IBService.forceRefreshAll(userSettings);
     res.json(result);
   } catch (error) {
     console.error('Error refreshing all IB data:', error);

@@ -15,10 +15,12 @@ import {
   RefreshCw, 
   Activity,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Settings
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api";
+import IBConfigDialog from "./IBConfigDialog";
 
 interface IntegrationViewProps {
   baseCurrency: string;
@@ -67,21 +69,27 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
     port: 7497,
     clientId: 1
   });
+  const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
 
   // Load connection settings and initial data from server on mount
   useEffect(() => {
-    const loadConnectionSettings = async () => {
-      try {
-        const response = await apiClient.getIBSettings();
-        if (response.data) {
-          setConnectionSettings(response.data);
-        }
-      } catch (error) {
-        console.error('Failed to load IB settings:', error);
-      }
-    };
     loadConnectionSettings();
   }, []);
+
+  const loadConnectionSettings = async () => {
+    try {
+      const response = await apiClient.getIBSettings();
+      if (response.data) {
+        setConnectionSettings({
+          host: response.data.host,
+          port: response.data.port,
+          clientId: response.data.client_id
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load IB settings:', error);
+    }
+  };
 
   // Load cached portfolio data on mount
   useEffect(() => {
@@ -190,11 +198,17 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
       // Check for errors in responses - check error first before checking data
       if (balanceResponse.error) {
         console.error('Balance error detected:', balanceResponse.error);
+        if (balanceResponse.error.includes('not configured')) {
+          throw new Error('IB connection not configured. Please click "Configure" to set up your Interactive Brokers connection.');
+        }
         throw new Error(balanceResponse.error);
       }
       
       if (portfolioResponse.error) {
         console.error('Portfolio error detected:', portfolioResponse.error);
+        if (portfolioResponse.error.includes('not configured')) {
+          throw new Error('IB connection not configured. Please click "Configure" to set up your Interactive Brokers connection.');
+        }
         throw new Error(portfolioResponse.error);
       }
       
@@ -262,43 +276,37 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
     }
   };
 
-  // Helper function to update the Interactive Broker account balance
+  // Helper function to update the configured target account balance
   const updateIBAccountBalance = async (balance: number, currency: string) => {
     try {
-      console.log('🔄 Updating Interactive Broker HK account balance...');
-      // Get all accounts to find the Interactive Broker HK account
-      const accountsResponse = await apiClient.getAccounts();
-      if (accountsResponse.data) {
-        // Find the Interactive Broker HK account (case-insensitive search)
-        const ibAccount = accountsResponse.data.find((acc: any) => 
-          acc.name.toLowerCase().includes('interactive broker') && 
-          acc.name.toLowerCase().includes('hk')
-        );
-        
-        if (ibAccount) {
-          console.log(`📝 Found IB account (ID: ${ibAccount.id}), current balance: ${ibAccount.currentBalance}, new balance: ${balance}`);
-          console.log(`📅 Current lastUpdated: ${ibAccount.lastUpdated}`);
-          
-          // Update the account balance (this will automatically update last_updated timestamp)
-          const updateResponse = await apiClient.updateAccount(ibAccount.id, {
-            currentBalance: balance
-          });
-          
-          console.log(`✅ Updated Interactive Broker HK account balance to ${balance} ${currency}`);
-          console.log(`📅 New lastUpdated: ${updateResponse.data?.lastUpdated}`);
-          
-          // Trigger account update callback if provided
-          if (onAccountUpdate) {
-            console.log('🔄 Triggering account update callback...');
-            await onAccountUpdate();
-            console.log('✅ Account update callback completed');
-          }
-        } else {
-          console.log('ℹ️ Interactive Broker HK account not found in accounts list');
-        }
+      console.log('🔄 Updating configured IB target account balance...');
+      
+      // Get user's IB settings to find the target account
+      const settingsResponse = await apiClient.getIBSettings();
+      if (!settingsResponse.data?.target_account_id) {
+        console.log('ℹ️ No target account configured for IB updates');
+        return;
+      }
+      
+      const targetAccountId = settingsResponse.data.target_account_id;
+      console.log(`📝 Updating target account ID: ${targetAccountId}, new balance: ${balance}`);
+      
+      // Update the account balance (this will automatically update last_updated timestamp)
+      const updateResponse = await apiClient.updateAccount(targetAccountId, {
+        currentBalance: balance
+      });
+      
+      console.log(`✅ Updated target account balance to ${balance} ${currency}`);
+      console.log(`📅 New lastUpdated: ${updateResponse.data?.lastUpdated}`);
+      
+      // Trigger account update callback if provided
+      if (onAccountUpdate) {
+        console.log('🔄 Triggering account update callback...');
+        await onAccountUpdate();
+        console.log('✅ Account update callback completed');
       }
     } catch (error) {
-      console.error('❌ Failed to update Interactive Broker account balance:', error);
+      console.error('❌ Failed to update target account balance:', error);
       // Don't show error toast as this is a background operation
     }
   };
@@ -570,19 +578,30 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
                 <Activity className="h-5 w-5 text-primary" />
                 Interactive Broker Portfolio
               </CardTitle>
-              <Button
-                onClick={handleRefreshAll}
-                disabled={isConnecting || isLoadingPortfolio}
-                size="sm"
-                className="flex items-center gap-2 w-fit"
-              >
-                {(isConnecting || isLoadingPortfolio) ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                {(isConnecting || isLoadingPortfolio) ? 'Refreshing...' : 'Refresh Portfolio'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => setIsConfigDialogOpen(true)}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <Settings className="h-4 w-4" />
+                  Configure
+                </Button>
+                <Button
+                  onClick={handleRefreshAll}
+                  disabled={isConnecting || isLoadingPortfolio}
+                  size="sm"
+                  className="flex items-center gap-2 w-fit"
+                >
+                  {(isConnecting || isLoadingPortfolio) ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {(isConnecting || isLoadingPortfolio) ? 'Refreshing...' : 'Refresh Portfolio'}
+                </Button>
+              </div>
             </div>
             <CardDescription>
               Account summary and holdings{lastUpdated && ` (Last updated: ${lastUpdated})`}
@@ -592,17 +611,17 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
         <CardContent className="space-y-6 px-4 sm:px-6">
           {/* Account Balance Summary */}
           {accountBalance !== null ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="flex items-center justify-between p-4 bg-background/30 rounded-lg">
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center justify-between p-4 bg-background/30 rounded-lg min-w-fit">
                 <div className="flex items-center gap-3">
                   <DollarSign className="h-5 w-5 text-primary" />
                   <div>
-                    <p className="font-medium text-foreground">Total Account Value</p>
+                    <p className="font-medium text-foreground whitespace-nowrap">Total Account Value</p>
                     <p className="text-xs text-muted-foreground">Net Liquidation</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xl font-bold text-foreground">
+                <div className="text-right ml-4">
+                  <p className="text-xl font-bold text-foreground whitespace-nowrap">
                     {formatCurrency(netLiquidation || accountBalance, accountCurrency || baseCurrency)}
                   </p>
                   {accountCurrency && accountCurrency !== baseCurrency && (
@@ -612,16 +631,16 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
               </div>
 
               {totalCashValue !== null && (
-                <div className="flex items-center justify-between p-4 bg-background/30 rounded-lg">
+                <div className="flex items-center justify-between p-4 bg-background/30 rounded-lg min-w-fit">
                   <div className="flex items-center gap-3">
                     <DollarSign className="h-5 w-5 text-primary" />
                     <div>
-                      <p className="font-medium text-foreground">Cash Balance</p>
+                      <p className="font-medium text-foreground whitespace-nowrap">Cash Balance</p>
                       <p className="text-xs text-muted-foreground">Available cash</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xl font-bold text-foreground">
+                  <div className="text-right ml-4">
+                    <p className="text-xl font-bold text-foreground whitespace-nowrap">
                       {formatCurrency(totalCashValue, accountCurrency || baseCurrency)}
                     </p>
                   </div>
@@ -806,6 +825,13 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
           </div>
         </CardContent>
       </Card>
+
+      {/* IB Configuration Dialog */}
+      <IBConfigDialog
+        open={isConfigDialogOpen}
+        onOpenChange={setIsConfigDialogOpen}
+        onSettingsSaved={loadConnectionSettings}
+      />
     </div>
   );
 };

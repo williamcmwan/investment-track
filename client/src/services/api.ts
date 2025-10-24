@@ -298,7 +298,14 @@ class ApiClient {
 
   // Interactive Brokers Integration endpoints
   async getIBSettings() {
-    return this.request<{ host: string; port: number; clientId: number }>('/integration/ib/settings');
+    return this.request<{ host: string; port: number; client_id: number; target_account_id?: number }>('/integration/ib/settings');
+  }
+
+  async saveIBSettings(settings: { host: string; port: number; client_id: number; target_account_id?: number }) {
+    return this.request<{ success: boolean; message: string }>('/integration/ib/settings', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    });
   }
 
   async getIBBalance() {

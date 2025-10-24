@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS ib_connections (
     host TEXT NOT NULL,
     port INTEGER NOT NULL,
     client_id INTEGER NOT NULL,
+    target_account_id INTEGER,
     is_connected BOOLEAN DEFAULT FALSE,
     last_connected DATETIME,
     account_balance REAL,
@@ -90,6 +91,7 @@ CREATE TABLE IF NOT EXISTS ib_connections (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_account_id) REFERENCES accounts(id) ON DELETE SET NULL,
     UNIQUE(user_id, client_id)
 );
 
