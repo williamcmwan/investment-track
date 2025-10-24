@@ -67,7 +67,10 @@ export class IBService {
   private static readonly PORTFOLIO_CACHE_FILE = path.join(IBService.CACHE_DIR, 'portfolio.json');
 
   // Get user-specific connection settings
-  static getUserConnectionSettings(userSettings: { host: string; port: number; client_id: number }): { host: string; port: number; clientId: number } {
+  static getUserConnectionSettings(userSettings?: { host: string; port: number; client_id: number }): { host: string; port: number; clientId: number } {
+    if (!userSettings) {
+      throw new Error('User IB settings are required but not provided');
+    }
     return {
       host: userSettings.host,
       port: userSettings.port,
@@ -136,7 +139,7 @@ export class IBService {
 
   private static getCachedBalance(): AccountSummary | null {
     console.log('getCachedBalance called');
-    
+
     // Check memory cache first
     if (this.isCacheValid(this.balanceCache, this.BALANCE_CACHE_DURATION)) {
       console.log('Returning cached account balance from memory');
@@ -172,7 +175,7 @@ export class IBService {
 
   private static getCachedPortfolio(): PortfolioPosition[] | null {
     console.log('getCachedPortfolio called');
-    
+
     // Check memory cache first
     if (this.isCacheValid(this.portfolioCache, this.PORTFOLIO_CACHE_DURATION)) {
       console.log('Returning cached portfolio from memory');
@@ -270,7 +273,7 @@ export class IBService {
 
     const settings = this.getUserConnectionSettings(userSettings);
     console.log(`🔌 Connecting to IB Gateway at ${settings.host}:${settings.port} with client ID ${settings.clientId}...`);
-    
+
     this.connectionPromise = new Promise((resolve, reject) => {
       this.ibApi = new IBApi({
         host: settings.host,
@@ -292,10 +295,10 @@ export class IBService {
         this.lastActivityTime = Date.now();
         clearTimeout(timeout);
         console.log('✅ Successfully connected to IB Gateway - maintaining persistent connection');
-        
+
         // Start keep-alive mechanism
         this.startKeepAlive();
-        
+
         resolve();
       });
 
@@ -308,7 +311,7 @@ export class IBService {
 
       this.ibApi!.on(EventName.error, (err: Error, code: ErrorCode, reqId: number) => {
         console.error(`❌ IB API Error [${code}]:`, err.message);
-        
+
         // Handle "client id already in use" error
         if (err.message.includes('client id is already in use')) {
           clearTimeout(timeout);
@@ -362,11 +365,11 @@ export class IBService {
     }
 
     console.log('🔄 Starting keep-alive mechanism');
-    
+
     // Check connection health every 5 minutes
     this.keepAliveInterval = setInterval(() => {
       const idleTime = Date.now() - this.lastActivityTime;
-      
+
       if (idleTime > this.IDLE_TIMEOUT) {
         console.log(`⏰ Connection idle for ${Math.round(idleTime / 60000)} minutes, disconnecting...`);
         this.disconnect();
@@ -387,9 +390,9 @@ export class IBService {
 
   static async disconnect(): Promise<void> {
     console.log('🔌 Disconnecting from IB Gateway...');
-    
+
     this.stopKeepAlive();
-    
+
     if (this.ibApi) {
       // Cancel any active account summary request
       if (this.activeReqId !== null) {
@@ -400,7 +403,7 @@ export class IBService {
         }
         this.activeReqId = null;
       }
-      
+
       if (this.isConnected) {
         try {
           this.ibApi.removeAllListeners();
@@ -412,13 +415,13 @@ export class IBService {
         }
         this.isConnected = false;
       }
-      
+
       this.ibApi = null;
     }
-    
+
     this.isConnecting = false;
     this.connectionPromise = null;
-    
+
     console.log('✅ Disconnected from IB Gateway');
   }
 
@@ -436,7 +439,7 @@ export class IBService {
   // Public method with caching (requires user settings)
   static async getAccountBalance(userSettings: { host: string; port: number; client_id: number }): Promise<AccountSummary> {
     console.log('🏦 getAccountBalance called');
-    
+
     // Return cached data if available
     const cached = this.getCachedBalance();
     if (cached) {
@@ -497,7 +500,7 @@ export class IBService {
 
       // Use a fixed request ID to make cancellation reliable
       const reqId = 1;
-      
+
       // Always cancel any existing subscription first
       try {
         this.ibApi.cancelAccountSummary(reqId);
@@ -523,20 +526,20 @@ export class IBService {
         const cleanup = () => {
           if (isResolved) return;
           isResolved = true;
-          
+
           clearTimeout(timeout);
-          
+
           // Remove event listeners
           this.ibApi!.off(EventName.accountSummary, summaryHandler);
           this.ibApi!.off(EventName.accountSummaryEnd, summaryEndHandler);
-          
+
           // Cancel the subscription immediately after getting data
           try {
             this.ibApi!.cancelAccountSummary(reqId);
           } catch (err) {
             console.error('Error canceling account summary:', err);
           }
-          
+
           this.activeReqId = null;
           this.isRequestInProgress = false;
         };
@@ -625,6 +628,126 @@ export class IBService {
     });
   }
 
+
+
+  private static async getBondMarketData(position: any): Promise<{ closePrice: number; dayChange: number; dayChangePercent: number } | null> {
+    if (!this.ibApi) {
+      throw new Error('IB API not initialized');
+    }
+
+    console.log(`Requesting bond market data for ${position.symbol}...`);
+
+    // If we don't have a contract ID, we can't reliably request market data for bonds
+    if (!position.conId || position.conId <= 0) {
+      console.log(`No contract ID available for bond ${position.symbol}, cannot request market data`);
+      return null;
+    }
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        console.log(`Timeout getting bond market data for ${position.symbol}`);
+        this.ibApi!.removeAllListeners('tickPrice' as any);
+        this.ibApi!.cancelMktData(reqId);
+        resolve(null);
+      }, 15000); // Longer timeout for bonds
+
+      const reqId = Math.floor(Math.random() * 10000) + 1000;
+      let lastPrice: number | null = null;
+      let closePrice: number | null = null;
+      let dataReceived = false;
+
+      const tickPriceHandler = (reqId_: number, tickType: number, price: number, attrib: any) => {
+        if (reqId_ === reqId) {
+          console.log(`Bond tick data for ${position.symbol}: tickType=${tickType}, price=${price}`);
+
+          if (tickType === 4) { // Last Price (current)
+            lastPrice = price;
+            console.log(`Got last price for ${position.symbol}: ${price}`);
+          } else if (tickType === 9) { // Close Price (previous day)
+            closePrice = price;
+            console.log(`Got close price for ${position.symbol}: ${price}`);
+          } else if (tickType === 1 && lastPrice === null) { // Bid price as fallback for last price
+            lastPrice = price;
+            console.log(`Using bid price as last price for ${position.symbol}: ${price}`);
+          } else if (tickType === 2 && lastPrice === null) { // Ask price as fallback for last price
+            lastPrice = price;
+            console.log(`Using ask price as last price for ${position.symbol}: ${price}`);
+          }
+
+          // If we have both prices, calculate and return
+          if (lastPrice !== null && closePrice !== null && !dataReceived) {
+            dataReceived = true;
+            clearTimeout(timeout);
+            this.ibApi!.removeListener('tickPrice' as any, tickPriceHandler);
+            this.ibApi!.cancelMktData(reqId);
+
+            const dayChange = (lastPrice - closePrice) * position.position;
+            const dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
+
+            console.log(`Calculated bond day change for ${position.symbol}: lastPrice=${lastPrice}, closePrice=${closePrice}, dayChange=${dayChange}, dayChangePercent=${dayChangePercent.toFixed(2)}%`);
+
+            resolve({
+              closePrice,
+              dayChange,
+              dayChangePercent
+            });
+          }
+        }
+      };
+
+      const tickPriceErrorHandler = (reqId_: number, errorCode: number, errorString: string) => {
+        if (reqId_ === reqId) {
+          console.log(`Bond market data error for ${position.symbol}: ${errorCode} - ${errorString}`);
+          clearTimeout(timeout);
+          this.ibApi!.removeListener('tickPrice' as any, tickPriceHandler);
+          this.ibApi!.removeListener('error' as any, tickPriceErrorHandler);
+          this.ibApi!.cancelMktData(reqId);
+          resolve(null);
+        }
+      };
+
+      this.ibApi!.on('tickPrice' as any, tickPriceHandler);
+      this.ibApi!.on('error' as any, tickPriceErrorHandler);
+
+      try {
+        // Use the contract ID directly - this is the most reliable approach for bonds
+        const bondContract = {
+          conId: position.conId,
+          secType: 'BOND' as any,
+          exchange: position.exchange || position.primaryExchange || 'SMART',
+          currency: position.currency || 'USD'
+        };
+
+        console.log(`Using contract ID for bond market data: ${position.conId}`);
+
+        // Set market data type to 3 (delayed) for free bond data
+        this.ibApi!.reqMarketDataType(3);
+
+        // Request market data
+        this.ibApi!.reqMktData(
+          reqId,
+          bondContract,
+          '', // genericTickList - empty for standard ticks
+          false, // snapshot
+          false // regulatorySnapshot
+        );
+
+        console.log(`Requested market data for bond ${position.symbol} (conId: ${position.conId}) with reqId ${reqId}`);
+
+      } catch (error) {
+        console.error(`Error requesting bond market data for ${position.symbol}:`, error);
+        clearTimeout(timeout);
+        this.ibApi!.removeListener('tickPrice' as any, tickPriceHandler);
+        this.ibApi!.removeListener('error' as any, tickPriceErrorHandler);
+        resolve(null);
+      }
+    });
+  }
+
+
+
+
+
   private static async getHistoricalClose(contract: any): Promise<number | undefined> {
     if (!this.ibApi) {
       throw new Error('IB API not initialized');
@@ -632,10 +755,10 @@ export class IBService {
 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        console.log(`Timeout getting historical data for ${contract.symbol}`);
+        console.log(`Timeout getting historical data for ${contract.symbol} (${contract.secType})`);
         this.ibApi!.removeAllListeners('historicalData' as any);
         resolve(undefined);
-      }, 5000);
+      }, 8000); // Increased timeout for crypto/bonds
 
       const reqId = Math.floor(Math.random() * 10000) + 1000;
       const closePrices: number[] = [];
@@ -649,37 +772,55 @@ export class IBService {
               isComplete = true;
               clearTimeout(timeout);
               this.ibApi!.removeListener('historicalData' as any, historicalDataHandler);
-              
+
               // Return the first close price (oldest, which should be previous day's close)
               const closePrice = closePrices.length > 0 ? closePrices[0] : undefined;
-              console.log(`Final close price for ${contract.symbol}: ${closePrice} (from ${closePrices.length} bars)`);
+              console.log(`Final close price for ${contract.symbol} (${contract.secType}): ${closePrice} (from ${closePrices.length} bars)`);
               resolve(closePrice);
             }
           } else if (close > 0) {
             // Collect all close prices
             closePrices.push(close);
-            console.log(`Historical bar for ${contract.symbol}: date=${time}, close=${close}`);
+            console.log(`Historical bar for ${contract.symbol} (${contract.secType}): date=${time}, close=${close}`);
           }
         }
       };
 
       this.ibApi!.on('historicalData' as any, historicalDataHandler);
 
-      // Request 2 days of historical data to get previous close
+      // Request historical data with appropriate settings for different security types
       try {
+        let duration = '2 D';
+        let barSize = '1 day' as any;
+        let whatToShow = 'TRADES' as any;
+        let useRTH = 1; // Regular trading hours
+
+        // Adjust settings based on security type
+        if (contract.secType === 'CRYPTO') {
+          duration = '2 D';
+          barSize = '1 day' as any;
+          whatToShow = 'MIDPOINT' as any; // Crypto often uses midpoint
+          useRTH = 0; // Crypto trades 24/7
+        } else if (contract.secType === 'BOND') {
+          duration = '1 W'; // Bonds need more days due to less frequent trading
+          barSize = '1 day' as any;
+          whatToShow = 'MIDPOINT' as any; // Bonds often work better with midpoint
+          useRTH = 1;
+        }
+
         this.ibApi!.reqHistoricalData(
           reqId,
           contract,
           '', // endDateTime - empty means now
-          '2 D', // duration - get 2 days
-          '1 day' as any, // bar size - daily bars
-          'TRADES', // what to show
-          1, // useRTH - regular trading hours
+          duration,
+          barSize,
+          whatToShow,
+          useRTH,
           1, // formatDate
           false // keepUpToDate
         );
       } catch (error) {
-        console.error(`Error requesting historical data for ${contract.symbol}:`, error);
+        console.error(`Error requesting historical data for ${contract.symbol} (${contract.secType}):`, error);
         clearTimeout(timeout);
         this.ibApi!.removeListener('historicalData' as any, historicalDataHandler);
         resolve(undefined);
@@ -690,7 +831,7 @@ export class IBService {
   // Public method with caching (requires user settings)
   static async getPortfolio(userSettings: { host: string; port: number; client_id: number }): Promise<PortfolioPosition[]> {
     console.log('📈 getPortfolio called');
-    
+
     // Return cached data if available
     const cached = this.getCachedPortfolio();
     if (cached) {
@@ -770,13 +911,13 @@ export class IBService {
         const cleanup = () => {
           if (isResolved) return;
           isResolved = true;
-          
+
           clearTimeout(timeout);
-          
+
           // Remove event listeners
           this.ibApi!.off(EventName.updatePortfolio, portfolioHandler);
           this.ibApi!.off(EventName.accountDownloadEnd, downloadEndHandler);
-          
+
           // Unsubscribe from account updates
           try {
             this.ibApi!.reqAccountUpdates(false, '');
@@ -784,7 +925,7 @@ export class IBService {
           } catch (err) {
             console.error('Error unsubscribing from account updates:', err);
           }
-          
+
           this.isPortfolioRequestInProgress = false;
         };
 
@@ -802,7 +943,7 @@ export class IBService {
           if (contract.secType === 'CASH') {
             return;
           }
-          
+
           // Log contract details to see what's available
           console.log('Portfolio contract:', {
             symbol: contract.symbol,
@@ -812,7 +953,7 @@ export class IBService {
             currency: contract.currency,
             conId: contract.conId
           });
-          
+
           this.portfolioPositions.push({
             symbol: contract.symbol || '',
             secType: contract.secType || '',
@@ -836,39 +977,96 @@ export class IBService {
               this.portfolioPositions.map(async (position) => {
                 try {
                   let enrichedPosition = { ...position };
-                  
-                  if (position.conId && position.secType === 'STK') {
-                    // Get contract details for industry/category
-                    const details = await this.getContractDetails(position.conId);
-                    if (details) {
+
+                  if (position.conId && ['STK', 'CRYPTO', 'BOND'].includes(position.secType)) {
+                    console.log(`Processing ${position.symbol} (${position.secType}) for day change data...`);
+
+                    // Handle bonds with market data approach directly
+                    if (position.secType === 'BOND') {
+                      console.log(`Using market data approach for bond ${position.symbol}...`);
+
+                      // Set basic bond info
                       enrichedPosition = {
                         ...enrichedPosition,
-                        industry: details.industry || '',
-                        category: details.category || '',
-                        country: details.contract?.primaryExchange || position.primaryExchange || ''
+                        industry: 'Fixed Income',
+                        category: 'Bond',
+                        country: position.exchange || position.primaryExchange || 'Unknown'
                       };
-                      
-                      // Get historical close price
-                      const closePrice = await this.getHistoricalClose(details.contract);
-                      if (closePrice && closePrice > 0) {
-                        enrichedPosition.closePrice = closePrice;
-                        
-                        // Calculate day change: (marketPrice - closePrice) * qty
-                        const dayChange = (position.marketPrice - closePrice) * position.position;
-                        // Calculate day change percent: ((marketPrice - closePrice) / closePrice) * 100
-                        const dayChangePercent = ((position.marketPrice - closePrice) / closePrice) * 100;
-                        
-                        enrichedPosition.dayChange = dayChange;
-                        enrichedPosition.dayChangePercent = dayChangePercent;
-                        
-                        console.log(`${position.symbol}: closePrice=${closePrice}, marketPrice=${position.marketPrice}, dayChange=${dayChange}, dayChangePercent=${dayChangePercent.toFixed(2)}%`);
+
+                      // Get bond data using market data ticks
+                      const bondMarketData = await this.getBondMarketData(position);
+                      if (bondMarketData && bondMarketData.closePrice > 0) {
+                        enrichedPosition.closePrice = bondMarketData.closePrice;
+                        enrichedPosition.dayChange = bondMarketData.dayChange;
+                        enrichedPosition.dayChangePercent = bondMarketData.dayChangePercent;
+                        console.log(`Got bond market data for ${position.symbol}: closePrice=${bondMarketData.closePrice}, dayChange=${bondMarketData.dayChange}, dayChangePercent=${bondMarketData.dayChangePercent.toFixed(2)}%`);
                       } else {
-                        console.log(`${position.symbol}: Could not get historical close price`);
+                        console.log(`Bond market data failed for ${position.symbol}`);
+                      }
+                    } else {
+                      // Handle stocks and crypto with contract details and historical data
+                      const details = await this.getContractDetails(position.conId);
+                      if (details) {
+                        console.log(`Got contract details for ${position.symbol} (${position.secType})`);
+
+                        // Set industry/category for stocks and crypto
+                        if (position.secType === 'STK') {
+                          enrichedPosition = {
+                            ...enrichedPosition,
+                            industry: details.industry || '',
+                            category: details.category || '',
+                            country: details.contract?.primaryExchange || position.primaryExchange || ''
+                          };
+                        } else if (position.secType === 'CRYPTO') {
+                          enrichedPosition = {
+                            ...enrichedPosition,
+                            industry: 'Cryptocurrency',
+                            category: 'Digital Asset',
+                            country: details.contract?.exchange || position.exchange || 'Crypto Exchange'
+                          };
+                        }
+
+                        // Get historical close price
+                        console.log(`Requesting historical data for ${position.symbol} (${position.secType})...`);
+                        let closePrice = await this.getHistoricalClose(details.contract);
+                        console.log(`Historical data result for ${position.symbol} (${position.secType}): closePrice=${closePrice}`);
+
+
+
+                        if (closePrice && closePrice > 0) {
+                          enrichedPosition.closePrice = closePrice;
+
+                          // Calculate day change: (marketPrice - closePrice) * qty
+                          const dayChange = (position.marketPrice - closePrice) * position.position;
+                          // Calculate day change percent: ((marketPrice - closePrice) / closePrice) * 100
+                          const dayChangePercent = ((position.marketPrice - closePrice) / closePrice) * 100;
+
+                          enrichedPosition.dayChange = dayChange;
+                          enrichedPosition.dayChangePercent = dayChangePercent;
+
+                          console.log(`${position.symbol} (${position.secType}): closePrice=${closePrice}, marketPrice=${position.marketPrice}, dayChange=${dayChange}, dayChangePercent=${dayChangePercent.toFixed(2)}%`);
+                        } else {
+                          console.log(`${position.symbol} (${position.secType}): Could not get historical close price`);
+                        }
+                      } else {
+                        console.log(`Failed to get contract details for ${position.symbol} (${position.secType})`);
+
+                        // For crypto without contract details, set basic info but no day change data
+                        if (position.secType === 'CRYPTO') {
+                          console.log(`Contract details failed for crypto ${position.symbol}, cannot get day change data`);
+
+                          // Set basic crypto info without contract details
+                          enrichedPosition = {
+                            ...enrichedPosition,
+                            industry: 'Cryptocurrency',
+                            category: 'Digital Asset',
+                            country: position.exchange || 'Crypto Exchange'
+                          };
+                        }
                       }
                     }
-
                   }
-                  
+
                   return enrichedPosition;
                 } catch (error) {
                   console.error(`Failed to get details for ${position.symbol}:`, error);
@@ -876,7 +1074,7 @@ export class IBService {
                 }
               })
             );
-            
+
             cleanup();
             resolve(enrichedPositions);
           }
@@ -907,7 +1105,7 @@ export class IBService {
   // Force refresh both balance and portfolio
   static async forceRefreshAll(userSettings: { host: string; port: number; client_id: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
     console.log('Force refreshing all account data');
-    
+
     const [balance, portfolio] = await Promise.all([
       this.forceRefreshAccountBalance(userSettings),
       this.forceRefreshPortfolio(userSettings)

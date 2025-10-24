@@ -165,20 +165,53 @@ cd server && npx tsx src/database/seed.ts
 
 ## 🔌 Interactive Brokers Integration
 
-The application supports real-time integration with Interactive Brokers using `@stoqey/ib` for account data retrieval.
+The application features comprehensive Interactive Brokers integration with user-configurable connections and real-time portfolio data including day change tracking for stocks, crypto, and bonds.
 
-### Setup
+### 🆕 User-Configurable IB Settings
+Each user can configure their own IB connection settings through the Portfolio page:
+
+#### Setup Process:
 1. **Install TWS or IB Gateway** from Interactive Brokers
 2. **Enable API connections**: File → Global Configuration → API → Settings
    - Check "Enable ActiveX and Socket Clients"
    - Note the Socket port number
-3. **Configure environment** in `server/.env`:
-   ```bash
-   IB_HOST=localhost
-   IB_PORT=4001  # 7497 for TWS paper, 4001 for IB Gateway, 4002 for Gateway paper
-   IB_CLIENT_ID=1
-   ```
-4. **Start TWS/Gateway** before using the integration features
+3. **Configure in Application**:
+   - Navigate to **Portfolio** page
+   - Click **"Configure"** button next to "Refresh Portfolio"
+   - Enter your connection details:
+     - **Host**: Usually 'localhost' (default)
+     - **Port**: 7497 for paper trading, 7496 for live trading
+     - **Client ID**: Unique identifier (1-32)
+     - **Target Account**: Select which investment account to update
+4. **Start TWS/Gateway** and use "Refresh Portfolio"
+
+#### Features:
+- **Per-User Configuration**: Each user has their own IB connection settings
+- **Account Selection**: Choose which investment account gets updated with portfolio data
+- **Persistent Settings**: Configuration saved in database per user
+- **No Environment Variables**: No need to configure server-side IB settings
+- **Validation**: Form validation with helpful tooltips
+
+### 📊 Enhanced Portfolio Data
+The IB integration now provides comprehensive day change data for all security types:
+
+#### Supported Securities:
+- **📈 Stocks**: Historical data from IB with industry/category details
+- **₿ Crypto**: Real-time crypto data with 24/7 trading support
+- **🏦 Bonds**: Market data using IB tick data (Last Price & Close Price)
+
+#### Day Change Data:
+- **CHG Column**: Dollar amount change from previous day
+- **CHG% Column**: Percentage change with trend indicators (↑↓)
+- **Real-time Data**: All data sourced directly from Interactive Brokers
+- **No External APIs**: Pure IB data for consistency and reliability
+
+#### Technical Implementation:
+- **Stocks**: IB historical data with 2-day lookback
+- **Crypto**: IB historical data with MIDPOINT pricing and 24/7 trading hours
+- **Bonds**: IB market data ticks (Tick 4: Last Price, Tick 9: Close Price)
+- **Contract ID Based**: Uses existing portfolio contract IDs for reliability
+- **Optimized Settings**: Security-type specific parameters for best data quality
 
 ### Port Reference
 - TWS Live: 7496 | TWS Paper: 7497
@@ -210,8 +243,14 @@ The application supports real-time integration with Interactive Brokers using `@
 - `POST /api/performance` - Create performance record
 
 ### Interactive Brokers Integration
-- `GET /api/integration/ib/settings` - Get IB connection settings
-- `POST /api/integration/ib/balance` - Get account balance from IB
+- `GET /api/integration/ib/settings` - Get user's IB connection settings
+- `POST /api/integration/ib/settings` - Save user's IB connection settings
+- `POST /api/integration/ib/balance` - Get account balance from IB (cached)
+- `POST /api/integration/ib/balance/refresh` - Force refresh account balance
+- `POST /api/integration/ib/portfolio` - Get portfolio positions (cached)
+- `POST /api/integration/ib/portfolio/refresh` - Force refresh portfolio data
+- `POST /api/integration/ib/account-data` - Get combined account data
+- `POST /api/integration/ib/refresh-all` - Force refresh all IB data
 
 ## 🗄️ Database Schema
 
@@ -470,6 +509,10 @@ For issues and questions:
   - Details shown by default for better user experience
 - ✅ **Account Timestamp Fix**: Last updated timestamp now properly reflects balance changes
 - ✅ **Interactive Brokers Integration**: Real IB API implementation using `@stoqey/ib`
+- ✅ **User-Configurable IB Settings**: Per-user IB connection configuration with account selection
+- ✅ **Enhanced Portfolio Data**: Day change tracking for stocks, crypto, and bonds using real IB data
+- ✅ **IB Configuration Dialog**: User-friendly setup interface with validation and account selection
+- ✅ **Multi-Security Support**: Optimized data retrieval for stocks (historical), crypto (24/7), and bonds (market ticks)
 
 ---
 
