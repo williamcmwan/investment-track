@@ -57,9 +57,10 @@ export class IBService {
   private static balanceCache: CachedData<AccountSummary> | null = null;
   private static portfolioCache: CachedData<PortfolioPosition[]> | null = null;
 
-  // Cache expiration times (in milliseconds)
-  private static readonly BALANCE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-  private static readonly PORTFOLIO_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
+  // Cache auto-refresh times (in milliseconds)
+  private static readonly AUTO_REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes - auto refresh if no manual refresh
+  private static readonly BALANCE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes - for balance freshness check
+  private static readonly PORTFOLIO_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes - for portfolio freshness check
 
   // Cache file paths
   private static readonly CACHE_DIR = path.join(process.cwd(), 'cache');
@@ -137,28 +138,67 @@ export class IBService {
     return cache !== null && (Date.now() - cache.timestamp) < duration;
   }
 
+  private static shouldAutoRefresh<T>(cache: CachedData<T> | null): boolean {
+    if (!cache) return true; // No cache, should refresh
+    const cacheAge = Date.now() - cache.timestamp;
+    return cacheAge > this.AUTO_REFRESH_INTERVAL && !cache.isRefreshing;
+  }
+
+  private static async refreshBalanceBackground(userSettings: { host: string; port: number; client_id: number }): Promise<void> {
+    try {
+      console.log('🔄 Starting background balance refresh...');
+      if (this.balanceCache) {
+        this.balanceCache.isRefreshing = true;
+      }
+
+      const freshBalance = await this.fetchAccountBalanceFresh(userSettings);
+      this.setCachedBalance(freshBalance);
+      console.log('✅ Background balance refresh completed');
+    } catch (error) {
+      console.error('❌ Background balance refresh failed:', error);
+    } finally {
+      if (this.balanceCache) {
+        this.balanceCache.isRefreshing = false;
+      }
+    }
+  }
+
+  private static async refreshPortfolioBackground(userSettings: { host: string; port: number; client_id: number }): Promise<void> {
+    try {
+      console.log('🔄 Starting background portfolio refresh...');
+      if (this.portfolioCache) {
+        this.portfolioCache.isRefreshing = true;
+      }
+
+      const freshPortfolio = await this.fetchPortfolioFresh(userSettings);
+      this.setCachedPortfolio(freshPortfolio);
+      console.log('✅ Background portfolio refresh completed');
+    } catch (error) {
+      console.error('❌ Background portfolio refresh failed:', error);
+    } finally {
+      if (this.portfolioCache) {
+        this.portfolioCache.isRefreshing = false;
+      }
+    }
+  }
+
   private static getCachedBalance(): AccountSummary | null {
     console.log('getCachedBalance called');
 
-    // Check memory cache first
-    if (this.isCacheValid(this.balanceCache, this.BALANCE_CACHE_DURATION)) {
-      console.log('Returning cached account balance from memory');
-      return this.balanceCache!.data;
-    }
-
-    // If memory cache is empty or expired, try loading from file
+    // Load from file if not in memory
     if (!this.balanceCache) {
       console.log('Memory cache empty, trying to load from file:', this.BALANCE_CACHE_FILE);
       this.balanceCache = this.loadCacheFromFile<AccountSummary>(this.BALANCE_CACHE_FILE);
-      if (this.isCacheValid(this.balanceCache, this.BALANCE_CACHE_DURATION)) {
-        console.log('Returning cached account balance from file');
-        return this.balanceCache!.data;
-      } else {
-        console.log('File cache invalid or not found');
-      }
     }
 
-    console.log('No valid cache found');
+    // Always return cached data if available (never remove cache)
+    if (this.balanceCache) {
+      const cacheAge = Date.now() - this.balanceCache.timestamp;
+      console.log(`Returning cached balance (age: ${Math.round(cacheAge / 1000 / 60)} minutes)`);
+      return this.balanceCache.data;
+    }
+
+    console.log('No cached balance found');
     return null;
   }
 
@@ -176,25 +216,20 @@ export class IBService {
   private static getCachedPortfolio(): PortfolioPosition[] | null {
     console.log('getCachedPortfolio called');
 
-    // Check memory cache first
-    if (this.isCacheValid(this.portfolioCache, this.PORTFOLIO_CACHE_DURATION)) {
-      console.log('Returning cached portfolio from memory');
-      return this.portfolioCache!.data;
-    }
-
-    // If memory cache is empty or expired, try loading from file
+    // Load from file if not in memory
     if (!this.portfolioCache) {
       console.log('Memory cache empty, trying to load from file:', this.PORTFOLIO_CACHE_FILE);
       this.portfolioCache = this.loadCacheFromFile<PortfolioPosition[]>(this.PORTFOLIO_CACHE_FILE);
-      if (this.isCacheValid(this.portfolioCache, this.PORTFOLIO_CACHE_DURATION)) {
-        console.log('Returning cached portfolio from file');
-        return this.portfolioCache!.data;
-      } else {
-        console.log('File cache invalid or not found');
-      }
     }
 
-    console.log('No valid portfolio cache found');
+    // Always return cached data if available (never remove cache)
+    if (this.portfolioCache) {
+      const cacheAge = Date.now() - this.portfolioCache.timestamp;
+      console.log(`Returning cached portfolio (age: ${Math.round(cacheAge / 1000 / 60)} minutes)`);
+      return this.portfolioCache.data;
+    }
+
+    console.log('No cached portfolio found');
     return null;
   }
 
@@ -440,16 +475,14 @@ export class IBService {
   static async getAccountBalance(userSettings: { host: string; port: number; client_id: number }): Promise<AccountSummary> {
     console.log('🏦 getAccountBalance called');
 
-    // Return cached data if available
+    // Return cached data if available (always return cache, never remove it)
     const cached = this.getCachedBalance();
     if (cached) {
       console.log('✅ Using cached balance data');
-      // Start background refresh if cache is getting old (> 3 minutes)
-      const cacheAge = Date.now() - this.balanceCache!.timestamp;
-      if (cacheAge > 3 * 60 * 1000 && !this.balanceCache!.isRefreshing) {
-        console.log('Starting background refresh for account balance');
-        this.balanceCache!.isRefreshing = true;
-        this.refreshAccountBalanceBackground(userSettings).catch(console.error);
+      // Start background refresh if cache is older than 30 minutes
+      if (this.shouldAutoRefresh(this.balanceCache)) {
+        console.log('Starting background refresh for account balance (30+ minutes old)');
+        this.refreshBalanceBackground(userSettings).catch(console.error);
       }
       return cached;
     }
@@ -461,18 +494,7 @@ export class IBService {
     return freshData;
   }
 
-  // Background refresh method
-  private static async refreshAccountBalanceBackground(userSettings: { host: string; port: number; client_id: number }): Promise<void> {
-    try {
-      const freshData = await this.fetchAccountBalanceFresh(userSettings);
-      this.setCachedBalance(freshData);
-    } catch (error) {
-      console.error('Background balance refresh failed:', error);
-      if (this.balanceCache) {
-        this.balanceCache.isRefreshing = false;
-      }
-    }
-  }
+
 
   // Force refresh method (for manual refresh button)
   static async forceRefreshAccountBalance(userSettings?: { host: string; port: number; client_id: number }): Promise<AccountSummary> {
@@ -832,15 +854,13 @@ export class IBService {
   static async getPortfolio(userSettings: { host: string; port: number; client_id: number }): Promise<PortfolioPosition[]> {
     console.log('📈 getPortfolio called');
 
-    // Return cached data if available
+    // Return cached data if available (always return cache, never remove it)
     const cached = this.getCachedPortfolio();
     if (cached) {
       console.log('✅ Using cached portfolio data');
-      // Start background refresh if cache is getting old (> 10 minutes)
-      const cacheAge = Date.now() - this.portfolioCache!.timestamp;
-      if (cacheAge > 10 * 60 * 1000 && !this.portfolioCache!.isRefreshing) {
-        console.log('Starting background refresh for portfolio');
-        this.portfolioCache!.isRefreshing = true;
+      // Start background refresh if cache is older than 30 minutes
+      if (this.shouldAutoRefresh(this.portfolioCache)) {
+        console.log('Starting background refresh for portfolio (30+ minutes old)');
         this.refreshPortfolioBackground(userSettings).catch(console.error);
       }
       return cached;
@@ -853,18 +873,7 @@ export class IBService {
     return freshData;
   }
 
-  // Background refresh method
-  private static async refreshPortfolioBackground(userSettings: { host: string; port: number; client_id: number }): Promise<void> {
-    try {
-      const freshData = await this.fetchPortfolioFresh(userSettings);
-      this.setCachedPortfolio(freshData);
-    } catch (error) {
-      console.error('Background portfolio refresh failed:', error);
-      if (this.portfolioCache) {
-        this.portfolioCache.isRefreshing = false;
-      }
-    }
-  }
+
 
   // Force refresh method (for manual refresh button)
   static async forceRefreshPortfolio(userSettings?: { host: string; port: number; client_id: number }): Promise<PortfolioPosition[]> {
@@ -1133,5 +1142,28 @@ export class IBService {
   // Get portfolio timestamp
   static getPortfolioTimestamp(): number | null {
     return this.portfolioCache ? this.portfolioCache.timestamp : null;
+  }
+
+  // Get cache statistics for reporting
+  static getCacheStats(): {
+    balance: { hasCache: boolean; timestamp: number | null; ageMinutes: number | null; isRefreshing: boolean };
+    portfolio: { hasCache: boolean; timestamp: number | null; ageMinutes: number | null; isRefreshing: boolean };
+  } {
+    const now = Date.now();
+
+    return {
+      balance: {
+        hasCache: !!this.balanceCache,
+        timestamp: this.balanceCache?.timestamp || null,
+        ageMinutes: this.balanceCache ? Math.round((now - this.balanceCache.timestamp) / 1000 / 60) : null,
+        isRefreshing: this.balanceCache?.isRefreshing || false
+      },
+      portfolio: {
+        hasCache: !!this.portfolioCache,
+        timestamp: this.portfolioCache?.timestamp || null,
+        ageMinutes: this.portfolioCache ? Math.round((now - this.portfolioCache.timestamp) / 1000 / 60) : null,
+        isRefreshing: this.portfolioCache?.isRefreshing || false
+      }
+    };
   }
 }
