@@ -25,6 +25,7 @@ import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
 import CurrencyView from "./CurrencyView";
 import IntegrationView from "./IntegrationView";
+import ManualInvestmentAccounts from "./ManualInvestmentAccounts";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
@@ -1028,13 +1029,15 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               {currentView === "overview" && "Dashboard Overview"}
               {currentView === "accounts" && "Investment Accounts"}
               {currentView === "currency" && "Currency Exchange"}
-              {currentView === "integration" && "Portfolio"}
+              {currentView === "integration" && "IB Portfolio"}
+              {currentView === "manual-investments" && "Other Portfolios"}
             </h1>
             <p className="text-muted-foreground">
               {currentView === "overview" && "Monitor your investment performance"}
               {currentView === "accounts" && "Manage your broker accounts"}
               {currentView === "currency" && "Track currency exchange rates"}
               {currentView === "integration" && "Interactive Brokers portfolio and positions"}
+              {currentView === "manual-investments" && "Add and manage other investment accounts manually"}
             </p>
               </div>
               {currentView === "overview" && (
@@ -1115,6 +1118,9 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                 await handlePostAccountUpdate();
               }}
             />
+          )}
+          {currentView === "manual-investments" && (
+            <ManualInvestmentAccounts accounts={accounts} />
           )}
           {currentView === "currency" && (
             <CurrencyView 

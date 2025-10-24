@@ -167,6 +167,46 @@ cd server && npx tsx src/database/seed.ts
 
 The application features comprehensive Interactive Brokers integration with user-configurable connections and real-time portfolio data including day change tracking for stocks, crypto, and bonds.
 
+## 📊 Manual Investment Accounts
+
+In addition to Interactive Brokers integration, the application supports manual investment tracking for users who want to track positions from multiple brokers or add positions not available through IB.
+
+### 🆕 Manual Position Management
+Users can manually add and manage investment positions with real-time market data from Yahoo Finance:
+
+#### Features:
+- **Multi-Account Support**: Link manual positions to existing investment accounts
+- **Real-time Market Data**: Automatic price updates from Yahoo Finance API
+- **Comprehensive Position Tracking**: 
+  - Quantity and average cost tracking
+  - Market value and unrealized P&L calculations
+  - Day change and percentage change tracking
+  - Industry and category classification
+- **Symbol Search**: Built-in symbol search using Yahoo Finance
+- **Multiple Security Types**: Support for stocks, ETFs, mutual funds, bonds, crypto, and other securities
+- **Multi-Currency Support**: Track positions in different currencies
+- **Portfolio Summary**: Aggregated portfolio metrics across all manual positions
+
+#### How to Use:
+1. **Navigate to Portfolio Page**: Access manual investment accounts section
+2. **Add Position**: Click "Add Position" button
+3. **Fill Position Details**:
+   - Select target account from dropdown
+   - Enter symbol (with auto-search suggestions)
+   - Choose security type (Stock, ETF, Bond, etc.)
+   - Enter quantity and average cost
+   - Add optional details (industry, category, notes)
+4. **Automatic Market Data**: Yahoo Finance data is fetched automatically
+5. **Manage Positions**: Edit or delete positions as needed
+6. **Refresh Data**: Use "Refresh Market Data" to update all positions
+
+#### Technical Implementation:
+- **Database Integration**: Uses existing account structure with `manual_positions` table
+- **Yahoo Finance API**: Real-time market data integration
+- **Field Mapping**: Robust camelCase to snake_case database column mapping
+- **Error Handling**: Comprehensive validation and error reporting
+- **Performance Optimized**: Batch market data updates for efficiency
+
 ### 🆕 User-Configurable IB Settings
 Each user can configure their own IB connection settings through the Portfolio page:
 
@@ -251,6 +291,16 @@ The IB integration now provides comprehensive day change data for all security t
 - `POST /api/integration/ib/portfolio/refresh` - Force refresh portfolio data
 - `POST /api/integration/ib/account-data` - Get combined account data
 - `POST /api/integration/ib/refresh-all` - Force refresh all IB data
+
+### Manual Investment Accounts
+- `GET /api/manual-investments/positions` - Get all manual positions
+- `POST /api/manual-investments/positions` - Add a new manual position
+- `PUT /api/manual-investments/positions/:id` - Update a manual position
+- `DELETE /api/manual-investments/positions/:id` - Delete a manual position
+- `POST /api/manual-investments/positions/refresh-market-data` - Refresh market data for all positions
+- `GET /api/manual-investments/summary` - Get portfolio summary for manual accounts
+- `GET /api/manual-investments/search-symbols` - Search for symbols using Yahoo Finance
+- `GET /api/manual-investments/market-data/:symbol` - Get market data for a specific symbol
 
 ## 🗄️ Database Schema
 
@@ -513,6 +563,8 @@ For issues and questions:
 - ✅ **Enhanced Portfolio Data**: Day change tracking for stocks, crypto, and bonds using real IB data
 - ✅ **IB Configuration Dialog**: User-friendly setup interface with validation and account selection
 - ✅ **Multi-Security Support**: Optimized data retrieval for stocks (historical), crypto (24/7), and bonds (market ticks)
+- ✅ **Manual Investment Accounts**: Add and manage investment positions manually with Yahoo Finance integration
+- ✅ **Manual Position Updates**: Fixed database column mapping issue for seamless position editing
 
 ---
 
