@@ -103,7 +103,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
         category: '',
         quantity: '',
         averageCost: '',
-        currentPrice: '',
+        marketPrice: '',
         exchange: '',
         primaryExchange: ''
     });
@@ -234,7 +234,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                     ...positionForm,
                     quantity: parseFloat(positionForm.quantity),
                     averageCost: parseFloat(positionForm.averageCost),
-                    marketPrice: positionForm.currentPrice ? parseFloat(positionForm.currentPrice) : undefined
+                    marketPrice: positionForm.marketPrice ? parseFloat(positionForm.marketPrice) : undefined
                 })
             });
 
@@ -346,6 +346,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                     secType: marketData.secType || prev.secType,
                     currency: marketData.currency || prev.currency,
                     averageCost: marketData.marketPrice ? marketData.marketPrice.toString() : prev.averageCost,
+                    marketPrice: marketData.marketPrice ? marketData.marketPrice.toString() : prev.marketPrice,
                     country: marketData.country || prev.country,
                     industry: marketData.industry || prev.industry,
                     category: marketData.sector || prev.category,
@@ -451,7 +452,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
             category: '',
             quantity: '',
             averageCost: '',
-            currentPrice: '',
+            marketPrice: '',
             exchange: '',
             primaryExchange: ''
         });
@@ -471,7 +472,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
             category: position.category || '',
             quantity: position.quantity.toString(),
             averageCost: position.averageCost.toString(),
-            currentPrice: (position.marketPrice || 0).toString(),
+            marketPrice: (position.marketPrice || 0).toString(),
             exchange: position.exchange || '',
             primaryExchange: position.primaryExchange || ''
         });
@@ -912,13 +913,13 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="currentPrice">Current Price</Label>
+                                <Label htmlFor="marketPrice">Current Price</Label>
                                 <Input
-                                    id="currentPrice"
+                                    id="marketPrice"
                                     type="number"
                                     step="0.01"
-                                    value={positionForm.currentPrice}
-                                    onChange={(e) => setPositionForm({ ...positionForm, currentPrice: e.target.value })}
+                                    value={positionForm.marketPrice}
+                                    onChange={(e) => setPositionForm({ ...positionForm, marketPrice: e.target.value })}
                                     placeholder="160.00"
                                 />
                             </div>
