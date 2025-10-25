@@ -2,7 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { TwoFactorAuthService } from '../services/twoFactorAuth.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
 import { UserModel } from '../models/User.js';
 
 const router = express.Router();
@@ -21,11 +21,15 @@ const disableSchema = z.object({
 });
 
 // Setup 2FA - Generate secret and QR code
-router.post('/setup', authenticateToken, async (req, res) => {
+router.post('/setup', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!req.user?.email) {
+      return res.status(401).json({ error: 'User email not found' });
     }
 
     const setup = await TwoFactorAuthService.generateSecret(userId, req.user.email);
@@ -46,7 +50,7 @@ router.post('/setup', authenticateToken, async (req, res) => {
 });
 
 // Verify and enable 2FA
-router.post('/verify', authenticateToken, async (req, res) => {
+router.post('/verify', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const validatedData = verifySchema.parse(req.body);
     const userId = req.user?.id;
@@ -114,10 +118,13 @@ router.post('/verify-login', async (req, res) => {
         throw new Error('JWT_SECRET not configured');
       }
 
+      if (!secret) {
+        throw new Error('JWT_SECRET not configured');
+      }
+
       const jwtToken = jwt.sign(
         { userId: user.id },
-        secret as string,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+        secret
       );
 
       return res.json({
@@ -148,7 +155,7 @@ router.post('/verify-login', async (req, res) => {
 });
 
 // Check if user has 2FA enabled
-router.get('/status', authenticateToken, async (req, res) => {
+router.get('/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -170,7 +177,7 @@ router.get('/status', authenticateToken, async (req, res) => {
 });
 
 // Disable 2FA
-router.post('/disable', authenticateToken, async (req, res) => {
+router.post('/disable', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) {

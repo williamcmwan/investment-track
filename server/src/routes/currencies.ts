@@ -59,6 +59,9 @@ router.get('/public-rate/:pair', async (req, res) => {
     }
     
     const [fromCurrency, toCurrency] = pair.split('/');
+    if (!fromCurrency || !toCurrency) {
+      return res.status(400).json({ error: 'Invalid currency pair format' });
+    }
     const rate = await ExchangeRateService.getExchangeRate(fromCurrency, toCurrency);
     
     return res.json({ 
@@ -157,6 +160,9 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     
     // Get current exchange rate for the pair
     const [fromCurrency, toCurrency] = validatedData.pair.split('/');
+    if (!fromCurrency || !toCurrency) {
+      return res.status(400).json({ error: 'Invalid currency pair format' });
+    }
     const currentRate = await ExchangeRateService.getExchangeRate(fromCurrency, toCurrency);
     
     const pairData = {

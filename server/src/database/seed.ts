@@ -20,6 +20,10 @@ async function seed() {
     for (const pair of currencyPairs) {
       try {
         const [fromCurrency, toCurrency] = pair.split('/');
+        if (!fromCurrency || !toCurrency) {
+          console.warn(`Invalid currency pair format: ${pair}`);
+          continue;
+        }
         const rate = await ExchangeRateService.getExchangeRate(fromCurrency, toCurrency);
         
         await dbRun(

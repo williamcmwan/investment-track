@@ -67,8 +67,10 @@ export class PerformanceHistoryService {
           currencyPL += (profitLossInOriginalCurrency / pair.currentRate);
         } else {
           // For cross-currency pairs, convert to base currency
-          const rateToBase = await ExchangeRateService.getExchangeRate(toCurrency, baseCurrency);
-          currencyPL += profitLossInOriginalCurrency * rateToBase;
+          if (toCurrency && baseCurrency) {
+            const rateToBase = await ExchangeRateService.getExchangeRate(toCurrency, baseCurrency);
+            currencyPL += profitLossInOriginalCurrency * rateToBase;
+          }
         }
       }
       
@@ -84,10 +86,18 @@ export class PerformanceHistoryService {
       const investmentPLCalculated = totalPL - currencyPL; // Investment P&L = Total - Currency (HK$1,409,843.85)
       
       // Calculate daily P&L (difference from previous day)
+      if (!targetDate) {
+        throw new Error('Target date is required');
+      }
+      
       const previousDate = new Date(targetDate);
       previousDate.setDate(previousDate.getDate() - 1);
       const previousDateStr = previousDate.toISOString().split('T')[0];
       
+      if (!previousDateStr) {
+        throw new Error('Previous date string is undefined');
+      }
+
       const previousSnapshot = await PerformanceModel.findByDateRange(
         userId, 
         previousDateStr,
@@ -95,7 +105,7 @@ export class PerformanceHistoryService {
       );
       
       // Daily P&L should reflect change in Investment P&L (exclude currency effects)
-      const previousInvestmentPL = previousSnapshot.length > 0 ? previousSnapshot[0].investmentPL : 0;
+      const previousInvestmentPL = (previousSnapshot && previousSnapshot.length > 0 && previousSnapshot[0]) ? previousSnapshot[0].investmentPL : 0;
       const dailyPL = investmentPLCalculated - previousInvestmentPL;
       
       // Store the snapshot

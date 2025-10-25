@@ -13,10 +13,10 @@ router.get('/ib/settings', authenticateToken, async (req, res) => {
     const userSettings = await IBConnectionService.getUserIBSettings(userId);
     
     if (userSettings) {
-      res.json(userSettings);
+      return res.json(userSettings);
     } else {
       // Return default settings for first-time setup
-      res.json({
+      return res.json({
         host: 'localhost',
         port: 7497,
         client_id: 1,
@@ -25,7 +25,7 @@ router.get('/ib/settings', authenticateToken, async (req, res) => {
     }
   } catch (error) {
     console.error('Error getting IB settings:', error);
-    res.status(500).json({ error: 'Failed to get IB settings' });
+    return res.status(500).json({ error: 'Failed to get IB settings' });
   }
 });
 
@@ -49,10 +49,10 @@ router.post('/ib/settings', authenticateToken, async (req, res) => {
     };
     await IBConnectionService.saveUserIBSettings(userId, settings);
     
-    res.json({ success: true, message: 'IB settings saved successfully' });
+    return res.json({ success: true, message: 'IB settings saved successfully' });
   } catch (error) {
     console.error('Error saving IB settings:', error);
-    res.status(500).json({ error: 'Failed to save IB settings' });
+    return res.status(500).json({ error: 'Failed to save IB settings' });
   }
 });
 
@@ -70,10 +70,10 @@ router.post('/ib/balance', authenticateToken, async (req, res) => {
     
     const result = await IBService.getAccountBalance(userSettings);
     const timestamp = IBService.getBalanceTimestamp();
-    res.json({ ...result, timestamp });
+    return res.json({ ...result, timestamp });
   } catch (error) {
     console.error('Error getting IB balance:', error);
-    res.status(500).json({ error: 'Failed to get IB account balance' });
+    return res.status(500).json({ error: 'Failed to get IB account balance' });
   }
 });
 
@@ -93,11 +93,11 @@ router.post('/ib/balance/refresh', authenticateToken, async (req, res) => {
     const result = await IBService.forceRefreshAccountBalance(userSettings);
     const timestamp = IBService.getBalanceTimestamp();
     console.log('✅ Balance refresh successful, returning data');
-    res.json({ ...result, timestamp });
+    return res.json({ ...result, timestamp });
   } catch (error) {
     console.error('❌ Error refreshing IB balance:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to refresh IB account balance';
-    res.status(500).json({ error: errorMessage });
+    return res.status(500).json({ error: errorMessage });
   }
 });
 
@@ -114,10 +114,10 @@ router.post('/ib/portfolio', authenticateToken, async (req, res) => {
     }
     
     const result = await IBService.getPortfolio(userSettings);
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     console.error('Error getting IB portfolio:', error);
-    res.status(500).json({ error: 'Failed to get IB portfolio' });
+    return res.status(500).json({ error: 'Failed to get IB portfolio' });
   }
 });
 
@@ -136,11 +136,11 @@ router.post('/ib/portfolio/refresh', authenticateToken, async (req, res) => {
     
     const result = await IBService.forceRefreshPortfolio(userSettings);
     console.log('✅ Portfolio refresh successful, returning data');
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     console.error('❌ Error refreshing IB portfolio:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to refresh IB portfolio';
-    res.status(500).json({ error: errorMessage });
+    return res.status(500).json({ error: errorMessage });
   }
 });
 
@@ -157,10 +157,10 @@ router.post('/ib/account-data', authenticateToken, async (req, res) => {
     }
     
     const result = await IBService.getAccountData(userSettings);
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     console.error('Error getting IB account data:', error);
-    res.status(500).json({ error: 'Failed to get IB account data' });
+    return res.status(500).json({ error: 'Failed to get IB account data' });
   }
 });
 
@@ -177,10 +177,10 @@ router.post('/ib/refresh-all', authenticateToken, async (req, res) => {
     }
     
     const result = await IBService.forceRefreshAll(userSettings);
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     console.error('Error refreshing all IB data:', error);
-    res.status(500).json({ error: 'Failed to refresh all IB data' });
+    return res.status(500).json({ error: 'Failed to refresh all IB data' });
   }
 });
 
@@ -188,10 +188,10 @@ router.post('/ib/refresh-all', authenticateToken, async (req, res) => {
 router.get('/ib/cache-status', authenticateToken, async (req, res) => {
   try {
     const status = IBService.getCacheStatus();
-    res.json(status);
+    return res.json(status);
   } catch (error) {
     console.error('Error getting cache status:', error);
-    res.status(500).json({ error: 'Failed to get cache status' });
+    return res.status(500).json({ error: 'Failed to get cache status' });
   }
 });
 
@@ -209,14 +209,14 @@ router.get('/ib/test-cache', authenticateToken, async (req, res) => {
 
     const balance = await IBService.getAccountBalance(userSettings);
     const portfolio = await IBService.getPortfolio(userSettings);
-    res.json({
+    return res.json({
       balance,
       portfolio,
       cacheStatus: IBService.getCacheStatus()
     });
   } catch (error) {
     console.error('Error testing cache:', error);
-    res.status(500).json({ error: 'Failed to test cache' });
+    return res.status(500).json({ error: 'Failed to test cache' });
   }
 });
 
@@ -224,10 +224,10 @@ router.get('/ib/test-cache', authenticateToken, async (req, res) => {
 router.post('/ib/cleanup', authenticateToken, async (req, res) => {
   try {
     await IBService.forceCleanup();
-    res.json({ success: true, message: 'IB subscriptions cleaned up' });
+    return res.json({ success: true, message: 'IB subscriptions cleaned up' });
   } catch (error) {
     console.error('Error cleaning up IB subscriptions:', error);
-    res.status(500).json({ error: 'Failed to cleanup IB subscriptions' });
+    return res.status(500).json({ error: 'Failed to cleanup IB subscriptions' });
   }
 });
 
@@ -235,10 +235,10 @@ router.post('/ib/cleanup', authenticateToken, async (req, res) => {
 router.post('/ib/disconnect', authenticateToken, async (req, res) => {
   try {
     await IBService.disconnect();
-    res.json({ success: true, message: 'Disconnected from IB Gateway' });
+    return res.json({ success: true, message: 'Disconnected from IB Gateway' });
   } catch (error) {
     console.error('Error disconnecting from IB:', error);
-    res.status(500).json({ error: 'Failed to disconnect from IB Gateway' });
+    return res.status(500).json({ error: 'Failed to disconnect from IB Gateway' });
   }
 });
 

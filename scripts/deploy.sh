@@ -125,14 +125,7 @@ echo "🗄️ Setting up database..."
 echo "🗄️ Running database migrations..."
 cd server
 npm run db:migrate
-echo "🗄️ Applying incremental migrations..."
-# Run additional migration scripts if available
-if npx --yes tsx --version > /dev/null 2>&1; then
-  npx tsx src/database/run-migration.ts || echo "ℹ️  run-migration.ts skipped or completed previously"
-  npx tsx src/database/run-specific-migration.ts || echo "ℹ️  run-specific-migration.ts skipped or completed previously"
-else
-  echo "⚠️  tsx not available; skipping incremental migration scripts"
-fi
+echo "✅ Database migrations completed"
 cd ..
 
 # Seed database

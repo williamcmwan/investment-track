@@ -263,6 +263,10 @@ export class EnhancedExchangeRateService {
       // Update each pair individually using Yahoo Finance with fallbacks
       for (const pair of pairs) {
         const [fromCurrency, toCurrency] = pair.pair.split('/');
+        if (!fromCurrency || !toCurrency) {
+          console.warn(`Invalid currency pair format: ${pair.pair}`);
+          continue;
+        }
         let newRate: number;
         
         if (fromCurrency === toCurrency) {

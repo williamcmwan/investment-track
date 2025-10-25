@@ -9,7 +9,7 @@ import { IBConnectionService } from './ibConnectionService.js';
 
 export class SchedulerService {
   private static isRunning = false;
-  private static dataRefreshTask: cron.ScheduledTask | null = null;
+  private static dataRefreshTask: ReturnType<typeof cron.schedule> | null = null;
 
   /**
    * Initialize the scheduler service
