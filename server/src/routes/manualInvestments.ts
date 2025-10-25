@@ -101,22 +101,31 @@ router.put('/positions/:id', async (req, res) => {
     // Convert numeric fields
     if (updates.quantity) updates.quantity = parseFloat(updates.quantity);
     if (updates.averageCost) updates.averageCost = parseFloat(updates.averageCost);
+    if (updates.marketPrice) updates.marketPrice = parseFloat(updates.marketPrice);
     if (updates.symbol) updates.symbol = updates.symbol.toUpperCase();
     
     const success = ManualInvestmentService.updateManualPosition(positionId, updates);
     
     if (success) {
-      // Update market data if symbol changed
-      if (updates.symbol) {
+      // If marketPrice was manually updated, recalculate market value and P&L
+      if (updates.marketPrice) {
+        // The updateManualPosition method should handle the market value and P&L calculation
+        // We'll add this logic to the service method
+        console.log(`📊 Manual price update for position ${positionId}: ${updates.marketPrice}`);
+      }
+      
+      // Update market data if symbol changed (but not if price was manually set)
+      if (updates.symbol && !updates.marketPrice) {
         await ManualInvestmentService.updatePositionMarketData(positionId);
       }
-      res.json({ success: true });
+      
+      return res.json({ success: true });
     } else {
-      res.status(404).json({ error: 'Position not found' });
+      return res.status(404).json({ error: 'Position not found' });
     }
   } catch (error) {
     console.error('Error updating manual position:', error);
-    res.status(500).json({ error: 'Failed to update manual position' });
+    return res.status(500).json({ error: 'Failed to update manual position' });
   }
 });
 
@@ -199,6 +208,7 @@ router.get('/summary', async (req, res) => {
     res.status(500).json({ error: 'Failed to get portfolio summary' });
   }
 });
+
 
 /**
  * GET /api/manual-investments/search-symbols

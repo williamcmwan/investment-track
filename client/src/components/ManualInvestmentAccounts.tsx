@@ -103,6 +103,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
         category: '',
         quantity: '',
         averageCost: '',
+        currentPrice: '',
         exchange: '',
         primaryExchange: ''
     });
@@ -113,6 +114,8 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
     // Sorting state
     const [sortField, setSortField] = useState<SortField>('symbol');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+
 
 
 
@@ -230,7 +233,8 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                 body: JSON.stringify({
                     ...positionForm,
                     quantity: parseFloat(positionForm.quantity),
-                    averageCost: parseFloat(positionForm.averageCost)
+                    averageCost: parseFloat(positionForm.averageCost),
+                    marketPrice: positionForm.currentPrice ? parseFloat(positionForm.currentPrice) : undefined
                 })
             });
 
@@ -447,6 +451,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
             category: '',
             quantity: '',
             averageCost: '',
+            currentPrice: '',
             exchange: '',
             primaryExchange: ''
         });
@@ -466,6 +471,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
             category: position.category || '',
             quantity: position.quantity.toString(),
             averageCost: position.averageCost.toString(),
+            currentPrice: (position.marketPrice || 0).toString(),
             exchange: position.exchange || '',
             primaryExchange: position.primaryExchange || ''
         });
@@ -903,6 +909,20 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                     placeholder="150.00"
                                 />
                             </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="currentPrice">Current Price</Label>
+                                <Input
+                                    id="currentPrice"
+                                    type="number"
+                                    step="0.01"
+                                    value={positionForm.currentPrice}
+                                    onChange={(e) => setPositionForm({ ...positionForm, currentPrice: e.target.value })}
+                                    placeholder="160.00"
+                                />
+                            </div>
+                            <div></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">

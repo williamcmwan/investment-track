@@ -296,6 +296,22 @@ export class ManualInvestmentService {
   ): boolean {
     const db = this.getDatabase();
     
+    // If marketPrice is being updated, we need to recalculate market value and unrealized P&L
+    if (updates.marketPrice !== undefined) {
+      const getStmt = db.prepare('SELECT quantity, average_cost FROM portfolios WHERE id = ?');
+      const position = getStmt.get(positionId) as any;
+      
+      if (position) {
+        const marketValue = updates.marketPrice * position.quantity;
+        const unrealizedPnl = (updates.marketPrice - position.average_cost) * position.quantity;
+        
+        // Add calculated values to updates
+        updates.marketValue = marketValue;
+        updates.unrealizedPnl = unrealizedPnl;
+        updates.lastPriceUpdate = new Date().toISOString();
+      }
+    }
+    
     // Map camelCase property names to snake_case database column names
     const fieldMapping: Record<string, string> = {
       mainAccountId: 'main_account_id',
