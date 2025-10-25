@@ -16,10 +16,12 @@ import {
     Trash2,
     RefreshCw,
     TrendingUp,
+    TrendingDown,
     Search,
     AlertCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiClient } from "../services/api";
 
 
 
@@ -79,6 +81,12 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
     const [positions, setPositions] = useState<ManualPosition[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [refreshStatus, setRefreshStatus] = useState<{
+        lastRefreshTime: string | null;
+        timeSinceLastRefresh: number | null;
+        nextAutoRefresh: string | null;
+        autoRefreshEnabled: boolean;
+    } | null>(null);
 
     // Dialog states
     const [positionDialogOpen, setPositionDialogOpen] = useState(false);
@@ -95,8 +103,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
         quantity: '',
         averageCost: '',
         exchange: '',
-        primaryExchange: '',
-        notes: ''
+        primaryExchange: ''
     });
 
     const [symbolSearchResults, setSymbolSearchResults] = useState<SymbolSearchResult[]>([]);
@@ -115,15 +122,33 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
 
     useEffect(() => {
         loadPositions();
+        loadRefreshStatus();
+        
+        // Set up interval to update refresh status every minute
+        const statusInterval = setInterval(loadRefreshStatus, 60000);
+        
+        return () => clearInterval(statusInterval);
     }, []);
+
+    const loadRefreshStatus = async () => {
+        try {
+            const response = await apiClient.getManualInvestmentRefreshStatus();
+            if (response.data) {
+                setRefreshStatus(response.data);
+            }
+        } catch (error) {
+            console.error('Error loading refresh status:', error);
+        }
+    };
 
     const loadPositions = async () => {
         try {
             setLoading(true);
-            const response = await fetch('/api/manual-investments/positions');
-            if (response.ok) {
-                const data = await response.json();
-                setPositions(data);
+            const response = await apiClient.getManualPositions();
+            if (response.data) {
+                setPositions(response.data);
+            } else if (response.error) {
+                setError(response.error);
             }
         } catch (error) {
             console.error('Error loading positions:', error);
@@ -166,6 +191,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                     description: "Position created successfully",
                 });
                 await loadPositions();
+                // Don't auto-refresh market data when creating position
                 setPositionDialogOpen(false);
                 resetPositionForm();
             } else {
@@ -207,6 +233,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                     description: "Position updated successfully",
                 });
                 await loadPositions();
+                // Don't auto-refresh market data when updating position
                 setPositionDialogOpen(false);
                 setEditingPosition(null);
                 resetPositionForm();
@@ -252,16 +279,17 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
     const handleRefreshMarketData = async () => {
         try {
             setLoading(true);
-            const response = await fetch('/api/manual-investments/positions/refresh-market-data', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: 'default' })
-            });
+            const response = await apiClient.refreshManualMarketData('default');
 
-            if (response.ok) {
+            if (response.data) {
+                toast({
+                    title: "Success",
+                    description: `Updated ${response.data.updated} positions, ${response.data.failed} failed`,
+                });
                 await loadPositions();
+                await loadRefreshStatus(); // Update refresh status
             } else {
-                setError('Failed to refresh market data');
+                setError(response.error || 'Failed to refresh market data');
             }
         } catch (error) {
             console.error('Error refreshing market data:', error);
@@ -291,6 +319,43 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
         }
     };
 
+    const fetchYahooFinanceData = async (symbol: string) => {
+        if (!symbol || symbol.length < 1) return;
+
+        try {
+            console.log(`Fetching Yahoo Finance data for ${symbol}...`);
+            const response = await fetch(`/api/manual-investments/market-data/${encodeURIComponent(symbol)}`);
+            if (response.ok) {
+                const marketData = await response.json();
+                console.log('Yahoo Finance data:', marketData);
+                
+                // Update form with Yahoo Finance data
+                setPositionForm(prev => ({
+                    ...prev,
+                    secType: marketData.secType || prev.secType,
+                    currency: marketData.currency || prev.currency,
+                    averageCost: marketData.marketPrice ? marketData.marketPrice.toString() : prev.averageCost,
+                    country: marketData.country || prev.country,
+                    industry: marketData.industry || prev.industry,
+                    category: marketData.sector || prev.category,
+                    exchange: marketData.exchange || prev.exchange
+                }));
+                
+                toast({
+                    title: "Success",
+                    description: `Updated fields with data for ${symbol}`,
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching Yahoo Finance data:', error);
+            toast({
+                title: "Warning",
+                description: `Could not fetch data for ${symbol}`,
+                variant: "destructive",
+            });
+        }
+    };
+
     const resetPositionForm = () => {
         setPositionForm({
             accountId: '',
@@ -303,8 +368,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
             quantity: '',
             averageCost: '',
             exchange: '',
-            primaryExchange: '',
-            notes: ''
+            primaryExchange: ''
         });
     };
 
@@ -323,8 +387,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
             quantity: position.quantity.toString(),
             averageCost: position.averageCost.toString(),
             exchange: position.exchange || '',
-            primaryExchange: position.primaryExchange || '',
-            notes: position.notes || ''
+            primaryExchange: position.primaryExchange || ''
         });
         setPositionDialogOpen(true);
     };
@@ -352,11 +415,18 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
             )}
 
             {/* Action buttons at the top */}
-            <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={handleRefreshMarketData} disabled={loading}>
-                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                    Refresh Market Data
-                </Button>
+            <div className="flex gap-2 justify-start">
+                <div className="flex flex-col items-start gap-1">
+                    <Button variant="outline" onClick={handleRefreshMarketData} disabled={loading}>
+                        <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                        Refresh Market Data
+                    </Button>
+                    {refreshStatus && refreshStatus.lastRefreshTime && (
+                        <p className="text-xs text-muted-foreground">
+                            Last updated: {new Date(refreshStatus.lastRefreshTime).toLocaleString()}
+                        </p>
+                    )}
+                </div>
                 <Button onClick={() => setPositionDialogOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add Position
@@ -364,57 +434,77 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
             </div>
 
             <Card>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Symbol</TableHead>
-                                    <TableHead>Account</TableHead>
-                                    <TableHead>Type</TableHead>
-                                    <TableHead>Quantity</TableHead>
-                                    <TableHead>Avg Cost</TableHead>
-                                    <TableHead>Market Price</TableHead>
-                                    <TableHead>Market Value</TableHead>
-                                    <TableHead>Day Change</TableHead>
-                                    <TableHead>Unrealized P&L</TableHead>
-                                    <TableHead>Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {positions.map((position) => (
-                                    <TableRow key={position.id}>
+                <div className="w-full overflow-x-auto">
+                    <Table className="w-full text-sm sm:text-base">
+                        <TableHeader>
+                            <TableRow className="text-xs sm:text-sm">
+                                <TableHead>Actions</TableHead>
+                                <TableHead>Symbol</TableHead>
+                                <TableHead>
+                                    <div className="text-right w-full">Chg</div>
+                                </TableHead>
+                                <TableHead>
+                                    <div className="text-right w-full">Chg %</div>
+                                </TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Account</TableHead>
+                                <TableHead>Country</TableHead>
+                                <TableHead>Industry</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Curr.</TableHead>
+                                <TableHead>
+                                    <div className="text-right w-full">Qty</div>
+                                </TableHead>
+                                <TableHead>
+                                    <div className="text-right w-full">Avg Cost</div>
+                                </TableHead>
+                                <TableHead>
+                                    <div className="text-right w-full">Current Price</div>
+                                </TableHead>
+                                <TableHead>
+                                    <div className="text-right w-full">P&L %</div>
+                                </TableHead>
+                                <TableHead>
+                                    <div className="text-right w-full">Unrealized P&L</div>
+                                </TableHead>
+                                <TableHead>
+                                    <div className="text-right w-full">P&L (HKD)</div>
+                                </TableHead>
+                                <TableHead>
+                                    <div className="text-right w-full">Market Value (HKD)</div>
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {positions.map((position) => {
+                                const isPositive = (position.unrealizedPnl || 0) >= 0;
+                                const isDayChangePositive = (position.dayChange || 0) >= 0;
+                                const pnlPercentage = position.marketValue && position.marketValue > 0 
+                                    ? ((position.unrealizedPnl || 0) / (position.marketValue - (position.unrealizedPnl || 0))) * 100 
+                                    : 0;
+                                
+                                // Convert to HKD (assuming 1:1 for now, should use exchange rates in real implementation)
+                                const convertToHKD = (amount: number | undefined, currency: string) => {
+                                    if (!amount) return 0;
+                                    // Simple conversion - in real app, use actual exchange rates
+                                    const rates: Record<string, number> = {
+                                        'USD': 7.8,
+                                        'EUR': 8.5,
+                                        'GBP': 10.0,
+                                        'HKD': 1,
+                                        'CNY': 1.1,
+                                        'JPY': 0.05
+                                    };
+                                    return amount * (rates[currency] || 1);
+                                };
+                                
+                                const pnlInHKD = convertToHKD(position.unrealizedPnl, position.currency);
+                                const marketValueInHKD = convertToHKD(position.marketValue, position.currency);
+                                
+                                return (
+                                    <TableRow key={position.id} className="text-xs sm:text-sm">
                                         <TableCell>
-                                            <div>
-                                                <div className="font-medium">{position.symbol}</div>
-                                                <div className="text-sm text-muted-foreground">
-                                                    {position.industry || position.category}
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {accounts.find(acc => acc.id === position.mainAccountId)?.name || 'Unknown Account'}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline">{position.secType}</Badge>
-                                        </TableCell>
-                                        <TableCell>{position.quantity}</TableCell>
-                                        <TableCell>{formatCurrency(position.averageCost, position.currency)}</TableCell>
-                                        <TableCell>{formatCurrency(position.marketPrice, position.currency)}</TableCell>
-                                        <TableCell>{formatCurrency(position.marketValue, position.currency)}</TableCell>
-                                        <TableCell>
-                                            <div className={`${(position.dayChange || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                <div>{formatCurrency(position.dayChange, position.currency)}</div>
-                                                <div className="text-sm">
-                                                    {formatPercent(position.dayChangePercent)}
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className={`${(position.unrealizedPnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                {formatCurrency(position.unrealizedPnl, position.currency)}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-1">
                                                 <Button variant="ghost" size="sm" onClick={() => openEditPosition(position)}>
                                                     <Edit className="h-4 w-4" />
                                                 </Button>
@@ -423,11 +513,165 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                                 </Button>
                                             </div>
                                         </TableCell>
+                                        <TableCell className="font-medium whitespace-nowrap">{position.symbol}</TableCell>
+                                        <TableCell className={`text-right font-medium whitespace-nowrap ${isDayChangePositive ? 'text-green-600' : 'text-red-600'}`}>
+                                            {position.dayChange !== undefined ? (
+                                                <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                                                    {isDayChangePositive ? (
+                                                        <TrendingUp className="h-3 w-3" />
+                                                    ) : (
+                                                        <TrendingDown className="h-3 w-3" />
+                                                    )}
+                                                    {formatCurrency(position.dayChange, position.currency)}
+                                                </div>
+                                            ) : (
+                                                'N/A'
+                                            )}
+                                        </TableCell>
+                                        <TableCell className={`text-right font-medium whitespace-nowrap ${isDayChangePositive ? 'text-green-600' : 'text-red-600'}`}>
+                                            {position.dayChangePercent !== undefined ? (
+                                                <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                                                    {isDayChangePositive ? (
+                                                        <TrendingUp className="h-3 w-3" />
+                                                    ) : (
+                                                        <TrendingDown className="h-3 w-3" />
+                                                    )}
+                                                    {position.dayChangePercent.toFixed(2)}%
+                                                </div>
+                                            ) : (
+                                                'N/A'
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="font-medium">{position.secType}</TableCell>
+                                        <TableCell className="whitespace-nowrap">
+                                            {accounts.find(acc => acc.id === position.mainAccountId)?.name || 'Unknown Account'}
+                                        </TableCell>
+                                        <TableCell className="text-xs sm:text-sm max-w-[120px] truncate" title={position.country || 'N/A'}>
+                                            {position.country || 'N/A'}
+                                        </TableCell>
+                                        <TableCell className="text-xs sm:text-sm max-w-[120px] truncate" title={position.industry || 'N/A'}>
+                                            {position.industry || 'N/A'}
+                                        </TableCell>
+                                        <TableCell className="text-xs sm:text-sm max-w-[120px] truncate" title={position.category || 'N/A'}>
+                                            {position.category || 'N/A'}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap">{position.currency}</TableCell>
+                                        <TableCell className="text-right whitespace-nowrap">{position.quantity.toLocaleString()}</TableCell>
+                                        <TableCell className="text-right whitespace-nowrap">
+                                            {formatCurrency(position.averageCost, position.currency)}
+                                        </TableCell>
+                                        <TableCell className="text-right whitespace-nowrap">
+                                            {formatCurrency(position.marketPrice, position.currency)}
+                                        </TableCell>
+                                        <TableCell className={`text-right font-medium whitespace-nowrap ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                                                {isPositive ? (
+                                                    <TrendingUp className="h-4 w-4" />
+                                                ) : (
+                                                    <TrendingDown className="h-4 w-4" />
+                                                )}
+                                                {pnlPercentage.toFixed(2)}%
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className={`text-right font-medium whitespace-nowrap ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                            {formatCurrency(position.unrealizedPnl, position.currency)}
+                                        </TableCell>
+                                        <TableCell className={`text-right font-medium whitespace-nowrap ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                            {formatCurrency(pnlInHKD, 'HKD')}
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium whitespace-nowrap">
+                                            {formatCurrency(marketValueInHKD, 'HKD')}
+                                        </TableCell>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </Card>
+                                );
+                            })}
+                            
+                            {/* Totals Row */}
+                            {positions.length > 0 && (() => {
+                                // Calculate totals
+                                const convertToHKD = (amount: number | undefined, currency: string) => {
+                                    if (!amount) return 0;
+                                    const rates: Record<string, number> = {
+                                        'USD': 7.8,
+                                        'EUR': 8.5,
+                                        'GBP': 10.0,
+                                        'HKD': 1,
+                                        'CNY': 1.1,
+                                        'JPY': 0.05
+                                    };
+                                    return amount * (rates[currency] || 1);
+                                };
+                                
+                                const totalDayChangeHKD = positions.reduce((sum, pos) => 
+                                    sum + convertToHKD(pos.dayChange, pos.currency), 0
+                                );
+                                
+                                const totalPnlHKD = positions.reduce((sum, pos) => 
+                                    sum + convertToHKD(pos.unrealizedPnl, pos.currency), 0
+                                );
+                                
+                                const totalMarketValueHKD = positions.reduce((sum, pos) => 
+                                    sum + convertToHKD(pos.marketValue, pos.currency), 0
+                                );
+                                
+                                const totalCostBasisHKD = positions.reduce((sum, pos) => {
+                                    const costBasis = (pos.marketValue || 0) - (pos.unrealizedPnl || 0);
+                                    return sum + convertToHKD(costBasis, pos.currency);
+                                }, 0);
+                                
+                                const totalDayChangePercent = totalCostBasisHKD > 0 ? (totalDayChangeHKD / totalCostBasisHKD) * 100 : 0;
+                                
+                                const isTotalPositive = totalPnlHKD >= 0;
+                                const isTotalDayChangePositive = totalDayChangeHKD >= 0;
+                                
+                                return (
+                                    <TableRow className="bg-muted/50 font-semibold border-t-2 text-xs sm:text-sm">
+                                        <TableCell className="text-left whitespace-nowrap font-bold">Total:</TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell className={`text-right font-bold whitespace-nowrap ${isTotalDayChangePositive ? 'text-green-600' : 'text-red-600'}`}>
+                                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                                                {isTotalDayChangePositive ? (
+                                                    <TrendingUp className="h-4 w-4" />
+                                                ) : (
+                                                    <TrendingDown className="h-4 w-4" />
+                                                )}
+                                                {formatCurrency(totalDayChangeHKD, 'HKD')}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className={`text-right font-bold whitespace-nowrap ${isTotalDayChangePositive ? 'text-green-600' : 'text-red-600'}`}>
+                                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                                                {isTotalDayChangePositive ? (
+                                                    <TrendingUp className="h-4 w-4" />
+                                                ) : (
+                                                    <TrendingDown className="h-4 w-4" />
+                                                )}
+                                                {totalDayChangePercent.toFixed(2)}%
+                                            </div>
+                                        </TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell className={`text-right font-bold whitespace-nowrap ${isTotalPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                            {formatCurrency(totalPnlHKD, 'HKD')}
+                                        </TableCell>
+                                        <TableCell className="text-right font-bold whitespace-nowrap">
+                                            {formatCurrency(totalMarketValueHKD, 'HKD')}
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })()}
+                        </TableBody>
+                    </Table>
+                </div>
+            </Card>
 
 
 
@@ -469,6 +713,12 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                         setPositionForm({ ...positionForm, symbol: value });
                                         if (value.length > 0) {
                                             searchSymbols(value);
+                                        }
+                                    }}
+                                    onBlur={(e) => {
+                                        const value = e.target.value.toUpperCase();
+                                        if (value.length > 0 && value !== editingPosition?.symbol) {
+                                            fetchYahooFinanceData(value);
                                         }
                                     }}
                                     placeholder="e.g., AAPL, TSLA"
@@ -564,16 +814,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                 />
                             </div>
                         </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="notes">Notes</Label>
-                            <Textarea
-                                id="notes"
-                                value={positionForm.notes}
-                                onChange={(e) => setPositionForm({ ...positionForm, notes: e.target.value })}
-                                placeholder="Optional notes about this position"
-                                rows={2}
-                            />
-                        </div>
+
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setPositionDialogOpen(false)}>

@@ -566,6 +566,15 @@ For issues and questions:
 - ✅ **Multi-Security Support**: Optimized data retrieval for stocks (historical), crypto (24/7), and bonds (market ticks)
 - ✅ **Manual Investment Accounts**: Add and manage investment positions manually with Yahoo Finance integration
 - ✅ **Manual Position Updates**: Fixed database column mapping issue for seamless position editing
+- ✅ **Enhanced "Other Portfolio" Features**:
+  - IB Portfolio-style table layout with edit/delete buttons at row start
+  - Totals row with day change, day change %, P&L (HKD), and market value (HKD)
+  - No auto-refresh on page load for faster loading
+  - Smart symbol auto-population with Yahoo Finance company data
+  - Enhanced Yahoo Finance integration with company profiles (country, industry, category)
+  - Streamlined Add/Edit dialog (removed notes field)
+  - Currency conversion to HKD for unified portfolio view
+  - Left-aligned action buttons for better UX
 
 ---
 

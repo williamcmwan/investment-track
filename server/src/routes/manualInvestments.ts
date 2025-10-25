@@ -1,6 +1,5 @@
 import express from 'express';
 import { ManualInvestmentService } from '../services/manualInvestmentService';
-import { YahooFinanceService } from '../services/yahooFinanceService';
 
 const router = express.Router();
 
@@ -22,13 +21,14 @@ router.get('/positions', async (req, res) => {
     if (accountId) {
       positions = ManualInvestmentService.getManualPositions(accountId);
     } else {
-      positions = await ManualInvestmentService.getEnrichedManualPositions(userId);
+      // Use getAllManualPositions instead of getEnrichedManualPositions to avoid auto-refresh
+      positions = ManualInvestmentService.getAllManualPositions(userId);
     }
     
-    res.json(positions);
+    return res.json(positions);
   } catch (error) {
     console.error('Error getting manual positions:', error);
-    res.status(500).json({ error: 'Failed to get manual positions' });
+    return res.status(500).json({ error: 'Failed to get manual positions' });
   }
 });
 
@@ -51,8 +51,7 @@ router.post('/positions', async (req, res) => {
       quantity,
       averageCost,
       exchange,
-      primaryExchange,
-      notes
+      primaryExchange
     } = req.body;
     
     if (!accountId || !symbol || !secType || !quantity || !averageCost) {
@@ -73,8 +72,7 @@ router.post('/positions', async (req, res) => {
       quantity: parseFloat(quantity),
       averageCost: parseFloat(averageCost),
       exchange,
-      primaryExchange,
-      notes
+      primaryExchange
     };
     
     console.log('📊 Creating position with processed data:', positionData);
@@ -84,10 +82,10 @@ router.post('/positions', async (req, res) => {
     // Try to get market data immediately
     await ManualInvestmentService.updatePositionMarketData(position.id);
     
-    res.status(201).json(position);
+    return res.status(201).json(position);
   } catch (error) {
     console.error('Error adding manual position:', error);
-    res.status(500).json({ error: 'Failed to add manual position' });
+    return res.status(500).json({ error: 'Failed to add manual position' });
   }
 });
 
@@ -150,10 +148,40 @@ router.post('/positions/refresh-market-data', async (req, res) => {
   try {
     const userId = req.body.userId || 'default';
     const result = await ManualInvestmentService.updateAllMarketData(userId);
-    res.json(result);
+    
+    // Include last refresh time in response
+    const lastRefreshTime = ManualInvestmentService.getLastRefreshTime();
+    
+    res.json({
+      ...result,
+      lastRefreshTime: lastRefreshTime ? new Date(lastRefreshTime).toISOString() : null
+    });
   } catch (error) {
     console.error('Error refreshing market data:', error);
     res.status(500).json({ error: 'Failed to refresh market data' });
+  }
+});
+
+/**
+ * GET /api/manual-investments/refresh-status
+ * Get refresh status and last refresh time
+ */
+router.get('/refresh-status', async (req, res) => {
+  try {
+    const lastRefreshTime = ManualInvestmentService.getLastRefreshTime();
+    const now = Date.now();
+    const timeSinceLastRefresh = lastRefreshTime ? now - lastRefreshTime : null;
+    const nextAutoRefresh = lastRefreshTime ? lastRefreshTime + (30 * 60 * 1000) : null;
+    
+    res.json({
+      lastRefreshTime: lastRefreshTime ? new Date(lastRefreshTime).toISOString() : null,
+      timeSinceLastRefresh,
+      nextAutoRefresh: nextAutoRefresh ? new Date(nextAutoRefresh).toISOString() : null,
+      autoRefreshEnabled: true
+    });
+  } catch (error) {
+    console.error('Error getting refresh status:', error);
+    res.status(500).json({ error: 'Failed to get refresh status' });
   }
 });
 
@@ -184,11 +212,13 @@ router.get('/search-symbols', async (req, res) => {
       return res.json([]);
     }
 
+    const { YahooFinanceService } = await import('../services/yahooFinanceService.js');
     const results = await YahooFinanceService.searchSymbols(query);
-    res.json(results);
+    
+    return res.json(results);
   } catch (error) {
     console.error('Error searching symbols:', error);
-    res.status(500).json({ error: 'Failed to search symbols' });
+    return res.status(500).json({ error: 'Failed to search symbols' });
   }
 });
 
@@ -199,16 +229,44 @@ router.get('/search-symbols', async (req, res) => {
 router.get('/market-data/:symbol', async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
+    const { YahooFinanceService } = await import('../services/yahooFinanceService.js');
     const marketData = await YahooFinanceService.getMarketData(symbol);
     
     if (marketData) {
-      res.json(marketData);
+      // Determine security type based on symbol and market data
+      let secType = 'STK'; // Default to stock
+      
+      if (symbol.includes('-') && symbol.length > 4) {
+        secType = 'STK'; // Likely a stock with class (e.g., BRK-B)
+      } else if (marketData.longName?.toLowerCase().includes('etf') || 
+                 marketData.shortName?.toLowerCase().includes('etf')) {
+        secType = 'ETF';
+      } else if (marketData.longName?.toLowerCase().includes('fund') || 
+                 marketData.shortName?.toLowerCase().includes('fund')) {
+        secType = 'MUTUAL_FUND';
+      } else if (marketData.longName?.toLowerCase().includes('bond') || 
+                 marketData.shortName?.toLowerCase().includes('bond') ||
+                 symbol.includes('TLT') || symbol.includes('IEF')) {
+        secType = 'BOND';
+      } else if (symbol.includes('BTC') || symbol.includes('ETH') || 
+                 marketData.currency === 'BTC' || marketData.currency === 'ETH') {
+        secType = 'CRYPTO';
+      }
+      
+      const enhancedData = {
+        ...marketData,
+        secType,
+        marketPrice: marketData.marketPrice,
+        currentPrice: marketData.marketPrice // Alias for average cost
+      };
+      
+      return res.json(enhancedData);
     } else {
-      res.status(404).json({ error: 'Market data not found for symbol' });
+      return res.status(404).json({ error: 'Market data not found for symbol' });
     }
   } catch (error) {
     console.error('Error getting market data:', error);
-    res.status(500).json({ error: 'Failed to get market data' });
+    return res.status(500).json({ error: 'Failed to get market data' });
   }
 });
 

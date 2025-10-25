@@ -46,6 +46,9 @@ export interface EnrichedManualPosition extends ManualPosition {
 
 export class ManualInvestmentService {
   private static db: Database.Database | null = null;
+  private static lastRefreshTime: number | null = null;
+  private static autoRefreshInterval: NodeJS.Timeout | null = null;
+  private static readonly AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
   /**
    * Convert database row (snake_case) to ManualPosition (camelCase)
@@ -197,6 +200,9 @@ export class ManualInvestmentService {
       db.exec("DROP TABLE IF EXISTS investment_accounts");
 
       console.log('✅ Portfolios table initialized');
+      
+      // Start auto-refresh timer
+      this.startAutoRefresh('default');
     } catch (error) {
       console.error('❌ Error initializing portfolios:', error);
     }
@@ -343,7 +349,47 @@ export class ManualInvestmentService {
   }
 
   /**
-   * Update market data for all manual positions using Yahoo Finance
+   * Enhanced market data fetching using yahoo-finance2 only
+   */
+  private static async getEnhancedMarketData(symbol: string): Promise<any> {
+    try {
+      console.log(`📊 Fetching enhanced data for ${symbol} using yahoo-finance2...`);
+      
+      const marketData = await YahooFinanceService.getMarketData(symbol);
+      
+      if (marketData) {
+        console.log(`✅ Enhanced data for ${symbol}:`, {
+          price: marketData.marketPrice,
+          change: marketData.dayChange,
+          changePercent: marketData.dayChangePercent?.toFixed(2) + '%'
+        });
+
+        return {
+          symbol: symbol,
+          stockType: "STK",
+          country: marketData.country || "N/A",
+          sector: marketData.sector || "N/A",
+          industry: marketData.industry || "N/A",
+          currency: marketData.currency || "USD",
+          marketPrice: marketData.marketPrice || 0,
+          closePrice: marketData.closePrice || 0,
+          dayChange: marketData.dayChange || 0,
+          dayChangePercent: marketData.dayChangePercent || 0,
+          marketState: marketData.marketState || "UNKNOWN"
+        };
+      }
+      
+      console.log(`⚠️ No market data available for ${symbol}, keeping existing data`);
+      return null;
+      
+    } catch (error: any) {
+      console.error(`❌ Failed to fetch enhanced data for ${symbol}:`, error?.message || error);
+      return null;
+    }
+  }
+
+  /**
+   * Update market data for all manual positions using enhanced yahoo-finance2
    */
   static async updateAllMarketData(userId: string = 'default'): Promise<{ updated: number; failed: number }> {
     const positions = this.getAllManualPositions(userId);
@@ -353,11 +399,10 @@ export class ManualInvestmentService {
       return { updated: 0, failed: 0 };
     }
 
-    console.log(`📊 Updating market data for ${symbols.length} symbols...`);
+    console.log(`📊 Updating market data for ${symbols.length} symbols using yahoo-finance2...`);
+    const startTime = Date.now();
     
-    const marketDataMap = await YahooFinanceService.getMultipleMarketData(symbols);
     const db = this.getDatabase();
-    
     let updated = 0;
     let failed = 0;
 
@@ -370,11 +415,45 @@ export class ManualInvestmentService {
         day_change_percent = ?,
         close_price = ?,
         unrealized_pnl = ?,
+        country = ?,
+        industry = ?,
+        category = ?,
         last_price_update = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
 
+    // Process symbols with rate limiting to avoid 401 errors
+    const concurrencyLimit = 2; // Reduced from 5 to avoid rate limiting
+    const symbolChunks = [];
+    for (let i = 0; i < symbols.length; i += concurrencyLimit) {
+      symbolChunks.push(symbols.slice(i, i + concurrencyLimit));
+    }
+
+    const marketDataMap = new Map<string, any>();
+    
+    for (let i = 0; i < symbolChunks.length; i++) {
+      const chunk = symbolChunks[i];
+      
+      if (!chunk || chunk.length === 0) continue;
+      
+      // Add delay between chunks to avoid rate limiting
+      if (i > 0) {
+        console.log(`⏱️ Waiting 1s before next batch to avoid rate limiting...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      const chunkPromises = chunk.map((symbol: string) => this.getEnhancedMarketData(symbol));
+      const chunkResults = await Promise.all(chunkPromises);
+      
+      chunkResults.forEach((data, index) => {
+        if (data && chunk[index]) {
+          marketDataMap.set(chunk[index], data);
+        }
+      });
+    }
+
+    // Update positions with enhanced data
     for (const position of positions) {
       const marketData = marketDataMap.get(position.symbol);
       
@@ -390,6 +469,9 @@ export class ManualInvestmentService {
           marketData.dayChangePercent,
           marketData.closePrice,
           unrealizedPnl,
+          marketData.country,
+          marketData.industry,
+          marketData.sector, // Use sector as category
           position.id
         );
         
@@ -400,7 +482,13 @@ export class ManualInvestmentService {
       }
     }
 
-    console.log(`✅ Updated market data: ${updated} successful, ${failed} failed`);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
+    // Update last refresh time
+    this.lastRefreshTime = Date.now();
+    
+    console.log(`✅ Updated market data: ${updated} successful, ${failed} failed in ${duration}ms`);
     return { updated, failed };
   }
 
@@ -435,6 +523,9 @@ export class ManualInvestmentService {
         day_change_percent = ?,
         close_price = ?,
         unrealized_pnl = ?,
+        country = COALESCE(?, country),
+        industry = COALESCE(?, industry),
+        category = COALESCE(?, category),
         last_price_update = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -447,6 +538,9 @@ export class ManualInvestmentService {
       marketData.dayChangePercent,
       marketData.closePrice,
       unrealizedPnl,
+      marketData.country || null,
+      marketData.industry || null,
+      marketData.sector || null, // Use sector as category
       positionId
     );
 
@@ -468,6 +562,45 @@ export class ManualInvestmentService {
     
     // Get fresh data with market prices
     return this.getAllManualPositions(userId);
+  }
+
+  /**
+   * Get last refresh timestamp
+   */
+  static getLastRefreshTime(): number | null {
+    return this.lastRefreshTime;
+  }
+
+  /**
+   * Start auto-refresh timer (30 minutes)
+   */
+  static startAutoRefresh(userId: string = 'default'): void {
+    // Clear existing timer
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval);
+    }
+
+    console.log('📊 Starting auto-refresh for manual investments (30 minutes interval)');
+    
+    this.autoRefreshInterval = setInterval(async () => {
+      try {
+        console.log('📊 Auto-refreshing manual investment market data...');
+        await this.updateAllMarketData(userId);
+      } catch (error) {
+        console.error('❌ Auto-refresh failed:', error);
+      }
+    }, this.AUTO_REFRESH_INTERVAL_MS);
+  }
+
+  /**
+   * Stop auto-refresh timer
+   */
+  static stopAutoRefresh(): void {
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval);
+      this.autoRefreshInterval = null;
+      console.log('📊 Stopped auto-refresh for manual investments');
+    }
   }
 
   /**

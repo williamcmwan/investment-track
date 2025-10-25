@@ -52,6 +52,9 @@ export class IBService {
   private static keepAliveInterval: NodeJS.Timeout | null = null;
   private static lastActivityTime = 0;
   private static readonly IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes idle timeout
+  
+  // Track failed bond market data requests to avoid repeated timeouts
+  private static failedBondSymbols: Set<string> = new Set();
 
   // Cache storage (in-memory for fast access)
   private static balanceCache: CachedData<AccountSummary> | null = null;
@@ -240,21 +243,36 @@ export class IBService {
   private static async savePortfolioToDB(mainAccountId: number, positions: PortfolioPosition[]): Promise<void> {
     try {
       const { dbRun } = await import('../database/connection.js');
-      // Ensure unified portfolios table exists via ManualInvestmentService init path (already called at boot)
+      
+      console.log(`💾 Starting batch save of ${positions.length} IB portfolio positions to DB...`);
+      const startTime = Date.now();
+      
       // Replace existing IB records for this account
       await dbRun('DELETE FROM portfolios WHERE source = ? AND main_account_id = ?', ['IB', mainAccountId]);
 
-      const insertSql = `
+      if (positions.length === 0) {
+        console.log('💾 No positions to save');
+        return;
+      }
+
+      // Build batch INSERT with multiple VALUES clauses
+      const baseInsertSql = `
         INSERT INTO portfolios (
           main_account_id, symbol, sec_type, currency, country, industry, category,
           quantity, average_cost, exchange, primary_exchange, con_id,
           market_price, market_value, day_change, day_change_percent, close_price,
           unrealized_pnl, realized_pnl, notes, source, last_price_update, updated_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES 
       `;
 
+      // Create VALUES clauses and collect all parameters
+      const valueClauses: string[] = [];
+      const allParams: any[] = [];
+
       for (const p of positions) {
-        await dbRun(insertSql, [
+        valueClauses.push(`(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
+        
+        allParams.push(
           mainAccountId,
           p.symbol || '',
           p.secType || '',
@@ -262,8 +280,7 @@ export class IBService {
           p.country || null,
           p.industry || null,
           p.category || null,
-          // quantity from IB 'position'
-          p.position ?? 0,
+          p.position ?? 0, // quantity from IB 'position'
           p.averageCost ?? 0,
           p.exchange || null,
           p.primaryExchange || null,
@@ -277,9 +294,17 @@ export class IBService {
           p.realizedPNL ?? null,
           null, // notes
           'IB'
-        ]);
+        );
       }
-      console.log(`💾 Saved ${positions.length} IB portfolio rows to DB for account ${mainAccountId}`);
+
+      // Execute single batch INSERT
+      const batchInsertSql = baseInsertSql + valueClauses.join(', ');
+      await dbRun(batchInsertSql, allParams);
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      console.log(`💾 Batch saved ${positions.length} IB portfolio rows to DB for account ${mainAccountId} in ${duration}ms`);
+      
     } catch (e) {
       console.error('❌ Failed to save IB portfolio to DB:', e);
     }
@@ -742,21 +767,30 @@ export class IBService {
       throw new Error('IB API not initialized');
     }
 
+    // Skip bonds that have previously failed to avoid repeated timeouts
+    if (this.failedBondSymbols.has(position.symbol)) {
+      console.log(`Skipping bond market data for ${position.symbol} (previously failed)`);
+      return null;
+    }
+
     console.log(`Requesting bond market data for ${position.symbol}...`);
 
     // If we don't have a contract ID, we can't reliably request market data for bonds
     if (!position.conId || position.conId <= 0) {
       console.log(`No contract ID available for bond ${position.symbol}, cannot request market data`);
+      this.failedBondSymbols.add(position.symbol); // Mark as failed
       return null;
     }
 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
         console.log(`Timeout getting bond market data for ${position.symbol}`);
-        this.ibApi!.removeAllListeners('tickPrice' as any);
+        this.failedBondSymbols.add(position.symbol); // Mark as failed to skip in future
+        this.ibApi!.removeListener('tickPrice' as any, tickPriceHandler);
+        this.ibApi!.removeListener('error' as any, tickPriceErrorHandler);
         this.ibApi!.cancelMktData(reqId);
         resolve(null);
-      }, 15000); // Longer timeout for bonds
+      }, 5000); // Reduced timeout for bonds (was 15000ms)
 
       const reqId = Math.floor(Math.random() * 10000) + 1000;
       let lastPrice: number | null = null;
@@ -825,6 +859,7 @@ export class IBService {
       const tickPriceErrorHandler = (reqId_: number, errorCode: number, errorString: string) => {
         if (reqId_ === reqId) {
           console.log(`Bond market data error for ${position.symbol}: ${errorCode} - ${errorString}`);
+          this.failedBondSymbols.add(position.symbol); // Mark as failed to skip in future
           clearTimeout(timeout);
           this.ibApi!.removeListener('tickPrice' as any, tickPriceHandler);
           this.ibApi!.removeListener('error' as any, tickPriceErrorHandler);
@@ -995,9 +1030,22 @@ export class IBService {
 
   // Force refresh method (for manual refresh button)
   static async forceRefreshPortfolio(userSettings?: { host: string; port: number; client_id: number }): Promise<PortfolioPosition[]> {
-    console.log('Force refreshing portfolio');
+    console.log('📊 Force refreshing portfolio...');
+    const refreshStartTime = Date.now();
+    
+    // Clear failed bonds cache on manual refresh to retry them
+    if (this.failedBondSymbols.size > 0) {
+      console.log(`📊 Clearing ${this.failedBondSymbols.size} failed bond symbols for retry`);
+      this.failedBondSymbols.clear();
+    }
+    
     const freshData = await this.fetchPortfolioFresh(userSettings);
     this.setCachedPortfolio(freshData);
+    
+    const refreshEndTime = Date.now();
+    const totalDuration = refreshEndTime - refreshStartTime;
+    console.log(`📊 Portfolio refresh completed in ${totalDuration}ms (${freshData.length} positions)`);
+    
     return freshData;
   }
 
@@ -1102,6 +1150,10 @@ export class IBService {
           if (!isResolved) {
             // Stop the initial wait timer now that account data download ended
             clearTimeout(timeout);
+            
+            console.log(`📊 Starting enrichment of ${this.portfolioPositions.length} positions...`);
+            const enrichmentStartTime = Date.now();
+            
             // Fetch contract details and market data for each position
             const enrichedPositions = await Promise.all(
               this.portfolioPositions.map(async (position) => {
@@ -1205,10 +1257,18 @@ export class IBService {
               })
             );
 
+            const enrichmentEndTime = Date.now();
+            const enrichmentDuration = enrichmentEndTime - enrichmentStartTime;
+            console.log(`📊 Position enrichment completed in ${enrichmentDuration}ms`);
+
             // Persist to DB if we have a target account to associate with
             try {
               if (typeof (mainAccountId) === 'number') {
+                const dbStartTime = Date.now();
                 await this.savePortfolioToDB(mainAccountId, enrichedPositions);
+                const dbEndTime = Date.now();
+                const dbDuration = dbEndTime - dbStartTime;
+                console.log(`📊 Database persistence completed in ${dbDuration}ms`);
               } else {
                 console.warn('⚠️ No target_account_id provided; skipping DB persist for IB portfolio');
               }

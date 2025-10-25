@@ -27,6 +27,10 @@ if [ ! -f "client/.env" ]; then
     echo "VITE_API_URL=http://localhost:3002/api" > client/.env
 fi
 
+# Create production environment file for client
+echo "📝 Creating/updating client/.env.production file..."
+echo "VITE_API_URL=/api" > client/.env.production
+
 if [ ! -f "server/.env" ]; then
     echo "📝 Creating server/.env file..."
     cat > server/.env << EOF
@@ -43,6 +47,12 @@ EOF
 else
     echo "📝 Preserving existing server/.env file"
     echo "⚠️  Ensure CORS_ORIGIN in server/.env is set to your production domain"
+    
+    # Ensure NODE_ENV is set to production for deployment
+    if ! grep -q "NODE_ENV=production" server/.env; then
+        echo "📝 Setting NODE_ENV=production in server/.env..."
+        sed -i.bak 's/NODE_ENV=.*/NODE_ENV=production/' server/.env 2>/dev/null || echo "NODE_ENV=production" >> server/.env
+    fi
 fi
 
 # Create data directory
@@ -53,6 +63,14 @@ fi
 
 echo "🔄 Pulling latest code from repository..."
 git pull origin main || echo "⚠️  Git pull skipped (not in a git repository or already up to date)"
+
+echo "🧹 Cleaning up development artifacts..."
+# Clean up any running development processes
+pkill -f "tsx watch" 2>/dev/null || true
+pkill -f "vite" 2>/dev/null || true
+
+# Clean npm cache to ensure fresh installs
+npm cache clean --force 2>/dev/null || true
 
 echo "📦 Installing dependencies..."
 
@@ -74,14 +92,32 @@ cd ..
 
 echo "🔨 Building applications..."
 
+# Clean previous builds
+echo "🧹 Cleaning previous builds..."
+rm -rf client/dist
+rm -rf server/dist
+
 # Build client
-echo "🔨 Building client..."
+echo "🔨 Building client for production..."
 cd client
 npm run build
+if [ $? -ne 0 ]; then
+    echo "❌ Client build failed!"
+    exit 1
+fi
+echo "✅ Client build completed successfully"
 cd ..
 
-# Skip server build for now - we'll run with tsx directly
-echo "🔨 Skipping server build - will run with tsx directly"
+# Build server (skip for now due to TypeScript strict mode issues)
+echo "🔨 Preparing server for production..."
+cd server
+# npm run build
+# if [ $? -ne 0 ]; then
+#     echo "❌ Server build failed!"
+#     exit 1
+# fi
+echo "✅ Server will run with tsx (TypeScript runtime)"
+cd ..
 
 echo "🗄️ Setting up database..."
 
@@ -106,6 +142,21 @@ npm run db:seed
 cd ..
 
 echo "✅ Deployment completed successfully!"
+
+# Verify builds exist
+echo "🔍 Verifying builds..."
+if [ ! -f "client/dist/index.html" ]; then
+    echo "❌ Client build verification failed - index.html not found!"
+    exit 1
+fi
+
+# Skip server build verification for now
+# if [ ! -f "server/dist/index.js" ]; then
+#     echo "❌ Server build verification failed - index.js not found!"
+#     exit 1
+# fi
+
+echo "✅ Build verification passed"
 echo ""
 echo "🔄 Restarting application..."
 
@@ -119,18 +170,40 @@ sleep 2
 ./scripts/app.sh start
 
 echo ""
+echo "⏳ Waiting for application to start..."
+sleep 5
+
+# Verify application is running
+echo "🔍 Verifying application health..."
+if curl -s http://localhost:3002/health > /dev/null; then
+    echo "✅ Application health check passed"
+else
+    echo "⚠️  Application health check failed - check logs with: ./scripts/app.sh logs"
+fi
+
+echo ""
 echo "🌐 Application is now ready:"
 echo "   Application: http://localhost:3002"
 echo "   API: http://localhost:3002/api"
 echo "   Health Check: http://localhost:3002/health"
 echo "   Database: SQLite database created"
+echo "   Mode: Production (using built files)"
 echo ""
 echo "📊 Demo credentials:"
 echo "   Email: demo@example.com"
 echo "   Password: demo123"
+echo ""
+echo "📋 Post-deployment checklist:"
+echo "   ✅ Client built and served from server"
+echo "   ✅ Server running with tsx in production mode"
+echo "   ✅ Database migrations applied"
+echo "   ✅ Manual investment auto-refresh enabled"
 echo ""
 echo "⚠️  Remember to:"
 echo "   1. Update JWT_SECRET in server/.env"
 echo "   2. Configure proper CORS_ORIGIN for production"
 echo "   3. Configure proper database backups"
 echo "   4. Configure IB_HOST, IB_PORT, IB_CLIENT_ID in server/.env"
+echo ""
+echo "📊 Check application status: ./scripts/app.sh status"
+echo "📋 View logs: ./scripts/app.sh logs"

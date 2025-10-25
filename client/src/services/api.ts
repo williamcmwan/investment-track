@@ -375,6 +375,59 @@ class ApiClient {
       method: 'POST',
     });
   }
+
+  // Manual Investment endpoints
+  async getManualPositions() {
+    return this.request<any[]>('/manual-investments/positions');
+  }
+
+  async createManualPosition(positionData: any) {
+    return this.request<any>('/manual-investments/positions', {
+      method: 'POST',
+      body: JSON.stringify(positionData),
+    });
+  }
+
+  async updateManualPosition(positionId: number, positionData: any) {
+    return this.request<any>(`/manual-investments/positions/${positionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(positionData),
+    });
+  }
+
+  async deleteManualPosition(positionId: number) {
+    return this.request<{ success: boolean }>(`/manual-investments/positions/${positionId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async refreshManualMarketData(userId: string = 'default') {
+    return this.request<{ 
+      updated: number; 
+      failed: number; 
+      lastRefreshTime: string | null;
+    }>('/manual-investments/positions/refresh-market-data', {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    });
+  }
+
+  async getManualInvestmentRefreshStatus() {
+    return this.request<{
+      lastRefreshTime: string | null;
+      timeSinceLastRefresh: number | null;
+      nextAutoRefresh: string | null;
+      autoRefreshEnabled: boolean;
+    }>('/manual-investments/refresh-status');
+  }
+
+  async searchSymbols(query: string) {
+    return this.request<any[]>(`/manual-investments/search-symbols?q=${encodeURIComponent(query)}`);
+  }
+
+  async getMarketDataForSymbol(symbol: string) {
+    return this.request<any>(`/manual-investments/market-data/${encodeURIComponent(symbol)}`);
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);
