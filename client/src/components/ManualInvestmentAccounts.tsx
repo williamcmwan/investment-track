@@ -76,7 +76,7 @@ interface ManualInvestmentAccountsProps {
     accounts: MainAccount[];
 }
 
-const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ accounts }) => {
+const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ accounts = [] }) => {
     const { toast } = useToast();
     const [positions, setPositions] = useState<ManualPosition[]>([]);
     const [loading, setLoading] = useState(false);
@@ -147,8 +147,10 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
             const response = await apiClient.getManualPositions();
             if (response.data) {
                 setPositions(response.data);
+                setError(null); // Clear any previous errors
             } else if (response.error) {
                 setError(response.error);
+                setPositions([]); // Set empty array to show empty state
             }
         } catch (error) {
             console.error('Error loading positions:', error);
@@ -405,6 +407,20 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
         return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
     };
 
+    // Show loading or error state if no accounts available
+    if (!accounts || accounts.length === 0) {
+        return (
+            <div className="space-y-6">
+                <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                        No investment accounts found. Please create an investment account first in the Accounts section.
+                    </AlertDescription>
+                </Alert>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             {error && (
@@ -476,12 +492,22 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {positions.map((position) => {
+                            {positions.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={16} className="text-center py-8 text-muted-foreground">
+                                        No positions found. Click "Add Position" to get started.
+                                    </TableCell>
+                                </TableRow>
+                            ) : positions.map((position) => {
                                 const isPositive = (position.unrealizedPnl || 0) >= 0;
                                 const isDayChangePositive = (position.dayChange || 0) >= 0;
-                                const pnlPercentage = position.marketValue && position.marketValue > 0 
-                                    ? ((position.unrealizedPnl || 0) / (position.marketValue - (position.unrealizedPnl || 0))) * 100 
-                                    : 0;
+                                const pnlPercentage = (() => {
+                                    if (!position.marketValue || position.marketValue <= 0) return 0;
+                                    const costBasis = position.marketValue - (position.unrealizedPnl || 0);
+                                    if (costBasis <= 0) return 0;
+                                    const percentage = ((position.unrealizedPnl || 0) / costBasis) * 100;
+                                    return isFinite(percentage) ? percentage : 0;
+                                })();
                                 
                                 // Convert to HKD (assuming 1:1 for now, should use exchange rates in real implementation)
                                 const convertToHKD = (amount: number | undefined, currency: string) => {
@@ -536,7 +562,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                                     ) : (
                                                         <TrendingDown className="h-3 w-3" />
                                                     )}
-                                                    {position.dayChangePercent.toFixed(2)}%
+                                                    {(position.dayChangePercent || 0).toFixed(2)}%
                                                 </div>
                                             ) : (
                                                 'N/A'
@@ -570,7 +596,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                                 ) : (
                                                     <TrendingDown className="h-4 w-4" />
                                                 )}
-                                                {pnlPercentage.toFixed(2)}%
+                                                {(pnlPercentage || 0).toFixed(2)}%
                                             </div>
                                         </TableCell>
                                         <TableCell className={`text-right font-medium whitespace-nowrap ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
@@ -619,7 +645,11 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                     return sum + convertToHKD(costBasis, pos.currency);
                                 }, 0);
                                 
-                                const totalDayChangePercent = totalCostBasisHKD > 0 ? (totalDayChangeHKD / totalCostBasisHKD) * 100 : 0;
+                                const totalDayChangePercent = (() => {
+                                    if (!totalCostBasisHKD || totalCostBasisHKD <= 0) return 0;
+                                    const percentage = (totalDayChangeHKD / totalCostBasisHKD) * 100;
+                                    return isFinite(percentage) ? percentage : 0;
+                                })();
                                 
                                 const isTotalPositive = totalPnlHKD >= 0;
                                 const isTotalDayChangePositive = totalDayChangeHKD >= 0;
@@ -645,7 +675,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                                 ) : (
                                                     <TrendingDown className="h-4 w-4" />
                                                 )}
-                                                {totalDayChangePercent.toFixed(2)}%
+                                                {(totalDayChangePercent || 0).toFixed(2)}%
                                             </div>
                                         </TableCell>
                                         <TableCell></TableCell>
