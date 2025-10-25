@@ -5,9 +5,12 @@ A modern, full-stack investment tracking application built with React, Node.js, 
 ## 🚀 Features
 
 - **Secure Authentication**: JWT-based auth with Two-Factor Authentication (2FA) support
-- **Multi-Currency Support**: Track investments in multiple currencies
+- **Multi-Currency Support**: Track investments in multiple currencies with automatic refresh
 - **Portfolio Analytics**: Comprehensive performance tracking and reporting
-- **Real-time Data**: Live currency rates and portfolio updates
+- **Automatic Data Refresh**: 30-minute refresh cycle for Currency → IB Portfolio → Manual Investments
+- **Interactive Brokers Integration**: Real-time portfolio data with user-configurable connections
+- **Manual Investment Tracking**: Add positions from any broker with Yahoo Finance market data
+- **Real-time Data**: Live currency rates and portfolio updates with timestamp tracking
 - **Responsive Design**: Modern UI with mobile support
 - **Type Safety**: Full TypeScript implementation
 
@@ -59,6 +62,26 @@ investment-track/
 - **bcrypt** - Password hashing
 - **speakeasy** - 2FA (TOTP)
 - **qrcode** - QR code generation
+
+## ⚡ Key Features Highlight
+
+### 🔄 Automatic Data Refresh
+- **30-minute refresh cycle** keeps all data current
+- **Smart sequence**: Currency → IB Portfolio → Manual Investments  
+- **User transparency**: Last update timestamps shown in UI
+- **Zero maintenance**: Runs automatically in background
+
+### 🔌 Interactive Brokers Integration
+- **User-configurable connections** - each user sets their own IB settings
+- **Real-time portfolio data** with day change tracking
+- **Multi-security support**: stocks, crypto, bonds with optimized data retrieval
+- **Automatic refresh** for users with configured IB settings
+
+### 📊 Manual Investment Tracking
+- **Multi-broker support** - add positions from any broker
+- **Yahoo Finance integration** for real-time market data
+- **Comprehensive tracking**: P&L, day changes, industry classification
+- **Unified portfolio view** with currency conversion
 
 ## 📦 Installation
 
@@ -162,6 +185,28 @@ cd server && npx tsx src/database/seed.ts
 - CORS protection
 - Rate limiting
 - Input validation with Zod
+
+## 🔄 Automatic Data Refresh System
+
+The application features an intelligent **30-minute automatic refresh cycle** that keeps all portfolio data current:
+
+### Refresh Sequence
+1. **Currency Exchange Rates** (first) - Updates all currency pairs with latest rates
+2. **IB Portfolio Data** (second) - Refreshes data for users with configured IB settings  
+3. **Manual Investment Market Data** (third) - Updates Yahoo Finance data for manual positions
+
+### Key Features
+- **Background Processing**: Runs automatically without user intervention
+- **Smart IB Refresh**: Only refreshes for users with configured IB connection settings
+- **Timestamp Tracking**: Shows last update times in the UI for transparency
+- **Error Resilience**: Each step is independent - if one fails, others continue
+- **Performance Optimized**: Efficient batch processing and caching
+
+### User Experience
+- **Currency View**: Shows last currency update time under "Add Currency Pair" button
+- **Manual Investments**: Shows last manual investments update time
+- **Real-time Updates**: Timestamps refresh automatically every minute in the UI
+- **Always Fresh Data**: Ensures portfolio data is never more than 30 minutes old
 
 ## 🔌 Interactive Brokers Integration
 
@@ -277,6 +322,8 @@ The IB integration now provides comprehensive day change data for all security t
 - `POST /api/currencies` - Create currency pair
 - `PUT /api/currencies/:id` - Update currency pair
 - `DELETE /api/currencies/:id` - Delete currency pair
+- `GET /api/currencies/last-update` - Get currency last update time
+- `GET /api/currencies/all-last-updates` - Get all data types last update times
 
 ### Performance
 - `GET /api/performance` - Get performance data
@@ -298,36 +345,27 @@ The IB integration now provides comprehensive day change data for all security t
 - `PUT /api/manual-investments/positions/:id` - Update a manual position
 - `DELETE /api/manual-investments/positions/:id` - Delete a manual position
 - `POST /api/manual-investments/positions/refresh-market-data` - Refresh market data for all positions
+- `GET /api/manual-investments/refresh-status` - Get refresh status and timing
+- `GET /api/manual-investments/all-last-updates` - Get comprehensive last update times
 - `GET /api/manual-investments/summary` - Get portfolio summary for manual accounts
 - `GET /api/manual-investments/search-symbols` - Search for symbols using Yahoo Finance
 - `GET /api/manual-investments/market-data/:symbol` - Get market data for a specific symbol
 
 ## 🗄️ Database Schema
 
-### Users Table
-- `id` - Primary key
-- `email` - Unique email address
-- `password_hash` - Hashed password
-- `name` - User's full name
-- `base_currency` - Default currency (HKD)
-- `two_factor_secret` - 2FA secret key
-- `two_factor_enabled` - 2FA status
+### Core Tables
+- **Users**: Authentication, 2FA settings, base currency preferences
+- **Accounts**: Investment accounts with currency and balance tracking
+- **Currency Pairs**: Exchange rate tracking with cost basis and amounts
+- **Portfolios**: Unified table for both IB and manual investment positions
+- **Performance History**: Daily snapshots for analytics and reporting
+- **Balance History**: Account balance changes over time
 
-### Accounts Table
-- `id` - Primary key
-- `user_id` - Foreign key to users
-- `name` - Account name
-- `currency` - Account currency
-- `original_capital` - Initial investment
-- `current_balance` - Current balance
-
-### Currency Pairs Table
-- `id` - Primary key
-- `user_id` - Foreign key to users
-- `pair` - Currency pair (e.g., USD/HKD)
-- `current_rate` - Current exchange rate
-- `avg_cost` - Average cost basis
-- `amount` - Amount held
+### Key Features
+- **Unified Portfolio Storage**: Single table handles both IB and manual positions
+- **Automatic Migrations**: Database schema updates handled automatically
+- **Performance Optimized**: Proper indexing for fast queries
+- **Data Integrity**: Foreign key constraints and validation
 
 ## 🚀 Deployment
 
@@ -538,43 +576,19 @@ For issues and questions:
 ## 🔄 Updates
 
 ### Recent Changes
-- ✅ Complete 2FA implementation
-- ✅ Database cleanup and organization
-- ✅ Production deployment scripts
-- ✅ Comprehensive documentation
-- ✅ TypeScript type safety
-- ✅ Security improvements
-- ✅ Single port deployment (port 3002)
-- ✅ Static file serving from Express server
-- ✅ **Quick Update Feature**: Efficient account balance updates from dashboard
-- ✅ **Unified App Management**: Single `scripts/app.sh` script for all operations
-- ✅ **Enhanced Process Management**: PID tracking, graceful shutdown, status monitoring
-- ✅ **Robust Stop Command**: Detects and stops processes regardless of how they were started
-- ✅ **Centralized Logging**: Structured logs with configurable viewing
-- ✅ **Unlimited Token Duration**: JWT tokens now valid indefinitely until manual logout
-- ✅ **Performance Overview Enhancements**: 
-  - Dates sorted in descending order (newest first)
-  - Year removed from date display for cleaner UI
-  - Pagination with 30 entries per page and Previous/Next navigation
-  - Details shown by default for better user experience
-- ✅ **Account Timestamp Fix**: Last updated timestamp now properly reflects balance changes
-- ✅ **Interactive Brokers Integration**: Real IB API implementation using `@stoqey/ib`
+- ✅ **Automatic 30-Minute Data Refresh**: Currency → IB Portfolio → Manual Investments refresh cycle
+- ✅ **Smart IB Refresh**: Automatically refreshes IB data for users with configured settings
+- ✅ **Last Update Timestamps**: Real-time display of when each data type was last refreshed
+- ✅ **Background Processing**: All refreshes happen automatically without user intervention
+- ✅ **Enhanced Manual Investment Accounts**: Yahoo Finance integration with real-time market data
 - ✅ **User-Configurable IB Settings**: Per-user IB connection configuration with account selection
-- ✅ **Enhanced Portfolio Data**: Day change tracking for stocks, crypto, and bonds using real IB data
-- ✅ Unified portfolios storage: migrated legacy `manual_positions` to unified `portfolios` table; IB portfolio persisted and served from DB; deprecated JSON portfolio cache for portfolios
-- ✅ **IB Configuration Dialog**: User-friendly setup interface with validation and account selection
-- ✅ **Multi-Security Support**: Optimized data retrieval for stocks (historical), crypto (24/7), and bonds (market ticks)
-- ✅ **Manual Investment Accounts**: Add and manage investment positions manually with Yahoo Finance integration
-- ✅ **Manual Position Updates**: Fixed database column mapping issue for seamless position editing
-- ✅ **Enhanced "Other Portfolio" Features**:
-  - IB Portfolio-style table layout with edit/delete buttons at row start
-  - Totals row with day change, day change %, P&L (HKD), and market value (HKD)
-  - No auto-refresh on page load for faster loading
-  - Smart symbol auto-population with Yahoo Finance company data
-  - Enhanced Yahoo Finance integration with company profiles (country, industry, category)
-  - Streamlined Add/Edit dialog (removed notes field)
-  - Currency conversion to HKD for unified portfolio view
-  - Left-aligned action buttons for better UX
+- ✅ **Unified Portfolio Storage**: Single `portfolios` table for both IB and manual positions
+- ✅ **Complete 2FA Implementation**: TOTP-based authentication with QR codes
+- ✅ **Production Deployment**: Single port (3002) with unified app management scripts
+- ✅ **Performance Analytics**: Enhanced dashboard with pagination and detailed P&L tracking
+- ✅ **Security Improvements**: JWT tokens, bcrypt hashing, CORS protection
+- ✅ **TypeScript Implementation**: Full type safety across frontend and backend
+- ✅ **Responsive Design**: Modern UI with mobile support and shadcn/ui components
 
 ---
 
