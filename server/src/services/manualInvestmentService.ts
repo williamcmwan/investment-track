@@ -18,6 +18,7 @@ export interface ManualPosition {
   averageCost: number;
   exchange?: string;
   primaryExchange?: string;
+  conId?: number;
   // Market data (from Yahoo Finance)
   marketPrice?: number;
   marketValue?: number;
@@ -25,11 +26,13 @@ export interface ManualPosition {
   dayChangePercent?: number;
   closePrice?: number;
   unrealizedPnl?: number;
+  realizedPnl?: number;
   // Metadata
   notes?: string;
   createdAt: string;
   updatedAt: string;
   lastPriceUpdate?: string;
+  source?: 'MANUAL' | 'IB';
 }
 
 export interface EnrichedManualPosition extends ManualPosition {
@@ -61,16 +64,19 @@ export class ManualInvestmentService {
       averageCost: row.average_cost,
       exchange: row.exchange,
       primaryExchange: row.primary_exchange,
+      conId: row.con_id,
       marketPrice: row.market_price,
       marketValue: row.market_value,
       dayChange: row.day_change,
       dayChangePercent: row.day_change_percent,
       closePrice: row.close_price,
       unrealizedPnl: row.unrealized_pnl,
+      realizedPnl: row.realized_pnl,
       notes: row.notes,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      lastPriceUpdate: row.last_price_update
+      lastPriceUpdate: row.last_price_update,
+      source: row.source
     };
   }
 
@@ -97,70 +103,103 @@ export class ManualInvestmentService {
    */
   static async initializeDatabase(): Promise<void> {
     const db = this.getDatabase();
-    
     try {
-      // Migration 003: Create manual positions table
-      console.log('📊 Running migration 003: Create manual positions table');
-      const migration003 = `
-        -- Migration: Add manual positions table
-        -- This allows users to manually add investment positions linked to their main accounts
+      console.log('📊 Initializing portfolios table');
 
-        -- Create manual positions table (references main accounts table)
-        CREATE TABLE IF NOT EXISTS manual_positions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            main_account_id INTEGER NOT NULL, -- References the main accounts table
-            symbol TEXT NOT NULL,
-            sec_type TEXT NOT NULL, -- 'STK', 'BOND', 'CRYPTO', 'ETF', 'MUTUAL_FUND', etc.
-            currency TEXT NOT NULL DEFAULT 'USD',
-            country TEXT,
-            industry TEXT,
-            category TEXT,
-            quantity REAL NOT NULL,
-            average_cost REAL NOT NULL,
-            exchange TEXT,
-            primary_exchange TEXT,
-            -- Yahoo Finance data (auto-populated)
-            market_price REAL,
-            market_value REAL,
-            day_change REAL,
-            day_change_percent REAL,
-            close_price REAL,
-            unrealized_pnl REAL,
-            -- Metadata
-            notes TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_price_update DATETIME
-            -- Note: We don't add foreign key constraint to main accounts table since it might be in a different database
+      // Create unified portfolios table (IB + MANUAL)
+      const createPortfolios = `
+        CREATE TABLE IF NOT EXISTS portfolios (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          main_account_id INTEGER NOT NULL,
+          symbol TEXT NOT NULL,
+          sec_type TEXT NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'USD',
+          country TEXT,
+          industry TEXT,
+          category TEXT,
+          quantity REAL NOT NULL,
+          average_cost REAL NOT NULL,
+          exchange TEXT,
+          primary_exchange TEXT,
+          con_id INTEGER,
+          market_price REAL,
+          market_value REAL,
+          day_change REAL,
+          day_change_percent REAL,
+          close_price REAL,
+          unrealized_pnl REAL,
+          realized_pnl REAL,
+          notes TEXT,
+          source TEXT NOT NULL DEFAULT 'MANUAL',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          last_price_update DATETIME
         );
-
-        -- Create indexes for better performance
-        CREATE INDEX IF NOT EXISTS idx_manual_positions_main_account_id ON manual_positions(main_account_id);
-        CREATE INDEX IF NOT EXISTS idx_manual_positions_symbol ON manual_positions(symbol);
-        CREATE INDEX IF NOT EXISTS idx_manual_positions_updated ON manual_positions(last_price_update);
       `;
-      
-      db.exec(migration003);
-      console.log('✅ Migration 003 completed');
+      db.exec(createPortfolios);
 
-      // Migration 004: Cleanup unused tables
-      console.log('📊 Running migration 004: Cleanup unused tables');
-      const migration004 = `
-        -- Migration: Clean up - Remove unused investment_accounts table
-        -- Since we're using the main accounts table, we don't need the investment_accounts table
+      // Detect existing manual_positions table and migrate/rename if needed
+      const tableExistsStmt = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?");
+      const manualExists = tableExistsStmt.get('manual_positions');
+      const portfoliosExists = tableExistsStmt.get('portfolios');
 
-        -- Drop the investment_accounts table if it exists (from previous versions)
-        DROP TABLE IF EXISTS investment_accounts;
-      `;
-      
-      db.exec(migration004);
-      console.log('✅ Migration 004 completed');
-      
+      if (manualExists && portfoliosExists) {
+        const countPortfolio = db.prepare('SELECT COUNT(1) as cnt FROM portfolios').get() as any;
+        const countManual = db.prepare('SELECT COUNT(1) as cnt FROM manual_positions').get() as any;
+        if ((countPortfolio?.cnt || 0) === 0 && (countManual?.cnt || 0) > 0) {
+          console.log('🔄 Migrating data from manual_positions to portfolios...');
+          const migrateInsert = `
+            INSERT INTO portfolios (
+              id, main_account_id, symbol, sec_type, currency, country, industry, category,
+              quantity, average_cost, exchange, primary_exchange,
+              market_price, market_value, day_change, day_change_percent, close_price,
+              unrealized_pnl, notes, created_at, updated_at, last_price_update, source
+            )
+            SELECT
+              id, main_account_id, symbol, sec_type, currency, country, industry, category,
+              quantity, average_cost, exchange, primary_exchange,
+              market_price, market_value, day_change, day_change_percent, close_price,
+              unrealized_pnl, notes, created_at, updated_at, last_price_update, 'MANUAL'
+            FROM manual_positions
+          `;
+          db.exec(migrateInsert);
+          db.exec('DROP TABLE IF EXISTS manual_positions');
+          console.log('✅ Migration from manual_positions completed and legacy table dropped');
+        }
+      } else if (manualExists && !portfoliosExists) {
+        // Fallback: rename legacy table if portfolios did not exist for some reason
+        try {
+          console.log('🔁 Renaming manual_positions to portfolios...');
+          db.exec('ALTER TABLE manual_positions RENAME TO portfolios');
+          db.exec("ALTER TABLE portfolios ADD COLUMN con_id INTEGER");
+          db.exec("ALTER TABLE portfolios ADD COLUMN realized_pnl REAL");
+          db.exec("ALTER TABLE portfolios ADD COLUMN source TEXT NOT NULL DEFAULT 'MANUAL'");
+          console.log('✅ Legacy table renamed and columns added');
+        } catch (err) {
+          console.error('❌ Error renaming manual_positions to portfolios:', err);
+        }
+      }
+
+      // Ensure required columns exist (idempotent)
+      const cols = db.prepare("PRAGMA table_info(portfolios)").all() as any[];
+      const names = new Set(cols.map(c => c.name));
+      if (!names.has('con_id')) db.exec("ALTER TABLE portfolios ADD COLUMN con_id INTEGER");
+      if (!names.has('realized_pnl')) db.exec("ALTER TABLE portfolios ADD COLUMN realized_pnl REAL");
+      if (!names.has('source')) db.exec("ALTER TABLE portfolios ADD COLUMN source TEXT NOT NULL DEFAULT 'MANUAL'");
+
+      // Create indexes for performance
+      db.exec("CREATE INDEX IF NOT EXISTS idx_portfolios_main_account_id ON portfolios(main_account_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_portfolios_symbol ON portfolios(symbol)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_portfolios_updated ON portfolios(last_price_update)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_portfolios_source ON portfolios(source)");
+
+      // Cleanup: remove unused legacy table if present
+      db.exec("DROP TABLE IF EXISTS investment_accounts");
+
+      console.log('✅ Portfolios table initialized');
     } catch (error) {
-      console.error('❌ Error running migrations:', error);
+      console.error('❌ Error initializing portfolios:', error);
     }
-    
-    console.log('✅ Manual investment accounts database initialized');
   }
 
 
@@ -171,8 +210,8 @@ export class ManualInvestmentService {
   static getManualPositions(mainAccountId: number): ManualPosition[] {
     const db = this.getDatabase();
     const stmt = db.prepare(`
-      SELECT * FROM manual_positions 
-      WHERE main_account_id = ? 
+      SELECT * FROM portfolios
+      WHERE main_account_id = ? AND source = 'MANUAL'
       ORDER BY symbol
     `);
     
@@ -187,7 +226,8 @@ export class ManualInvestmentService {
   static getAllManualPositions(userId: string = 'default'): ManualPosition[] {
     const db = this.getDatabase();
     const stmt = db.prepare(`
-      SELECT * FROM manual_positions 
+      SELECT * FROM portfolios
+      WHERE source = 'MANUAL'
       ORDER BY main_account_id, symbol
     `);
     
@@ -203,10 +243,10 @@ export class ManualInvestmentService {
     
     const db = this.getDatabase();
     const stmt = db.prepare(`
-      INSERT INTO manual_positions (
+      INSERT INTO portfolios (
         main_account_id, symbol, sec_type, currency, country, industry, category,
-        quantity, average_cost, exchange, primary_exchange, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        quantity, average_cost, exchange, primary_exchange, notes, source
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     try {
@@ -222,13 +262,14 @@ export class ManualInvestmentService {
         position.averageCost,
         position.exchange,
         position.primaryExchange,
-        position.notes
+        position.notes,
+        'MANUAL'
       );
       
       console.log('✅ Position inserted with ID:', result.lastInsertRowid);
       
       // Return the created position
-      const getStmt = db.prepare('SELECT * FROM manual_positions WHERE id = ?');
+      const getStmt = db.prepare('SELECT * FROM portfolios WHERE id = ?');
       const rawPosition = getStmt.get(result.lastInsertRowid) as any;
       const createdPosition = this.mapDatabaseToPosition(rawPosition);
       console.log('📊 Created position:', createdPosition);
@@ -262,6 +303,9 @@ export class ManualInvestmentService {
       dayChangePercent: 'day_change_percent',
       closePrice: 'close_price',
       unrealizedPnl: 'unrealized_pnl',
+      realizedPnl: 'realized_pnl',
+      conId: 'con_id',
+      source: 'source',
       lastPriceUpdate: 'last_price_update'
     };
     
@@ -279,8 +323,8 @@ export class ManualInvestmentService {
     }
     
     const stmt = db.prepare(`
-      UPDATE manual_positions 
-      SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP 
+      UPDATE portfolios
+      SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
     
@@ -293,7 +337,7 @@ export class ManualInvestmentService {
    */
   static deleteManualPosition(positionId: number): boolean {
     const db = this.getDatabase();
-    const stmt = db.prepare('DELETE FROM manual_positions WHERE id = ?');
+    const stmt = db.prepare('DELETE FROM portfolios WHERE id = ?');
     const result = stmt.run(positionId);
     return result.changes > 0;
   }
@@ -318,8 +362,8 @@ export class ManualInvestmentService {
     let failed = 0;
 
     const updateStmt = db.prepare(`
-      UPDATE manual_positions 
-      SET 
+      UPDATE portfolios
+      SET
         market_price = ?,
         market_value = ?,
         day_change = ?,
@@ -365,7 +409,7 @@ export class ManualInvestmentService {
    */
   static async updatePositionMarketData(positionId: number): Promise<boolean> {
     const db = this.getDatabase();
-    const getStmt = db.prepare('SELECT * FROM manual_positions WHERE id = ?');
+    const getStmt = db.prepare('SELECT * FROM portfolios WHERE id = ?');
     const position = getStmt.get(positionId) as ManualPosition;
     
     if (!position) {
@@ -383,8 +427,8 @@ export class ManualInvestmentService {
     const dayChange = marketData.dayChange * position.quantity;
 
     const updateStmt = db.prepare(`
-      UPDATE manual_positions 
-      SET 
+      UPDATE portfolios
+      SET
         market_price = ?,
         market_value = ?,
         day_change = ?,
@@ -439,14 +483,15 @@ export class ManualInvestmentService {
   } {
     const db = this.getDatabase();
     const stmt = db.prepare(`
-      SELECT 
+      SELECT
         COUNT(mp.id) as position_count,
         COUNT(DISTINCT mp.main_account_id) as account_count,
         COALESCE(SUM(mp.market_value), 0) as total_value,
         COALESCE(SUM(mp.average_cost * mp.quantity), 0) as total_cost,
         COALESCE(SUM(mp.unrealized_pnl), 0) as total_unrealized_pnl,
         COALESCE(SUM(mp.day_change), 0) as total_day_change
-      FROM manual_positions mp
+      FROM portfolios mp
+      WHERE mp.source = 'MANUAL'
     `);
     
     const result = stmt.get() as any;

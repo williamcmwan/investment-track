@@ -216,12 +216,6 @@ export class IBService {
   private static getCachedPortfolio(): PortfolioPosition[] | null {
     console.log('getCachedPortfolio called');
 
-    // Load from file if not in memory
-    if (!this.portfolioCache) {
-      console.log('Memory cache empty, trying to load from file:', this.PORTFOLIO_CACHE_FILE);
-      this.portfolioCache = this.loadCacheFromFile<PortfolioPosition[]>(this.PORTFOLIO_CACHE_FILE);
-    }
-
     // Always return cached data if available (never remove cache)
     if (this.portfolioCache) {
       const cacheAge = Date.now() - this.portfolioCache.timestamp;
@@ -229,7 +223,7 @@ export class IBService {
       return this.portfolioCache.data;
     }
 
-    console.log('No cached portfolio found');
+    console.log('No cached portfolio found in memory');
     return null;
   }
 
@@ -239,9 +233,100 @@ export class IBService {
       timestamp: Date.now(),
       isRefreshing: false
     };
-    // Save to file for persistence
-    this.saveCacheToFile(this.PORTFOLIO_CACHE_FILE, this.portfolioCache);
-    console.log('Portfolio cached in memory and file');
+    console.log('Portfolio cached in memory');
+  }
+
+  // Persist IB portfolio to DB (source = 'IB') for a given main account
+  private static async savePortfolioToDB(mainAccountId: number, positions: PortfolioPosition[]): Promise<void> {
+    try {
+      const { dbRun } = await import('../database/connection.js');
+      // Ensure unified portfolios table exists via ManualInvestmentService init path (already called at boot)
+      // Replace existing IB records for this account
+      await dbRun('DELETE FROM portfolios WHERE source = ? AND main_account_id = ?', ['IB', mainAccountId]);
+
+      const insertSql = `
+        INSERT INTO portfolios (
+          main_account_id, symbol, sec_type, currency, country, industry, category,
+          quantity, average_cost, exchange, primary_exchange, con_id,
+          market_price, market_value, day_change, day_change_percent, close_price,
+          unrealized_pnl, realized_pnl, notes, source, last_price_update, updated_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `;
+
+      for (const p of positions) {
+        await dbRun(insertSql, [
+          mainAccountId,
+          p.symbol || '',
+          p.secType || '',
+          p.currency || 'USD',
+          p.country || null,
+          p.industry || null,
+          p.category || null,
+          // quantity from IB 'position'
+          p.position ?? 0,
+          p.averageCost ?? 0,
+          p.exchange || null,
+          p.primaryExchange || null,
+          p.conId || null,
+          p.marketPrice ?? null,
+          p.marketValue ?? null,
+          p.dayChange ?? null,
+          p.dayChangePercent ?? null,
+          p.closePrice ?? null,
+          p.unrealizedPNL ?? null,
+          p.realizedPNL ?? null,
+          null, // notes
+          'IB'
+        ]);
+      }
+      console.log(`💾 Saved ${positions.length} IB portfolio rows to DB for account ${mainAccountId}`);
+    } catch (e) {
+      console.error('❌ Failed to save IB portfolio to DB:', e);
+    }
+  }
+
+  // Load IB portfolio from DB; if mainAccountId provided, filter by it
+  private static async loadPortfolioFromDB(mainAccountId?: number | null): Promise<PortfolioPosition[]> {
+    try {
+      const { dbAll } = await import('../database/connection.js');
+      let rows: any[];
+      if (mainAccountId != null) {
+        rows = await dbAll(
+          'SELECT * FROM portfolios WHERE source = ? AND main_account_id = ? ORDER BY symbol',
+          ['IB', mainAccountId]
+        );
+      } else {
+        rows = await dbAll(
+          'SELECT * FROM portfolios WHERE source = ? ORDER BY main_account_id, symbol',
+          ['IB']
+        );
+      }
+      const positions: PortfolioPosition[] = rows.map((row: any) => ({
+        symbol: row.symbol,
+        secType: row.sec_type,
+        currency: row.currency,
+        position: row.quantity,
+        averageCost: row.average_cost,
+        marketPrice: row.market_price || 0,
+        marketValue: row.market_value || 0,
+        unrealizedPNL: row.unrealized_pnl || 0,
+        realizedPNL: row.realized_pnl || 0,
+        exchange: row.exchange || undefined,
+        primaryExchange: row.primary_exchange || undefined,
+        conId: row.con_id || undefined,
+        industry: row.industry || undefined,
+        category: row.category || undefined,
+        country: row.country || undefined,
+        closePrice: row.close_price || undefined,
+        dayChange: row.day_change || undefined,
+        dayChangePercent: row.day_change_percent || undefined
+      }));
+      console.log(`📥 Loaded ${positions.length} IB portfolio rows from DB${mainAccountId != null ? ' for account ' + mainAccountId : ''}`);
+      return positions;
+    } catch (e) {
+      console.error('❌ Failed to load IB portfolio from DB:', e);
+      return [];
+    }
   }
 
   // Force cancel all known subscriptions (use if you get "maximum requests exceeded")
@@ -677,31 +762,51 @@ export class IBService {
       let lastPrice: number | null = null;
       let closePrice: number | null = null;
       let dataReceived = false;
+      let lastPriceIsZero = false;
 
       const tickPriceHandler = (reqId_: number, tickType: number, price: number, attrib: any) => {
         if (reqId_ === reqId) {
           console.log(`Bond tick data for ${position.symbol}: tickType=${tickType}, price=${price}`);
 
           if (tickType === 4) { // Last Price (current)
-            lastPrice = price;
-            console.log(`Got last price for ${position.symbol}: ${price}`);
-          } else if (tickType === 9) { // Close Price (previous day)
+            if (price > 0) {
+              lastPrice = price;
+              console.log(`Got last price for ${position.symbol}: ${price}`);
+            } else {
+              lastPriceIsZero = true;
+              console.log(`Last price reported as 0 for ${position.symbol}, will skip CHG/CHG% calculation`);
+            }
+          } else if (tickType === 9 && price > 0) { // Close Price (previous day)
             closePrice = price;
             console.log(`Got close price for ${position.symbol}: ${price}`);
-          } else if (tickType === 1 && lastPrice === null) { // Bid price as fallback for last price
+          } else if (tickType === 1 && lastPrice === null && price > 0) { // Bid price as fallback for last price
             lastPrice = price;
             console.log(`Using bid price as last price for ${position.symbol}: ${price}`);
-          } else if (tickType === 2 && lastPrice === null) { // Ask price as fallback for last price
+          } else if (tickType === 2 && lastPrice === null && price > 0) { // Ask price as fallback for last price
             lastPrice = price;
             console.log(`Using ask price as last price for ${position.symbol}: ${price}`);
           }
 
-          // If we have both prices, calculate and return
+          // If we have both prices, decide whether to calculate and return
           if (lastPrice !== null && closePrice !== null && !dataReceived) {
             dataReceived = true;
             clearTimeout(timeout);
             this.ibApi!.removeListener('tickPrice' as any, tickPriceHandler);
             this.ibApi!.cancelMktData(reqId);
+
+            // Do not calculate CHG/CHG% when lastPrice is 0 or non-positive
+            if (lastPriceIsZero || lastPrice <= 0) {
+              console.log(`Skipping CHG/CHG% for bond ${position.symbol} because lastPrice=0 or non-positive (lastPrice=${lastPrice})`);
+              resolve(null);
+              return;
+            }
+
+            // Also skip if closePrice is non-positive to avoid invalid % calculations
+            if (closePrice <= 0) {
+              console.log(`Skipping CHG/CHG% for bond ${position.symbol}: closePrice=${closePrice} (non-positive)`);
+              resolve(null);
+              return;
+            }
 
             const dayChange = (lastPrice - closePrice) * position.position;
             const dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
@@ -851,24 +956,37 @@ export class IBService {
   }
 
   // Public method with caching (requires user settings)
-  static async getPortfolio(userSettings: { host: string; port: number; client_id: number }): Promise<PortfolioPosition[]> {
+  static async getPortfolio(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<PortfolioPosition[]> {
     console.log('📈 getPortfolio called');
 
-    // Return cached data if available (always return cache, never remove it)
+    // Return cached data if available
     const cached = this.getCachedPortfolio();
     if (cached) {
-      console.log('✅ Using cached portfolio data');
-      // Start background refresh if cache is older than 30 minutes
+      console.log('✅ Using cached portfolio data (memory)');
       if (this.shouldAutoRefresh(this.portfolioCache)) {
         console.log('Starting background refresh for portfolio (30+ minutes old)');
-        this.refreshPortfolioBackground(userSettings).catch(console.error);
+        this.refreshPortfolioBackground(userSettings as any).catch(console.error);
       }
       return cached;
     }
 
-    // No cache available, fetch fresh data and save to cache
-    console.log('❌ No cached portfolio available, fetching fresh data');
-    const freshData = await this.fetchPortfolioFresh(userSettings);
+    // Attempt to load from DB first (primary persistence)
+    const mainAccountId = (userSettings as any)?.target_account_id ?? null;
+    const dbData = await this.loadPortfolioFromDB(mainAccountId);
+    if (dbData.length > 0) {
+      this.setCachedPortfolio(dbData);
+      console.log('✅ Using portfolio data from DB');
+      // Background refresh if DB data is stale
+      if (this.shouldAutoRefresh(this.portfolioCache)) {
+        console.log('Starting background refresh for portfolio (DB data considered stale by policy)');
+        this.refreshPortfolioBackground(userSettings as any).catch(console.error);
+      }
+      return dbData;
+    }
+
+    // No DB data, fetch fresh from IB, persist to DB, and cache in memory
+    console.log('❌ No DB portfolio available, fetching fresh data from IB');
+    const freshData = await this.fetchPortfolioFresh(userSettings as any);
     this.setCachedPortfolio(freshData);
     return freshData;
   }
@@ -906,6 +1024,7 @@ export class IBService {
       }
 
       this.portfolioPositions = [];
+      const mainAccountId = (userSettings as any)?.target_account_id ?? null;
 
       return new Promise((resolve, reject) => {
         let isResolved = false;
@@ -915,7 +1034,7 @@ export class IBService {
             cleanup();
             reject(new Error('Timeout waiting for portfolio data'));
           }
-        }, 15000);
+        }, 30000);
 
         const cleanup = () => {
           if (isResolved) return;
@@ -981,6 +1100,8 @@ export class IBService {
 
         const downloadEndHandler = async (accountName: string) => {
           if (!isResolved) {
+            // Stop the initial wait timer now that account data download ended
+            clearTimeout(timeout);
             // Fetch contract details and market data for each position
             const enrichedPositions = await Promise.all(
               this.portfolioPositions.map(async (position) => {
@@ -1084,6 +1205,20 @@ export class IBService {
               })
             );
 
+            // Persist to DB if we have a target account to associate with
+            try {
+              if (typeof (mainAccountId) === 'number') {
+                await this.savePortfolioToDB(mainAccountId, enrichedPositions);
+              } else {
+                console.warn('⚠️ No target_account_id provided; skipping DB persist for IB portfolio');
+              }
+            } catch (e) {
+              console.error('❌ Error persisting IB portfolio to DB:', e);
+            }
+
+            // Update in-memory cache
+            this.setCachedPortfolio(enrichedPositions);
+
             cleanup();
             resolve(enrichedPositions);
           }
@@ -1102,7 +1237,7 @@ export class IBService {
   }
 
   // Combined method for frontend (returns cached data immediately, refreshes in background)
-  static async getAccountData(userSettings: { host: string; port: number; client_id: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
+  static async getAccountData(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
     const [balance, portfolio] = await Promise.all([
       this.getAccountBalance(userSettings),
       this.getPortfolio(userSettings)

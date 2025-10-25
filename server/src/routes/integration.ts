@@ -40,12 +40,14 @@ router.post('/ib/settings', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Host, port, and client ID are required' });
     }
     
-    await IBConnectionService.saveUserIBSettings(userId, {
+    const parsedTarget = target_account_id === 'none' ? undefined : parseInt(target_account_id);
+    const settings = {
       host,
       port: parseInt(port),
       client_id: parseInt(client_id),
-      target_account_id: target_account_id === "none" ? undefined : parseInt(target_account_id)
-    });
+      ...(parsedTarget !== undefined ? { target_account_id: parsedTarget } : {})
+    };
+    await IBConnectionService.saveUserIBSettings(userId, settings);
     
     res.json({ success: true, message: 'IB settings saved successfully' });
   } catch (error) {
@@ -197,10 +199,18 @@ router.get('/ib/cache-status', authenticateToken, async (req, res) => {
 router.get('/ib/test-cache', authenticateToken, async (req, res) => {
   try {
     console.log('🧪 Testing cache loading...');
-    const balance = await IBService.getAccountBalance();
-    const portfolio = await IBService.getPortfolio();
-    res.json({ 
-      balance, 
+    const userId = (req as any).user.id;
+
+    // Get user's IB settings
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    if (!userSettings) {
+      return res.status(400).json({ error: 'IB connection not configured. Please configure your IB settings first.' });
+    }
+
+    const balance = await IBService.getAccountBalance(userSettings);
+    const portfolio = await IBService.getPortfolio(userSettings);
+    res.json({
+      balance,
       portfolio,
       cacheStatus: IBService.getCacheStatus()
     });

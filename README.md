@@ -201,7 +201,7 @@ Users can manually add and manage investment positions with real-time market dat
 6. **Refresh Data**: Use "Refresh Market Data" to update all positions
 
 #### Technical Implementation:
-- **Database Integration**: Uses existing account structure with `manual_positions` table
+- **Database Integration**: Uses unified `portfolios` table with `source` column ('MANUAL' or 'IB'); legacy `manual_positions` auto-migrated on startup
 - **Yahoo Finance API**: Real-time market data integration
 - **Field Mapping**: Robust camelCase to snake_case database column mapping
 - **Error Handling**: Comprehensive validation and error reporting
@@ -561,6 +561,7 @@ For issues and questions:
 - ✅ **Interactive Brokers Integration**: Real IB API implementation using `@stoqey/ib`
 - ✅ **User-Configurable IB Settings**: Per-user IB connection configuration with account selection
 - ✅ **Enhanced Portfolio Data**: Day change tracking for stocks, crypto, and bonds using real IB data
+- ✅ Unified portfolios storage: migrated legacy `manual_positions` to unified `portfolios` table; IB portfolio persisted and served from DB; deprecated JSON portfolio cache for portfolios
 - ✅ **IB Configuration Dialog**: User-friendly setup interface with validation and account selection
 - ✅ **Multi-Security Support**: Optimized data retrieval for stocks (historical), crypto (24/7), and bonds (market ticks)
 - ✅ **Manual Investment Accounts**: Add and manage investment positions manually with Yahoo Finance integration
