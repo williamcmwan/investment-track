@@ -5,6 +5,7 @@ import { ExchangeRateService } from './exchangeRateService.js';
 import { ManualInvestmentService } from './manualInvestmentService.js';
 import { IBService } from './ibService.js';
 import { LastUpdateService } from './lastUpdateService.js';
+import { IBConnectionService } from './ibConnectionService.js';
 
 export class SchedulerService {
   private static isRunning = false;
@@ -181,6 +182,7 @@ export class SchedulerService {
   private static async refreshAllData() {
     try {
       console.log(`[${new Date().toISOString()}] 🔄 Starting automatic data refresh sequence...`);
+      const refreshStartTime = Date.now();
       
       // Step 1: Refresh Currency Exchange Rates
       console.log('📈 Step 1/3: Refreshing currency exchange rates...');
@@ -199,10 +201,41 @@ export class SchedulerService {
       // Step 2: Refresh IB Portfolio Data
       console.log('📊 Step 2/3: Refreshing IB portfolio data...');
       try {
-        // Note: IB refresh requires user-specific connection settings
-        // For now, we'll skip automatic IB refresh as it requires user credentials
-        // This can be enhanced later to store encrypted connection settings per user
-        console.log('⚠️ IB portfolio refresh skipped (requires user-specific credentials)');
+        // Get all users and check if they have IB settings configured
+        const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+        let ibRefreshCount = 0;
+        let ibSkippedCount = 0;
+        
+        for (const user of users) {
+          try {
+            // Check if user has IB settings configured
+            const userIBSettings = await IBConnectionService.getUserIBSettings(user.id);
+            
+            if (userIBSettings) {
+              console.log(`🔄 Refreshing IB data for user: ${user.name} (${user.email})`);
+              
+              // Refresh both balance and portfolio for this user
+              await IBService.forceRefreshAccountBalance(userIBSettings);
+              await IBService.forceRefreshPortfolio(userIBSettings);
+              
+              ibRefreshCount++;
+              console.log(`✅ IB data refreshed for user: ${user.name}`);
+            } else {
+              ibSkippedCount++;
+              console.log(`⏭️ Skipping IB refresh for ${user.name} (no IB settings configured)`);
+            }
+          } catch (userError) {
+            console.error(`❌ Failed to refresh IB data for user ${user.name}:`, userError);
+            ibSkippedCount++;
+          }
+        }
+        
+        if (ibRefreshCount > 0) {
+          LastUpdateService.updateIBPortfolioTime();
+          console.log(`✅ IB portfolio data refreshed for ${ibRefreshCount} users, ${ibSkippedCount} skipped`);
+        } else {
+          console.log(`⚠️ No users have IB settings configured - IB refresh skipped for all ${ibSkippedCount} users`);
+        }
       } catch (error) {
         console.error('❌ Failed to refresh IB portfolio data:', error);
       }
@@ -217,7 +250,9 @@ export class SchedulerService {
         console.error('❌ Failed to refresh manual investment market data:', error);
       }
 
-      console.log(`[${new Date().toISOString()}] ✅ Automatic data refresh sequence completed`);
+      const refreshEndTime = Date.now();
+      const totalDuration = refreshEndTime - refreshStartTime;
+      console.log(`[${new Date().toISOString()}] ✅ Automatic data refresh sequence completed in ${totalDuration}ms`);
       
     } catch (error) {
       console.error('❌ Error in automatic data refresh sequence:', error);
