@@ -640,14 +640,20 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                     sum + convertToHKD(pos.marketValue, pos.currency), 0
                                 );
                                 
-                                const totalCostBasisHKD = positions.reduce((sum, pos) => {
-                                    const costBasis = (pos.marketValue || 0) - (pos.unrealizedPnl || 0);
-                                    return sum + convertToHKD(costBasis, pos.currency);
+                                // Calculate total previous close value in HKD
+                                // Previous Close Value = closePrice * quantity (converted to HKD)
+                                const totalPreviousCloseValueHKD = positions.reduce((sum, pos) => {
+                                    const closePrice = pos.closePrice || 0;
+                                    const quantity = pos.quantity || 0;
+                                    const previousCloseValue = closePrice * quantity;
+                                    return sum + convertToHKD(previousCloseValue, pos.currency);
                                 }, 0);
                                 
+                                // Chg % = (Current Market Value / Previous Close Value - 1) * 100
+                                // This matches your formula: Sum[(Previous Close + Chg)*Qty*Rate] / Sum[Previous Close*Qty*Rate] - 1
                                 const totalDayChangePercent = (() => {
-                                    if (!totalCostBasisHKD || totalCostBasisHKD <= 0) return 0;
-                                    const percentage = (totalDayChangeHKD / totalCostBasisHKD) * 100;
+                                    if (!totalPreviousCloseValueHKD || totalPreviousCloseValueHKD <= 0) return 0;
+                                    const percentage = ((totalMarketValueHKD / totalPreviousCloseValueHKD) - 1) * 100;
                                     return isFinite(percentage) ? percentage : 0;
                                 })();
                                 
