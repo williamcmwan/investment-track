@@ -34,6 +34,21 @@ router.get('/last-update', async (req, res) => {
   }
 });
 
+// Get comprehensive last update times for all data types (public endpoint)
+router.get('/all-last-updates', async (req, res) => {
+  try {
+    const { LastUpdateService } = await import('../services/lastUpdateService.js');
+    const allUpdates = LastUpdateService.getAllLastUpdateTimes();
+    return res.json({
+      ...allUpdates,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Get all last update times error:', error);
+    return res.status(500).json({ error: 'Failed to get last update times' });
+  }
+});
+
 // Get exchange rate for a specific pair (public endpoint - no auth required)
 router.get('/public-rate/:pair', async (req, res) => {
   try {

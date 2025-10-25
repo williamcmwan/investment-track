@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import * as path from 'path';
 import * as fs from 'fs';
 import { YahooFinanceService, MarketData } from './yahooFinanceService';
+import { LastUpdateService } from './lastUpdateService.js';
 
 
 
@@ -515,6 +516,7 @@ export class ManualInvestmentService {
     
     // Update last refresh time
     this.lastRefreshTime = Date.now();
+    LastUpdateService.updateManualInvestmentsTime();
     
     console.log(`✅ Updated market data: ${updated} successful, ${failed} failed in ${duration}ms`);
     return { updated, failed };

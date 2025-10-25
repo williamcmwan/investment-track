@@ -88,6 +88,11 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
         nextAutoRefresh: string | null;
         autoRefreshEnabled: boolean;
     } | null>(null);
+    const [allLastUpdateTimes, setAllLastUpdateTimes] = useState<{
+        currency: string | null;
+        ibPortfolio: string | null;
+        manualInvestments: string | null;
+    } | null>(null);
 
     // Dialog states
     const [positionDialogOpen, setPositionDialogOpen] = useState(false);
@@ -131,9 +136,13 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
     useEffect(() => {
         loadPositions();
         loadRefreshStatus();
+        loadAllLastUpdateTimes();
         
         // Set up interval to update refresh status every minute
-        const statusInterval = setInterval(loadRefreshStatus, 60000);
+        const statusInterval = setInterval(() => {
+            loadRefreshStatus();
+            loadAllLastUpdateTimes();
+        }, 60000);
         
         return () => clearInterval(statusInterval);
     }, []);
@@ -146,6 +155,17 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
             }
         } catch (error) {
             console.error('Error loading refresh status:', error);
+        }
+    };
+
+    const loadAllLastUpdateTimes = async () => {
+        try {
+            const response = await apiClient.getAllLastUpdateTimes();
+            if (response.data) {
+                setAllLastUpdateTimes(response.data);
+            }
+        } catch (error) {
+            console.error('Error loading all last update times:', error);
         }
     };
 
@@ -299,6 +319,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                 });
                 await loadPositions();
                 await loadRefreshStatus(); // Update refresh status
+                await loadAllLastUpdateTimes(); // Update all last update times
             } else {
                 setError(response.error || 'Failed to refresh market data');
             }
@@ -538,9 +559,9 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                         <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                         Refresh Market Data
                     </Button>
-                    {refreshStatus && refreshStatus.lastRefreshTime && (
+                    {allLastUpdateTimes && allLastUpdateTimes.manualInvestments && (
                         <p className="text-xs text-muted-foreground">
-                            Last updated: {new Date(refreshStatus.lastRefreshTime).toLocaleString()}
+                            Last updated: {new Date(allLastUpdateTimes.manualInvestments).toLocaleString()}
                         </p>
                     )}
                 </div>

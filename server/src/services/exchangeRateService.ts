@@ -1,4 +1,5 @@
 import { dbRun, dbGet, dbAll } from '../database/connection.js';
+import { LastUpdateService } from './lastUpdateService.js';
 
 interface ExchangeRate {
   pair: string;
@@ -260,6 +261,7 @@ export class ExchangeRateService {
       }
 
       console.log(`Updated ${pairs.length} currency pairs with Yahoo Finance data`);
+      LastUpdateService.updateCurrencyTime();
     } catch (error) {
       console.error('Error updating currency pairs:', error);
       throw error;

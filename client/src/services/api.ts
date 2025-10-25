@@ -428,6 +428,26 @@ class ApiClient {
   async getMarketDataForSymbol(symbol: string) {
     return this.request<any>(`/manual-investments/market-data/${encodeURIComponent(symbol)}`);
   }
+
+  // Last update times endpoints
+  async getAllLastUpdateTimes() {
+    return this.request<{
+      currency: string | null;
+      ibPortfolio: string | null;
+      manualInvestments: string | null;
+      currencyTimestamp: number | null;
+      ibPortfolioTimestamp: number | null;
+      manualInvestmentsTimestamp: number | null;
+      timestamp: string;
+    }>('/currencies/all-last-updates');
+  }
+
+  async getCurrencyLastUpdate() {
+    return this.request<{
+      lastUpdate: string | null;
+      timestamp: string;
+    }>('/currencies/last-update');
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

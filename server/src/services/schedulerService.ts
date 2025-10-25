@@ -1,9 +1,14 @@
 import cron from 'node-cron';
 import { PerformanceHistoryService } from './performanceHistoryService.js';
 import { dbAll } from '../database/connection.js';
+import { ExchangeRateService } from './exchangeRateService.js';
+import { ManualInvestmentService } from './manualInvestmentService.js';
+import { IBService } from './ibService.js';
+import { LastUpdateService } from './lastUpdateService.js';
 
 export class SchedulerService {
   private static isRunning = false;
+  private static dataRefreshTask: cron.ScheduledTask | null = null;
 
   /**
    * Initialize the scheduler service
@@ -16,6 +21,9 @@ export class SchedulerService {
 
     console.log('🚀 Initializing scheduler service...');
     
+    // Initialize last update service
+    LastUpdateService.initialize();
+    
     // Schedule daily performance calculation at 11:59 PM Dublin time
     // Dublin time is GMT+0 (standard time) or GMT+1 (daylight saving time)
     // Using '59 23 * * *' for 11:59 PM server time
@@ -26,20 +34,30 @@ export class SchedulerService {
       timezone: 'Europe/Dublin'
     });
 
+    // Schedule automatic data refresh every 30 minutes
+    // Sequence: Currency -> IB Portfolio -> Other Portfolio (Manual Investments)
+    this.dataRefreshTask = cron.schedule('*/30 * * * *', async () => {
+      await this.refreshAllData();
+    });
+
     // Also schedule a test task that runs every minute (for development/testing)
     // Remove this in production
     if (process.env.NODE_ENV === 'development') {
       cron.schedule('* * * * *', () => {
-        console.log(`[${new Date().toISOString()}] Scheduler is running... Next daily calculation: 11:59 PM Dublin time`);
+        console.log(`[${new Date().toISOString()}] Scheduler is running... Next daily calculation: 11:59 PM Dublin time, Next data refresh: every 30 minutes`);
       });
     }
 
     this.isRunning = true;
     console.log('✅ Scheduler service initialized');
     console.log('📅 Daily performance snapshots will be calculated at 11:59 PM Dublin time');
+    console.log('🔄 Data refresh (Currency -> IB -> Manual) will run every 30 minutes');
     
     // Calculate today's snapshot immediately if it doesn't exist
     this.calculateTodayIfMissing();
+    
+    // Run initial data refresh
+    this.refreshAllData();
   }
 
   /**
@@ -54,6 +72,11 @@ export class SchedulerService {
     cron.getTasks().forEach(task => {
       task.stop();
     });
+
+    if (this.dataRefreshTask) {
+      this.dataRefreshTask.stop();
+      this.dataRefreshTask = null;
+    }
 
     this.isRunning = false;
     console.log('🛑 Scheduler service stopped');
@@ -145,6 +168,63 @@ export class SchedulerService {
   }
 
   /**
+   * Manually trigger data refresh (for testing or manual refresh)
+   */
+  static async triggerDataRefresh() {
+    console.log('Manually triggering data refresh...');
+    await this.refreshAllData();
+  }
+
+  /**
+   * Refresh all data in sequence: Currency -> IB Portfolio -> Manual Investments
+   */
+  private static async refreshAllData() {
+    try {
+      console.log(`[${new Date().toISOString()}] 🔄 Starting automatic data refresh sequence...`);
+      
+      // Step 1: Refresh Currency Exchange Rates
+      console.log('📈 Step 1/3: Refreshing currency exchange rates...');
+      try {
+        // Get all users to refresh their currency pairs
+        const users = await dbAll('SELECT id FROM users') as Array<{id: number}>;
+        for (const user of users) {
+          await ExchangeRateService.updateAllCurrencyPairs(user.id);
+        }
+        LastUpdateService.updateCurrencyTime();
+        console.log('✅ Currency exchange rates refreshed successfully');
+      } catch (error) {
+        console.error('❌ Failed to refresh currency exchange rates:', error);
+      }
+
+      // Step 2: Refresh IB Portfolio Data
+      console.log('📊 Step 2/3: Refreshing IB portfolio data...');
+      try {
+        // Note: IB refresh requires user-specific connection settings
+        // For now, we'll skip automatic IB refresh as it requires user credentials
+        // This can be enhanced later to store encrypted connection settings per user
+        console.log('⚠️ IB portfolio refresh skipped (requires user-specific credentials)');
+      } catch (error) {
+        console.error('❌ Failed to refresh IB portfolio data:', error);
+      }
+
+      // Step 3: Refresh Manual Investment Market Data
+      console.log('💼 Step 3/3: Refreshing manual investment market data...');
+      try {
+        await ManualInvestmentService.updateAllMarketData('default');
+        LastUpdateService.updateManualInvestmentsTime();
+        console.log('✅ Manual investment market data refreshed successfully');
+      } catch (error) {
+        console.error('❌ Failed to refresh manual investment market data:', error);
+      }
+
+      console.log(`[${new Date().toISOString()}] ✅ Automatic data refresh sequence completed`);
+      
+    } catch (error) {
+      console.error('❌ Error in automatic data refresh sequence:', error);
+    }
+  }
+
+  /**
    * Get scheduler status
    */
   static getStatus() {
@@ -152,7 +232,9 @@ export class SchedulerService {
     return {
       isRunning: this.isRunning,
       tasks: Object.keys(tasks).length,
-      nextRun: '11:59 PM Dublin time daily'
+      nextRun: '11:59 PM Dublin time daily',
+      dataRefreshInterval: '30 minutes',
+      lastDataRefresh: new Date().toISOString()
     };
   }
 }

@@ -188,6 +188,25 @@ router.get('/refresh-status', async (req, res) => {
 });
 
 /**
+ * GET /api/manual-investments/all-last-updates
+ * Get comprehensive last update times for all data types
+ */
+router.get('/all-last-updates', async (req, res) => {
+  try {
+    const { LastUpdateService } = await import('../services/lastUpdateService.js');
+    const allUpdates = LastUpdateService.getAllLastUpdateTimes();
+    
+    res.json({
+      ...allUpdates,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error getting all last update times:', error);
+    res.status(500).json({ error: 'Failed to get last update times' });
+  }
+});
+
+/**
  * GET /api/manual-investments/summary
  * Get portfolio summary for manual accounts
  */

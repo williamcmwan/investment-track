@@ -41,6 +41,7 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
   const [editingCurrency, setEditingCurrency] = useState<CurrencyPair | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [popularPairs, setPopularPairs] = useState<string[]>([]);
+  const [lastUpdateTime, setLastUpdateTime] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Form state for adding new currency pair
@@ -60,6 +61,7 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
   useEffect(() => {
     loadCurrencies();
     loadPopularPairs();
+    loadLastUpdateTime();
   }, []);
 
   const loadCurrencies = async () => {
@@ -99,6 +101,17 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
     }
   };
 
+  const loadLastUpdateTime = async () => {
+    try {
+      const response = await apiClient.getAllLastUpdateTimes();
+      if (response.data) {
+        setLastUpdateTime(response.data.currency);
+      }
+    } catch (error) {
+      console.error('Error loading last update time:', error);
+    }
+  };
+
   const handleAddCurrencyPair = async () => {
     if (!newPair.pair || !newPair.avgCost || !newPair.amount) {
       toast({
@@ -124,6 +137,7 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
         });
         handleDialogClose();
         loadCurrencies(); // Reload the list
+        loadLastUpdateTime(); // Reload last update time
       } else {
         toast({
           title: "Error",
@@ -329,13 +343,14 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
     <div className="space-y-6">
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-    <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-      <DialogTrigger asChild>
-        <Button className="bg-gradient-primary hover:opacity-90 transition-smooth">
-          <PlusCircle className="h-4 w-4 mr-2" />
-          Add Currency Pair
-        </Button>
-      </DialogTrigger>
+    <div className="flex flex-col items-start gap-1">
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogTrigger asChild>
+          <Button className="bg-gradient-primary hover:opacity-90 transition-smooth">
+            <PlusCircle className="h-4 w-4 mr-2" />
+            Add Currency Pair
+          </Button>
+        </DialogTrigger>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
           <DialogTitle className="text-foreground">Add Currency Exchange</DialogTitle>
@@ -398,6 +413,12 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+      {lastUpdateTime && (
+        <p className="text-xs text-muted-foreground">
+          Last updated: {new Date(lastUpdateTime).toLocaleString()}
+        </p>
+      )}
+    </div>
       </div>
 
       {/* Summary Cards */}

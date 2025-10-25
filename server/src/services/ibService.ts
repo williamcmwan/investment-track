@@ -1,6 +1,7 @@
 import { IBApi, EventName, ErrorCode } from '@stoqey/ib';
 import * as fs from 'fs';
 import * as path from 'path';
+import { LastUpdateService } from './lastUpdateService.js';
 
 interface AccountSummary {
   balance: number;
@@ -156,6 +157,7 @@ export class IBService {
 
       const freshBalance = await this.fetchAccountBalanceFresh(userSettings);
       this.setCachedBalance(freshBalance);
+      LastUpdateService.updateIBPortfolioTime();
       console.log('✅ Background balance refresh completed');
     } catch (error) {
       console.error('❌ Background balance refresh failed:', error);
@@ -175,6 +177,7 @@ export class IBService {
 
       const freshPortfolio = await this.fetchPortfolioFresh(userSettings);
       this.setCachedPortfolio(freshPortfolio);
+      LastUpdateService.updateIBPortfolioTime();
       console.log('✅ Background portfolio refresh completed');
     } catch (error) {
       console.error('❌ Background portfolio refresh failed:', error);
@@ -611,6 +614,7 @@ export class IBService {
     console.log('Force refreshing account balance');
     const freshData = await this.fetchAccountBalanceFresh(userSettings);
     this.setCachedBalance(freshData);
+    LastUpdateService.updateIBPortfolioTime();
     return freshData;
   }
 
@@ -1041,6 +1045,7 @@ export class IBService {
     
     const freshData = await this.fetchPortfolioFresh(userSettings);
     this.setCachedPortfolio(freshData);
+    LastUpdateService.updateIBPortfolioTime();
     
     const refreshEndTime = Date.now();
     const totalDuration = refreshEndTime - refreshStartTime;
