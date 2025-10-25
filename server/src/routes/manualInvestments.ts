@@ -107,13 +107,6 @@ router.put('/positions/:id', async (req, res) => {
     const success = ManualInvestmentService.updateManualPosition(positionId, updates);
     
     if (success) {
-      // If marketPrice was manually updated, recalculate market value and P&L
-      if (updates.marketPrice) {
-        // The updateManualPosition method should handle the market value and P&L calculation
-        // We'll add this logic to the service method
-        console.log(`📊 Manual price update for position ${positionId}: ${updates.marketPrice}`);
-      }
-      
       // Update market data if symbol changed (but not if price was manually set)
       if (updates.symbol && !updates.marketPrice) {
         await ManualInvestmentService.updatePositionMarketData(positionId);

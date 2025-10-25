@@ -296,19 +296,31 @@ export class ManualInvestmentService {
   ): boolean {
     const db = this.getDatabase();
     
-    // If marketPrice is being updated, we need to recalculate market value and unrealized P&L
-    if (updates.marketPrice !== undefined) {
-      const getStmt = db.prepare('SELECT quantity, average_cost FROM portfolios WHERE id = ?');
+    // If any P&L affecting fields are being updated, recalculate market value and unrealized P&L
+    if (updates.marketPrice !== undefined || updates.quantity !== undefined || updates.averageCost !== undefined) {
+      const getStmt = db.prepare('SELECT quantity, average_cost, market_price FROM portfolios WHERE id = ?');
       const position = getStmt.get(positionId) as any;
       
       if (position) {
-        const marketValue = updates.marketPrice * position.quantity;
-        const unrealizedPnl = (updates.marketPrice - position.average_cost) * position.quantity;
+        // Use updated values if provided, otherwise use existing values
+        const quantity = updates.quantity !== undefined ? updates.quantity : position.quantity;
+        const averageCost = updates.averageCost !== undefined ? updates.averageCost : position.average_cost;
+        const marketPrice = updates.marketPrice !== undefined ? updates.marketPrice : position.market_price;
+        
+        // Recalculate market value and unrealized P&L
+        const marketValue = marketPrice * quantity;
+        const unrealizedPnl = (marketPrice - averageCost) * quantity;
         
         // Add calculated values to updates
         updates.marketValue = marketValue;
         updates.unrealizedPnl = unrealizedPnl;
-        updates.lastPriceUpdate = new Date().toISOString();
+        
+        // Update price timestamp only if market price was changed
+        if (updates.marketPrice !== undefined) {
+          updates.lastPriceUpdate = new Date().toISOString();
+        }
+        
+        console.log(`📊 Recalculated P&L for position ${positionId}: Market Value = ${marketValue}, Unrealized P&L = ${unrealizedPnl}`);
       }
     }
     
