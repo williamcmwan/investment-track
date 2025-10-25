@@ -23,7 +23,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "../services/api";
 
-
+type SortField = 'symbol' | 'secType' | 'currency' | 'quantity' | 'averageCost' | 'marketPrice' | 'pnlPercent' | 'unrealizedPnl' | 'marketValue' | 'country' | 'industry' | 'category' | 'dayChange' | 'dayChangePercent' | 'account';
+type SortDirection = 'asc' | 'desc';
 
 interface ManualPosition {
     id: number;
@@ -108,6 +109,10 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
 
     const [symbolSearchResults, setSymbolSearchResults] = useState<SymbolSearchResult[]>([]);
     const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
+
+    // Sorting state
+    const [sortField, setSortField] = useState<SortField>('symbol');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
 
 
@@ -358,6 +363,79 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
         }
     };
 
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDirection('asc');
+        }
+    };
+
+    const getSortedPositions = () => {
+        return [...positions].sort((a, b) => {
+            let aValue: any;
+            let bValue: any;
+
+            switch (sortField) {
+                case 'account':
+                    aValue = accounts.find(acc => acc.id === a.mainAccountId)?.name || '';
+                    bValue = accounts.find(acc => acc.id === b.mainAccountId)?.name || '';
+                    break;
+                case 'pnlPercent':
+                    // Calculate P&L percentage for sorting
+                    const aPnlPercent = a.marketValue && a.marketValue > 0 
+                        ? ((a.unrealizedPnl || 0) / (a.marketValue - (a.unrealizedPnl || 0))) * 100 
+                        : 0;
+                    const bPnlPercent = b.marketValue && b.marketValue > 0 
+                        ? ((b.unrealizedPnl || 0) / (b.marketValue - (b.unrealizedPnl || 0))) * 100 
+                        : 0;
+                    aValue = aPnlPercent;
+                    bValue = bPnlPercent;
+                    break;
+                case 'quantity':
+                    aValue = a.quantity || 0;
+                    bValue = b.quantity || 0;
+                    break;
+                case 'averageCost':
+                    aValue = a.averageCost || 0;
+                    bValue = b.averageCost || 0;
+                    break;
+                case 'marketPrice':
+                    aValue = a.marketPrice || 0;
+                    bValue = b.marketPrice || 0;
+                    break;
+                case 'unrealizedPnl':
+                    aValue = a.unrealizedPnl || 0;
+                    bValue = b.unrealizedPnl || 0;
+                    break;
+                case 'marketValue':
+                    aValue = a.marketValue || 0;
+                    bValue = b.marketValue || 0;
+                    break;
+                case 'dayChange':
+                    aValue = a.dayChange || 0;
+                    bValue = b.dayChange || 0;
+                    break;
+                case 'dayChangePercent':
+                    aValue = a.dayChangePercent || 0;
+                    bValue = b.dayChangePercent || 0;
+                    break;
+                default:
+                    aValue = a[sortField] || '';
+                    bValue = b[sortField] || '';
+            }
+
+            if (typeof aValue === 'string') {
+                return sortDirection === 'asc' 
+                    ? aValue.localeCompare(bValue)
+                    : bValue.localeCompare(aValue);
+            }
+
+            return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+        });
+    };
+
     const resetPositionForm = () => {
         setPositionForm({
             accountId: '',
@@ -407,6 +485,22 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
         return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
     };
 
+    const SortableHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
+        <TableHead 
+            className="cursor-pointer hover:bg-muted/50 select-none"
+            onClick={() => handleSort(field)}
+        >
+            <div className="flex items-center gap-1">
+                {children}
+                {sortField === field && (
+                    <span className="text-xs">
+                        {sortDirection === 'asc' ? '↑' : '↓'}
+                    </span>
+                )}
+            </div>
+        </TableHead>
+    );
+
     // Show loading or error state if no accounts available
     if (!accounts || accounts.length === 0) {
         return (
@@ -455,40 +549,40 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                         <TableHeader>
                             <TableRow className="text-xs sm:text-sm">
                                 <TableHead>Actions</TableHead>
-                                <TableHead>Symbol</TableHead>
-                                <TableHead>
+                                <SortableHeader field="symbol">Symbol</SortableHeader>
+                                <SortableHeader field="dayChange">
                                     <div className="text-right w-full">Chg</div>
-                                </TableHead>
-                                <TableHead>
+                                </SortableHeader>
+                                <SortableHeader field="dayChangePercent">
                                     <div className="text-right w-full">Chg %</div>
-                                </TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Account</TableHead>
-                                <TableHead>Country</TableHead>
-                                <TableHead>Industry</TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead>Curr.</TableHead>
-                                <TableHead>
+                                </SortableHeader>
+                                <SortableHeader field="secType">Type</SortableHeader>
+                                <SortableHeader field="account">Account</SortableHeader>
+                                <SortableHeader field="country">Country</SortableHeader>
+                                <SortableHeader field="industry">Industry</SortableHeader>
+                                <SortableHeader field="category">Category</SortableHeader>
+                                <SortableHeader field="currency">Curr.</SortableHeader>
+                                <SortableHeader field="quantity">
                                     <div className="text-right w-full">Qty</div>
-                                </TableHead>
-                                <TableHead>
+                                </SortableHeader>
+                                <SortableHeader field="averageCost">
                                     <div className="text-right w-full">Avg Cost</div>
-                                </TableHead>
-                                <TableHead>
+                                </SortableHeader>
+                                <SortableHeader field="marketPrice">
                                     <div className="text-right w-full">Current Price</div>
-                                </TableHead>
-                                <TableHead>
+                                </SortableHeader>
+                                <SortableHeader field="pnlPercent">
                                     <div className="text-right w-full">P&L %</div>
-                                </TableHead>
-                                <TableHead>
+                                </SortableHeader>
+                                <SortableHeader field="unrealizedPnl">
                                     <div className="text-right w-full">Unrealized P&L</div>
-                                </TableHead>
+                                </SortableHeader>
                                 <TableHead>
                                     <div className="text-right w-full">P&L (HKD)</div>
                                 </TableHead>
-                                <TableHead>
+                                <SortableHeader field="marketValue">
                                     <div className="text-right w-full">Market Value (HKD)</div>
-                                </TableHead>
+                                </SortableHeader>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -498,7 +592,7 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                         No positions found. Click "Add Position" to get started.
                                     </TableCell>
                                 </TableRow>
-                            ) : positions.map((position) => {
+                            ) : getSortedPositions().map((position) => {
                                 const isPositive = (position.unrealizedPnl || 0) >= 0;
                                 const isDayChangePositive = (position.dayChange || 0) >= 0;
                                 const pnlPercentage = (() => {
