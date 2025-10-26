@@ -169,7 +169,7 @@ start_server() {
             exit 1
         fi
         
-        nohup node dist/index.js > "$LOG_DIR/server.log" 2>&1 &
+        nohup node --max-old-space-size=2048 dist/index.js > "$LOG_DIR/server.log" 2>&1 &
     else
         nohup npm run dev > "$LOG_DIR/server.log" 2>&1 &
     fi
