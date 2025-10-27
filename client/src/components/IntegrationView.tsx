@@ -10,9 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { 
-  DollarSign, 
-  RefreshCw, 
+import {
+  DollarSign,
+  RefreshCw,
   Activity,
   TrendingUp,
   TrendingDown,
@@ -95,7 +95,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
   useEffect(() => {
     const loadInitialData = async () => {
       console.log('🔄 Loading initial cached data...');
-      
+
       try {
         console.log('📊 Trying to load cached balance...');
         const balanceResponse = await apiClient.getIBBalance();
@@ -120,15 +120,15 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
         console.log('📈 Trying to load cached portfolio...');
         const portfolioResponse = await apiClient.getIBPortfolio();
         console.log('Portfolio response:', portfolioResponse);
-        
+
         if (portfolioResponse.data && portfolioResponse.data.length > 0) {
           console.log('✅ Found cached portfolio with', portfolioResponse.data.length, 'positions');
           setPortfolio(portfolioResponse.data);
-          
+
           // Fetch exchange rates for all currencies in portfolio
           const uniqueCurrencies = [...new Set(portfolioResponse.data.map(p => p.currency))];
           const rates: Record<string, number> = {};
-          
+
           for (const currency of uniqueCurrencies) {
             if (currency !== baseCurrency) {
               try {
@@ -143,7 +143,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
               rates[currency] = 1;
             }
           }
-          
+
           setExchangeRates(rates);
         } else {
           console.log('❌ No cached portfolio data or empty array');
@@ -151,7 +151,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
       } catch (error) {
         console.log('❌ Error loading cached portfolio:', error);
       }
-      
+
       console.log('🏁 Initial data loading complete');
     };
 
@@ -184,17 +184,17 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
   const handleRefreshAll = async () => {
     setIsConnecting(true);
     setIsLoadingPortfolio(true);
-    
+
     try {
       // Force refresh both balance and portfolio to get fresh data
       const [balanceResponse, portfolioResponse] = await Promise.all([
         apiClient.forceRefreshIBBalance(),
         apiClient.forceRefreshIBPortfolio()
       ]);
-      
+
       console.log('Balance response:', balanceResponse);
       console.log('Portfolio response:', portfolioResponse);
-      
+
       // Check for errors in responses - check error first before checking data
       if (balanceResponse.error) {
         console.error('Balance error detected:', balanceResponse.error);
@@ -203,7 +203,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
         }
         throw new Error(balanceResponse.error);
       }
-      
+
       if (portfolioResponse.error) {
         console.error('Portfolio error detected:', portfolioResponse.error);
         if (portfolioResponse.error.includes('not configured')) {
@@ -211,16 +211,16 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
         }
         throw new Error(portfolioResponse.error);
       }
-      
+
       // Verify we have data
       if (!balanceResponse.data) {
         throw new Error("No balance data received from server");
       }
-      
+
       if (!portfolioResponse.data) {
         throw new Error("No portfolio data received from server");
       }
-      
+
       // Update balance
       setAccountBalance(balanceResponse.data.balance);
       setNetLiquidation(balanceResponse.data.netLiquidation ?? null);
@@ -230,17 +230,17 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
       if (balanceResponse.data.timestamp) {
         setLastUpdated(new Date(balanceResponse.data.timestamp).toLocaleString());
       }
-      
+
       // Update the Interactive Broker HK account in the Accounts page
       await updateIBAccountBalance(balanceResponse.data.netLiquidation ?? balanceResponse.data.balance, balanceResponse.data.currency);
-      
+
       // Update portfolio
       setPortfolio(portfolioResponse.data);
-      
+
       // Fetch exchange rates for all currencies in portfolio
       const uniqueCurrencies = [...new Set(portfolioResponse.data.map(p => p.currency))];
       const rates: Record<string, number> = {};
-      
+
       for (const currency of uniqueCurrencies) {
         if (currency !== baseCurrency) {
           try {
@@ -255,9 +255,9 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
           rates[currency] = 1;
         }
       }
-      
+
       setExchangeRates(rates);
-      
+
       toast({
         title: "Success",
         description: "Portfolio refreshed successfully with latest market data",
@@ -280,25 +280,25 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
   const updateIBAccountBalance = async (balance: number, currency: string) => {
     try {
       console.log('🔄 Updating configured IB target account balance...');
-      
+
       // Get user's IB settings to find the target account
       const settingsResponse = await apiClient.getIBSettings();
       if (!settingsResponse.data?.target_account_id) {
         console.log('ℹ️ No target account configured for IB updates');
         return;
       }
-      
+
       const targetAccountId = settingsResponse.data.target_account_id;
       console.log(`📝 Updating target account ID: ${targetAccountId}, new balance: ${balance}`);
-      
+
       // Update the account balance (this will automatically update last_updated timestamp)
       const updateResponse = await apiClient.updateAccount(targetAccountId, {
         currentBalance: balance
       });
-      
+
       console.log(`✅ Updated target account balance to ${balance} ${currency}`);
       console.log(`📅 New lastUpdated: ${updateResponse.data?.lastUpdated}`);
-      
+
       // Trigger account update callback if provided
       if (onAccountUpdate) {
         console.log('🔄 Triggering account update callback...');
@@ -324,11 +324,11 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
       const response = await apiClient.getIBPortfolio();
       if (response.data) {
         setPortfolio(response.data);
-        
+
         // Fetch exchange rates for all currencies in portfolio
         const uniqueCurrencies = [...new Set(response.data.map(p => p.currency))];
         const rates: Record<string, number> = {};
-        
+
         for (const currency of uniqueCurrencies) {
           if (currency !== baseCurrency) {
             try {
@@ -343,9 +343,9 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
             rates[currency] = 1;
           }
         }
-        
+
         setExchangeRates(rates);
-        
+
         toast({
           title: "Success",
           description: "Portfolio retrieved successfully",
@@ -393,42 +393,42 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
     const totalPnLHKD = portfolio.reduce((sum, position) => {
       return sum + convertToHKD(position.unrealizedPNL, position.currency);
     }, 0);
-    
+
     const totalMarketValueHKD = portfolio.reduce((sum, position) => {
       return sum + convertToHKD(position.marketValue, position.currency);
     }, 0);
-    
+
     const totalDayChangeHKD = portfolio.reduce((sum, position) => {
       if (position.dayChange !== undefined) {
         return sum + convertToHKD(position.dayChange, position.currency);
       }
       return sum;
     }, 0);
-    
+
     // Calculate total day change percentage
     // Formula: Sum of ((currentPrice - previousClose) * qty in HKD) / Sum of (previousClose * qty in HKD)
     let totalDayChangeAmountHKD = 0;
     let totalPreviousValueHKD = 0;
-    
+
     portfolio.forEach(position => {
       if (position.closePrice !== undefined && position.closePrice > 0) {
         // (currentPrice - previousClose) * qty converted to HKD
         const dayChangeAmount = (position.marketPrice - position.closePrice) * position.position;
         const dayChangeAmountHKD = convertToHKD(dayChangeAmount, position.currency);
-        
+
         // previousClose * qty converted to HKD
         const previousValue = position.closePrice * position.position;
         const previousValueHKD = convertToHKD(previousValue, position.currency);
-        
+
         totalDayChangeAmountHKD += dayChangeAmountHKD;
         totalPreviousValueHKD += previousValueHKD;
       }
     });
-    
-    const totalDayChangePercent = totalPreviousValueHKD > 0 
-      ? (totalDayChangeAmountHKD / totalPreviousValueHKD) * 100 
+
+    const totalDayChangePercent = totalPreviousValueHKD > 0
+      ? (totalDayChangeAmountHKD / totalPreviousValueHKD) * 100
       : 0;
-    
+
     return { totalPnLHKD, totalMarketValueHKD, totalDayChangeHKD, totalDayChangePercent };
   };
 
@@ -477,7 +477,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
       }
 
       if (typeof aValue === 'string') {
-        return sortDirection === 'asc' 
+        return sortDirection === 'asc'
           ? aValue.localeCompare(bValue)
           : bValue.localeCompare(aValue);
       }
@@ -493,9 +493,9 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
     if (position.country) {
       return position.country;
     }
-    
+
     const ex = (position.primaryExchange || position.exchange || '').toUpperCase();
-    
+
     const countryMap: Record<string, string> = {
       'NASDAQ': 'USA',
       'NYSE': 'USA',
@@ -520,17 +520,17 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
       'VSE': 'Austria',
       'KSE': 'South Korea',
     };
-    
+
     // Check for exact match first
     if (countryMap[ex]) {
       return countryMap[ex];
     }
-    
+
     // Check for partial match
     for (const [key, country] of Object.entries(countryMap)) {
       if (ex.includes(key)) return country;
     }
-    
+
     // Fallback to currency-based guess
     const currencyMap: Record<string, string> = {
       'USD': 'USA',
@@ -543,16 +543,16 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
       'EUR': 'Europe',
       'KRW': 'South Korea',
     };
-    
+
     if (position.currency && currencyMap[position.currency]) {
       return currencyMap[position.currency];
     }
-    
+
     return ex || 'N/A';
   };
 
   const SortableHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
-    <div 
+    <div
       className="cursor-pointer hover:bg-muted/50 select-none flex items-center gap-1"
       onClick={() => handleSort(field)}
     >
@@ -609,8 +609,8 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
         <CardContent className="space-y-6 px-4 sm:px-6">
           {/* Account Balance Summary */}
           {accountBalance !== null ? (
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg flex-1 min-w-0">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg min-w-0 max-w-sm w-full">
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-4 w-4 text-primary flex-shrink-0" />
                   <div className="min-w-0">
@@ -629,7 +629,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
               </div>
 
               {totalCashValue !== null && (
-                <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg flex-1 min-w-0">
+                <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg min-w-0 max-w-sm w-full">
                   <div className="flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-primary flex-shrink-0" />
                     <div className="min-w-0">
@@ -646,7 +646,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-4 text-center bg-background/30 rounded-lg">
+            <div className="flex flex-col items-center justify-center py-4 text-center bg-background/30 rounded-lg max-w-sm w-full">
               <DollarSign className="h-8 w-8 text-muted-foreground mb-2" />
               <h3 className="text-sm font-medium text-foreground mb-1">No Account Data</h3>
               <p className="text-xs text-muted-foreground">
@@ -667,145 +667,145 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
               </p>
             </div>
             {portfolio.length > 0 ? (
-            <div className="w-full overflow-x-auto">
-              <Table className="w-full text-sm">
-                <TableHeader>
-                  <TableRow className="text-xs">
-                    <TableHead className="sticky left-0 z-10 border-r px-2 w-20 min-w-[80px] bg-background">
-                      <SortableHeader field="symbol">Symbol</SortableHeader>
-                    </TableHead>
-                    <TableHead className="px-2 w-20">
-                      <SortableHeader field="dayChangePercent">
-                        <div className="text-right w-full">
-                          <div>Chg</div>
-                          <div>Chg %</div>
-                        </div>
-                      </SortableHeader>
-                    </TableHead>
-                    <TableHead className="px-2 w-24">
-                      <SortableHeader field="averageCost">
-                        <div className="text-right w-full">Avg Cost</div>
-                      </SortableHeader>
-                    </TableHead>
-                    <TableHead className="px-2 w-16">
-                      <SortableHeader field="position">
-                        <div className="text-right w-full">Qty</div>
-                      </SortableHeader>
-                    </TableHead>
-                    <TableHead className="px-2 w-24">
-                      <SortableHeader field="marketPrice">
-                        <div className="text-right w-full">Current Price</div>
-                      </SortableHeader>
-                    </TableHead>
-                    <TableHead className="px-2">
-                      <SortableHeader field="pnlPercent">
-                        <div className="text-right w-full min-w-[90px]">
-                          <div>Unrealized P&L</div>
-                          <div>P&L %</div>
-                        </div>
-                      </SortableHeader>
-                    </TableHead>
-                    <TableHead className="px-2">
-                      <div className="text-right w-full min-w-[90px]">P&L ({baseCurrency})</div>
-                    </TableHead>
-                    <TableHead className="px-2">
-                      <SortableHeader field="marketValue">
-                        <div className="text-right w-full min-w-[100px]">Market Value ({baseCurrency})</div>
-                      </SortableHeader>
-                    </TableHead>
-                    <TableHead className="px-2 w-16">
-                      <SortableHeader field="secType">
-                        <div className="text-center w-full">Type</div>
-                      </SortableHeader>
-                    </TableHead>
-                    <TableHead className="px-2 w-20">
-                      <SortableHeader field="country">
-                        <div className="text-center w-full">Country</div>
-                      </SortableHeader>
-                    </TableHead>
-                    <TableHead className="px-2 w-24">
-                      <SortableHeader field="industry">
-                        <div className="text-center w-full">Industry</div>
-                      </SortableHeader>
-                    </TableHead>
-                    <TableHead className="px-2 w-24">
-                      <SortableHeader field="category">
-                        <div className="text-center w-full">Category</div>
-                      </SortableHeader>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {getSortedPortfolio().map((position, index) => {
-                    const pnlPercentage = calculatePnLPercentage(position.unrealizedPNL, position.marketValue);
-                    const pnlInHKD = convertToHKD(position.unrealizedPNL, position.currency);
-                    const marketValueInHKD = convertToHKD(position.marketValue, position.currency);
-                    const isPositive = position.unrealizedPNL >= 0;
-                    const isDayChangePositive = (position.dayChange || 0) >= 0;
-                    
-                    return (
-                      <TableRow key={index} className="text-xs">
-                        <TableCell className="sticky left-0 z-10 border-r font-medium whitespace-nowrap px-2 bg-background">
-                          {position.symbol}
-                        </TableCell>
-                        <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isDayChangePositive ? 'text-profit' : 'text-loss'}`}>
-                          {position.dayChange !== undefined && position.dayChangePercent !== undefined ? (
+              <div className="w-full overflow-x-auto">
+                <Table className="w-full text-sm">
+                  <TableHeader>
+                    <TableRow className="text-xs">
+                      <TableHead className="sticky left-0 z-10 border-r px-2 w-20 min-w-[80px] bg-background">
+                        <SortableHeader field="symbol">Symbol</SortableHeader>
+                      </TableHead>
+                      <TableHead className="px-2 w-20">
+                        <SortableHeader field="dayChangePercent">
+                          <div className="text-right w-full">
+                            <div>Chg</div>
+                            <div>Chg %</div>
+                          </div>
+                        </SortableHeader>
+                      </TableHead>
+                      <TableHead className="px-2 w-24">
+                        <SortableHeader field="averageCost">
+                          <div className="text-right w-full">Avg Cost</div>
+                        </SortableHeader>
+                      </TableHead>
+                      <TableHead className="px-2 w-16">
+                        <SortableHeader field="position">
+                          <div className="text-right w-full">Qty</div>
+                        </SortableHeader>
+                      </TableHead>
+                      <TableHead className="px-2 w-24">
+                        <SortableHeader field="marketPrice">
+                          <div className="text-right w-full">Current Price</div>
+                        </SortableHeader>
+                      </TableHead>
+                      <TableHead className="px-2">
+                        <SortableHeader field="pnlPercent">
+                          <div className="text-right w-full min-w-[90px]">
+                            <div>Unrealized P&L</div>
+                            <div>P&L %</div>
+                          </div>
+                        </SortableHeader>
+                      </TableHead>
+                      <TableHead className="px-2">
+                        <div className="text-right w-full min-w-[90px]">P&L ({baseCurrency})</div>
+                      </TableHead>
+                      <TableHead className="px-2">
+                        <SortableHeader field="marketValue">
+                          <div className="text-right w-full min-w-[100px]">Market Value ({baseCurrency})</div>
+                        </SortableHeader>
+                      </TableHead>
+                      <TableHead className="px-2 w-16">
+                        <SortableHeader field="secType">
+                          <div className="text-center w-full">Type</div>
+                        </SortableHeader>
+                      </TableHead>
+                      <TableHead className="px-2 w-20">
+                        <SortableHeader field="country">
+                          <div className="text-center w-full">Country</div>
+                        </SortableHeader>
+                      </TableHead>
+                      <TableHead className="px-2 w-24">
+                        <SortableHeader field="industry">
+                          <div className="text-center w-full">Industry</div>
+                        </SortableHeader>
+                      </TableHead>
+                      <TableHead className="px-2 w-24">
+                        <SortableHeader field="category">
+                          <div className="text-center w-full">Category</div>
+                        </SortableHeader>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {getSortedPortfolio().map((position, index) => {
+                      const pnlPercentage = calculatePnLPercentage(position.unrealizedPNL, position.marketValue);
+                      const pnlInHKD = convertToHKD(position.unrealizedPNL, position.currency);
+                      const marketValueInHKD = convertToHKD(position.marketValue, position.currency);
+                      const isPositive = position.unrealizedPNL >= 0;
+                      const isDayChangePositive = (position.dayChange || 0) >= 0;
+
+                      return (
+                        <TableRow key={index} className="text-xs">
+                          <TableCell className="sticky left-0 z-10 border-r font-medium whitespace-nowrap px-2 bg-background">
+                            {position.symbol}
+                          </TableCell>
+                          <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isDayChangePositive ? 'text-profit' : 'text-loss'}`}>
+                            {position.dayChange !== undefined && position.dayChangePercent !== undefined ? (
+                              <div className="flex flex-col items-end gap-0">
+                                <div className="flex items-center justify-end gap-1">
+                                  {isDayChangePositive ? (
+                                    <TrendingUp className="h-3 w-3" />
+                                  ) : (
+                                    <TrendingDown className="h-3 w-3" />
+                                  )}
+                                  {formatCurrency(position.dayChange, position.currency)}
+                                </div>
+                                <div className="flex items-center justify-end gap-1">
+                                  {position.dayChangePercent.toFixed(2)}%
+                                </div>
+                              </div>
+                            ) : (
+                              'N/A'
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap px-2">
+                            {formatCurrency(position.averageCost, position.currency)}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap px-2">{position.position.toLocaleString()}</TableCell>
+                          <TableCell className="text-right whitespace-nowrap px-2">
+                            {formatCurrency(position.marketPrice, position.currency)}
+                          </TableCell>
+                          <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isPositive ? 'text-profit' : 'text-loss'}`}>
                             <div className="flex flex-col items-end gap-0">
                               <div className="flex items-center justify-end gap-1">
-                                {isDayChangePositive ? (
+                                {isPositive ? (
                                   <TrendingUp className="h-3 w-3" />
                                 ) : (
                                   <TrendingDown className="h-3 w-3" />
                                 )}
-                                {formatCurrency(position.dayChange, position.currency)}
+                                {formatCurrency(position.unrealizedPNL, position.currency)}
                               </div>
                               <div className="flex items-center justify-end gap-1">
-                                {position.dayChangePercent.toFixed(2)}%
+                                {pnlPercentage.toFixed(2)}%
                               </div>
                             </div>
-                          ) : (
-                            'N/A'
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right whitespace-nowrap px-2">
-                          {formatCurrency(position.averageCost, position.currency)}
-                        </TableCell>
-                        <TableCell className="text-right whitespace-nowrap px-2">{position.position.toLocaleString()}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap px-2">
-                          {formatCurrency(position.marketPrice, position.currency)}
-                        </TableCell>
-                        <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isPositive ? 'text-profit' : 'text-loss'}`}>
-                          <div className="flex flex-col items-end gap-0">
-                            <div className="flex items-center justify-end gap-1">
-                              {isPositive ? (
-                                <TrendingUp className="h-3 w-3" />
-                              ) : (
-                                <TrendingDown className="h-3 w-3" />
-                              )}
-                              {formatCurrency(position.unrealizedPNL, position.currency)}
-                            </div>
-                            <div className="flex items-center justify-end gap-1">
-                              {pnlPercentage.toFixed(2)}%
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isPositive ? 'text-profit' : 'text-loss'}`}>
-                          {formatCurrency(pnlInHKD, baseCurrency)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium whitespace-nowrap px-2">
-                          {formatCurrency(marketValueInHKD, baseCurrency)}
-                        </TableCell>
-                        <TableCell className="text-center text-xs px-2">{position.secType}</TableCell>
-                        <TableCell className="text-center text-xs px-2">{getCountryFromExchange(position)}</TableCell>
-                        <TableCell className="text-center text-xs px-2 truncate" title={position.industry || 'N/A'}>
-                          {position.industry || 'N/A'}
-                        </TableCell>
-                        <TableCell className="text-center text-xs px-2 truncate" title={position.category || 'N/A'}>
-                          {position.category || 'N/A'}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                          </TableCell>
+                          <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isPositive ? 'text-profit' : 'text-loss'}`}>
+                            {formatCurrency(pnlInHKD, baseCurrency)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium whitespace-nowrap px-2">
+                            {formatCurrency(marketValueInHKD, baseCurrency)}
+                          </TableCell>
+                          <TableCell className="text-center text-xs px-2">{position.secType}</TableCell>
+                          <TableCell className="text-center text-xs px-2">{getCountryFromExchange(position)}</TableCell>
+                          <TableCell className="text-center text-xs px-2 truncate" title={position.industry || 'N/A'}>
+                            {position.industry || 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-center text-xs px-2 truncate" title={position.category || 'N/A'}>
+                            {position.category || 'N/A'}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                     {/* Totals Row */}
                     <TableRow className="bg-muted/50 font-semibold border-t-2 text-xs">
                       <TableCell className="sticky left-0 z-10 border-r text-left whitespace-nowrap font-bold px-2 bg-muted/50">

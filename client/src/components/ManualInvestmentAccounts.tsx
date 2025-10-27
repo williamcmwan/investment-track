@@ -20,7 +20,7 @@ import {
     Search,
     AlertCircle
 } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "../services/api";
 
@@ -120,6 +120,9 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
     // Sorting state
     const [sortField, setSortField] = useState<SortField>('symbol');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    
+    // Action popover state for click-based interaction
+    const [openActionPopover, setOpenActionPopover] = useState<number | null>(null);
 
 
 
@@ -683,19 +686,25 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                 return (
                                     <TableRow key={position.id} className="text-xs">
                                         <TableCell className="sticky left-0 z-10 border-r font-medium whitespace-nowrap px-2 bg-background">
-                                            <Tooltip delayDuration={300}>
-                                                <TooltipTrigger asChild>
-                                                    <span className="cursor-pointer hover:text-primary transition-colors inline-block">
+                                            <Popover 
+                                                open={openActionPopover === position.id} 
+                                                onOpenChange={(open) => setOpenActionPopover(open ? position.id : null)}
+                                            >
+                                                <PopoverTrigger asChild>
+                                                    <span className="cursor-pointer hover:text-primary active:text-primary transition-colors inline-block select-none">
                                                         {position.symbol}
                                                     </span>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="right" className="p-2 z-50">
+                                                </PopoverTrigger>
+                                                <PopoverContent side="right" className="p-2 w-auto" sideOffset={5}>
                                                     <div className="flex gap-1">
                                                         <Button 
                                                             variant="ghost" 
                                                             size="sm" 
                                                             className="h-8 w-8 p-0 hover:bg-primary/10" 
-                                                            onClick={() => openEditPosition(position)}
+                                                            onClick={() => {
+                                                                openEditPosition(position);
+                                                                setOpenActionPopover(null);
+                                                            }}
                                                             title="Edit Position"
                                                         >
                                                             <Edit className="h-4 w-4" />
@@ -704,14 +713,17 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                                             variant="ghost" 
                                                             size="sm" 
                                                             className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive" 
-                                                            onClick={() => handleDeletePosition(position.id)}
+                                                            onClick={() => {
+                                                                handleDeletePosition(position.id);
+                                                                setOpenActionPopover(null);
+                                                            }}
                                                             title="Delete Position"
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </Button>
                                                     </div>
-                                                </TooltipContent>
-                                            </Tooltip>
+                                                </PopoverContent>
+                                            </Popover>
                                         </TableCell>
                                         <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isDayChangePositive ? 'text-profit' : 'text-loss'}`}>
                                             {position.dayChange !== undefined && position.dayChangePercent !== undefined ? (
