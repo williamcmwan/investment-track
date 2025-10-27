@@ -20,6 +20,7 @@ import {
     Search,
     AlertCircle
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "../services/api";
 
@@ -514,19 +515,17 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
     };
 
     const SortableHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
-        <TableHead 
-            className="cursor-pointer hover:bg-muted/50 select-none"
+        <div 
+            className="cursor-pointer hover:bg-muted/50 select-none flex items-center gap-1"
             onClick={() => handleSort(field)}
         >
-            <div className="flex items-center gap-1">
-                {children}
-                {sortField === field && (
-                    <span className="text-xs">
-                        {sortDirection === 'asc' ? '↑' : '↓'}
-                    </span>
-                )}
-            </div>
-        </TableHead>
+            {children}
+            {sortField === field && (
+                <span className="text-xs">
+                    {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+            )}
+        </div>
     );
 
     // Show loading or error state if no accounts available
@@ -573,50 +572,82 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
 
             <Card>
                 <div className="w-full overflow-x-auto">
-                    <Table className="w-full text-sm sm:text-base">
+                    <Table className="w-full text-sm">
                         <TableHeader>
-                            <TableRow className="text-xs sm:text-sm">
-                                <TableHead>Actions</TableHead>
-                                <SortableHeader field="symbol">Symbol</SortableHeader>
-                                <SortableHeader field="dayChange">
-                                    <div className="text-right w-full">Chg</div>
-                                </SortableHeader>
-                                <SortableHeader field="dayChangePercent">
-                                    <div className="text-right w-full">Chg %</div>
-                                </SortableHeader>
-                                <SortableHeader field="secType">Type</SortableHeader>
-                                <SortableHeader field="account">Account</SortableHeader>
-                                <SortableHeader field="country">Country</SortableHeader>
-                                <SortableHeader field="industry">Industry</SortableHeader>
-                                <SortableHeader field="category">Category</SortableHeader>
-                                <SortableHeader field="currency">Curr.</SortableHeader>
-                                <SortableHeader field="quantity">
-                                    <div className="text-right w-full">Qty</div>
-                                </SortableHeader>
-                                <SortableHeader field="averageCost">
-                                    <div className="text-right w-full">Avg Cost</div>
-                                </SortableHeader>
-                                <SortableHeader field="marketPrice">
-                                    <div className="text-right w-full">Current Price</div>
-                                </SortableHeader>
-                                <SortableHeader field="pnlPercent">
-                                    <div className="text-right w-full">P&L %</div>
-                                </SortableHeader>
-                                <SortableHeader field="unrealizedPnl">
-                                    <div className="text-right w-full">Unrealized P&L</div>
-                                </SortableHeader>
-                                <TableHead>
+                            <TableRow className="text-xs">
+                                <TableHead className="sticky left-0 z-10 border-r px-2 w-20 min-w-[80px] bg-background">
+                                    <SortableHeader field="symbol">Symbol</SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-20">
+                                    <SortableHeader field="dayChangePercent">
+                                        <div className="text-right w-full">
+                                            <div>Chg</div>
+                                            <div>Chg %</div>
+                                        </div>
+                                    </SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-24">
+                                    <SortableHeader field="averageCost">
+                                        <div className="text-right w-full">Avg Cost</div>
+                                    </SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-16">
+                                    <SortableHeader field="quantity">
+                                        <div className="text-right w-full">Qty</div>
+                                    </SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-24">
+                                    <SortableHeader field="marketPrice">
+                                        <div className="text-right w-full">Current Price</div>
+                                    </SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-24">
+                                    <SortableHeader field="pnlPercent">
+                                        <div className="text-right w-full">
+                                            <div>Unrealized P&L</div>
+                                            <div>P&L %</div>
+                                        </div>
+                                    </SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-24">
                                     <div className="text-right w-full">P&L (HKD)</div>
                                 </TableHead>
-                                <SortableHeader field="marketValue">
-                                    <div className="text-right w-full">Market Value (HKD)</div>
-                                </SortableHeader>
+                                <TableHead className="px-2 w-28">
+                                    <SortableHeader field="marketValue">
+                                        <div className="text-right w-full">Market Value (HKD)</div>
+                                    </SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-20">
+                                    <SortableHeader field="account">
+                                        <div className="text-center w-full">Account</div>
+                                    </SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-16">
+                                    <SortableHeader field="secType">
+                                        <div className="text-center w-full">Type</div>
+                                    </SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-20">
+                                    <SortableHeader field="country">
+                                        <div className="text-center w-full">Country</div>
+                                    </SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-24">
+                                    <SortableHeader field="industry">
+                                        <div className="text-center w-full">Industry</div>
+                                    </SortableHeader>
+                                </TableHead>
+                                <TableHead className="px-2 w-24">
+                                    <SortableHeader field="category">
+                                        <div className="text-center w-full">Category</div>
+                                    </SortableHeader>
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {positions.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={16} className="text-center py-8 text-muted-foreground">
+                                    <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
                                         No positions found. Click "Add Position" to get started.
                                     </TableCell>
                                 </TableRow>
@@ -650,85 +681,97 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                 const marketValueInHKD = convertToHKD(position.marketValue, position.currency);
                                 
                                 return (
-                                    <TableRow key={position.id} className="text-xs sm:text-sm">
-                                        <TableCell>
-                                            <div className="flex gap-1">
-                                                <Button variant="ghost" size="sm" onClick={() => openEditPosition(position)}>
-                                                    <Edit className="h-4 w-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="sm" onClick={() => handleDeletePosition(position.id)}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </div>
+                                    <TableRow key={position.id} className="text-xs">
+                                        <TableCell className="sticky left-0 z-10 border-r font-medium whitespace-nowrap px-2 bg-background">
+                                            <Tooltip delayDuration={300}>
+                                                <TooltipTrigger asChild>
+                                                    <span className="cursor-pointer hover:text-primary transition-colors inline-block">
+                                                        {position.symbol}
+                                                    </span>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="right" className="p-2 z-50">
+                                                    <div className="flex gap-1">
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            className="h-8 w-8 p-0 hover:bg-primary/10" 
+                                                            onClick={() => openEditPosition(position)}
+                                                            title="Edit Position"
+                                                        >
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive" 
+                                                            onClick={() => handleDeletePosition(position.id)}
+                                                            title="Delete Position"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TooltipContent>
+                                            </Tooltip>
                                         </TableCell>
-                                        <TableCell className="font-medium whitespace-nowrap">{position.symbol}</TableCell>
-                                        <TableCell className={`text-right font-medium whitespace-nowrap ${isDayChangePositive ? 'text-green-600' : 'text-red-600'}`}>
-                                            {position.dayChange !== undefined ? (
-                                                <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                                                    {isDayChangePositive ? (
-                                                        <TrendingUp className="h-3 w-3" />
-                                                    ) : (
-                                                        <TrendingDown className="h-3 w-3" />
-                                                    )}
-                                                    {formatCurrency(position.dayChange, position.currency)}
+                                        <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isDayChangePositive ? 'text-profit' : 'text-loss'}`}>
+                                            {position.dayChange !== undefined && position.dayChangePercent !== undefined ? (
+                                                <div className="flex flex-col items-end gap-0">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        {isDayChangePositive ? (
+                                                            <TrendingUp className="h-3 w-3" />
+                                                        ) : (
+                                                            <TrendingDown className="h-3 w-3" />
+                                                        )}
+                                                        {formatCurrency(position.dayChange, position.currency)}
+                                                    </div>
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        {(position.dayChangePercent || 0).toFixed(2)}%
+                                                    </div>
                                                 </div>
                                             ) : (
                                                 'N/A'
                                             )}
                                         </TableCell>
-                                        <TableCell className={`text-right font-medium whitespace-nowrap ${isDayChangePositive ? 'text-green-600' : 'text-red-600'}`}>
-                                            {position.dayChangePercent !== undefined ? (
-                                                <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                                                    {isDayChangePositive ? (
-                                                        <TrendingUp className="h-3 w-3" />
-                                                    ) : (
-                                                        <TrendingDown className="h-3 w-3" />
-                                                    )}
-                                                    {(position.dayChangePercent || 0).toFixed(2)}%
-                                                </div>
-                                            ) : (
-                                                'N/A'
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="font-medium">{position.secType}</TableCell>
-                                        <TableCell className="whitespace-nowrap">
-                                            {accounts.find(acc => acc.id === position.mainAccountId)?.name || 'Unknown Account'}
-                                        </TableCell>
-                                        <TableCell className="text-xs sm:text-sm max-w-[120px] truncate" title={position.country || 'N/A'}>
-                                            {position.country || 'N/A'}
-                                        </TableCell>
-                                        <TableCell className="text-xs sm:text-sm max-w-[120px] truncate" title={position.industry || 'N/A'}>
-                                            {position.industry || 'N/A'}
-                                        </TableCell>
-                                        <TableCell className="text-xs sm:text-sm max-w-[120px] truncate" title={position.category || 'N/A'}>
-                                            {position.category || 'N/A'}
-                                        </TableCell>
-                                        <TableCell className="whitespace-nowrap">{position.currency}</TableCell>
-                                        <TableCell className="text-right whitespace-nowrap">{position.quantity.toLocaleString()}</TableCell>
-                                        <TableCell className="text-right whitespace-nowrap">
+                                        <TableCell className="text-right whitespace-nowrap px-2">
                                             {formatCurrency(position.averageCost, position.currency)}
                                         </TableCell>
-                                        <TableCell className="text-right whitespace-nowrap">
+                                        <TableCell className="text-right whitespace-nowrap px-2">{position.quantity.toLocaleString()}</TableCell>
+                                        <TableCell className="text-right whitespace-nowrap px-2">
                                             {formatCurrency(position.marketPrice, position.currency)}
                                         </TableCell>
-                                        <TableCell className={`text-right font-medium whitespace-nowrap ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                                                {isPositive ? (
-                                                    <TrendingUp className="h-4 w-4" />
-                                                ) : (
-                                                    <TrendingDown className="h-4 w-4" />
-                                                )}
-                                                {(pnlPercentage || 0).toFixed(2)}%
+                                        <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isPositive ? 'text-profit' : 'text-loss'}`}>
+                                            <div className="flex flex-col items-end gap-0">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {isPositive ? (
+                                                        <TrendingUp className="h-3 w-3" />
+                                                    ) : (
+                                                        <TrendingDown className="h-3 w-3" />
+                                                    )}
+                                                    {formatCurrency(position.unrealizedPnl, position.currency)}
+                                                </div>
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {(pnlPercentage || 0).toFixed(2)}%
+                                                </div>
                                             </div>
                                         </TableCell>
-                                        <TableCell className={`text-right font-medium whitespace-nowrap ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                                            {formatCurrency(position.unrealizedPnl, position.currency)}
-                                        </TableCell>
-                                        <TableCell className={`text-right font-medium whitespace-nowrap ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                        <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isPositive ? 'text-profit' : 'text-loss'}`}>
                                             {formatCurrency(pnlInHKD, 'HKD')}
                                         </TableCell>
-                                        <TableCell className="text-right font-medium whitespace-nowrap">
+                                        <TableCell className="text-right font-medium whitespace-nowrap px-2">
                                             {formatCurrency(marketValueInHKD, 'HKD')}
+                                        </TableCell>
+                                        <TableCell className="text-center text-xs px-2">
+                                            {accounts.find(acc => acc.id === position.mainAccountId)?.name || 'Unknown Account'}
+                                        </TableCell>
+                                        <TableCell className="text-center text-xs px-2">{position.secType}</TableCell>
+                                        <TableCell className="text-center text-xs px-2 truncate" title={position.country || 'N/A'}>
+                                            {position.country || 'N/A'}
+                                        </TableCell>
+                                        <TableCell className="text-center text-xs px-2 truncate" title={position.industry || 'N/A'}>
+                                            {position.industry || 'N/A'}
+                                        </TableCell>
+                                        <TableCell className="text-center text-xs px-2 truncate" title={position.category || 'N/A'}>
+                                            {position.category || 'N/A'}
                                         </TableCell>
                                     </TableRow>
                                 );
@@ -783,46 +826,54 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
                                 const isTotalDayChangePositive = totalDayChangeHKD >= 0;
                                 
                                 return (
-                                    <TableRow className="bg-muted/50 font-semibold border-t-2 text-xs sm:text-sm">
-                                        <TableCell className="text-left whitespace-nowrap font-bold">Total:</TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell className={`text-right font-bold whitespace-nowrap ${isTotalDayChangePositive ? 'text-green-600' : 'text-red-600'}`}>
-                                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                                                {isTotalDayChangePositive ? (
-                                                    <TrendingUp className="h-4 w-4" />
-                                                ) : (
-                                                    <TrendingDown className="h-4 w-4" />
-                                                )}
-                                                {formatCurrency(totalDayChangeHKD, 'HKD')}
+                                    <TableRow className="bg-muted/50 font-semibold border-t-2 text-xs">
+                                        <TableCell className="sticky left-0 z-10 border-r text-left whitespace-nowrap font-bold px-2 bg-muted/50">
+                                            Total:
+                                        </TableCell>
+                                        <TableCell className={`text-right font-bold whitespace-nowrap px-2 ${isTotalDayChangePositive ? 'text-profit' : 'text-loss'}`}>
+                                            <div className="flex flex-col items-end gap-0">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {isTotalDayChangePositive ? (
+                                                        <TrendingUp className="h-3 w-3" />
+                                                    ) : (
+                                                        <TrendingDown className="h-3 w-3" />
+                                                    )}
+                                                    {formatCurrency(totalDayChangeHKD, 'HKD')}
+                                                </div>
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {(totalDayChangePercent || 0).toFixed(2)}%
+                                                </div>
                                             </div>
                                         </TableCell>
-                                        <TableCell className={`text-right font-bold whitespace-nowrap ${isTotalDayChangePositive ? 'text-green-600' : 'text-red-600'}`}>
-                                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                                                {isTotalDayChangePositive ? (
-                                                    <TrendingUp className="h-4 w-4" />
-                                                ) : (
-                                                    <TrendingDown className="h-4 w-4" />
-                                                )}
-                                                {(totalDayChangePercent || 0).toFixed(2)}%
+                                        <TableCell className="px-2"></TableCell>
+                                        <TableCell className="px-2"></TableCell>
+                                        <TableCell className="px-2"></TableCell>
+                                        <TableCell className={`text-right font-bold whitespace-nowrap px-2 ${isTotalPositive ? 'text-profit' : 'text-loss'}`}>
+                                            <div className="flex flex-col items-end gap-0">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {isTotalPositive ? (
+                                                        <TrendingUp className="h-3 w-3" />
+                                                    ) : (
+                                                        <TrendingDown className="h-3 w-3" />
+                                                    )}
+                                                    {formatCurrency(totalPnlHKD, 'HKD')}
+                                                </div>
+                                                <div>
+                                                    {/* P&L % calculation for total would go here if needed */}
+                                                </div>
                                             </div>
                                         </TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell className={`text-right font-bold whitespace-nowrap ${isTotalPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                        <TableCell className={`text-right font-bold whitespace-nowrap px-2 ${isTotalPositive ? 'text-profit' : 'text-loss'}`}>
                                             {formatCurrency(totalPnlHKD, 'HKD')}
                                         </TableCell>
-                                        <TableCell className="text-right font-bold whitespace-nowrap">
+                                        <TableCell className="text-right font-bold whitespace-nowrap px-2">
                                             {formatCurrency(totalMarketValueHKD, 'HKD')}
                                         </TableCell>
+                                        <TableCell className="px-2"></TableCell>
+                                        <TableCell className="px-2"></TableCell>
+                                        <TableCell className="px-2"></TableCell>
+                                        <TableCell className="px-2"></TableCell>
+                                        <TableCell className="px-2"></TableCell>
                                     </TableRow>
                                 );
                             })()}

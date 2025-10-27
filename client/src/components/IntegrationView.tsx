@@ -552,19 +552,17 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
   };
 
   const SortableHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
-    <TableHead 
-      className="cursor-pointer hover:bg-muted/50 select-none"
+    <div 
+      className="cursor-pointer hover:bg-muted/50 select-none flex items-center gap-1"
       onClick={() => handleSort(field)}
     >
-      <div className="flex items-center gap-1">
-        {children}
-        {sortField === field && (
-          <span className="text-xs">
-            {sortDirection === 'asc' ? '↑' : '↓'}
-          </span>
-        )}
-      </div>
-    </TableHead>
+      {children}
+      {sortField === field && (
+        <span className="text-xs">
+          {sortDirection === 'asc' ? '↑' : '↓'}
+        </span>
+      )}
+    </div>
   );
 
   return (
@@ -611,17 +609,17 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
         <CardContent className="space-y-6 px-4 sm:px-6">
           {/* Account Balance Summary */}
           {accountBalance !== null ? (
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center justify-between p-4 bg-background/30 rounded-lg min-w-fit">
-                <div className="flex items-center gap-3">
-                  <DollarSign className="h-5 w-5 text-primary" />
-                  <div>
-                    <p className="font-medium text-foreground whitespace-nowrap">Total Account Value</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-primary flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground text-sm">Total Account Value</p>
                     <p className="text-xs text-muted-foreground">Net Liquidation</p>
                   </div>
                 </div>
-                <div className="text-right ml-4">
-                  <p className="text-xl font-bold text-foreground whitespace-nowrap">
+                <div className="text-right ml-2">
+                  <p className="text-lg font-bold text-foreground whitespace-nowrap">
                     {formatCurrency(netLiquidation || accountBalance, accountCurrency || baseCurrency)}
                   </p>
                   {accountCurrency && accountCurrency !== baseCurrency && (
@@ -631,16 +629,16 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
               </div>
 
               {totalCashValue !== null && (
-                <div className="flex items-center justify-between p-4 bg-background/30 rounded-lg min-w-fit">
-                  <div className="flex items-center gap-3">
-                    <DollarSign className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="font-medium text-foreground whitespace-nowrap">Cash Balance</p>
+                <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-primary flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground text-sm">Cash Balance</p>
                       <p className="text-xs text-muted-foreground">Available cash</p>
                     </div>
                   </div>
-                  <div className="text-right ml-4">
-                    <p className="text-xl font-bold text-foreground whitespace-nowrap">
+                  <div className="text-right ml-2">
+                    <p className="text-lg font-bold text-foreground whitespace-nowrap">
                       {formatCurrency(totalCashValue, accountCurrency || baseCurrency)}
                     </p>
                   </div>
@@ -648,10 +646,10 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-6 text-center bg-background/30 rounded-lg">
-              <DollarSign className="h-10 w-10 text-muted-foreground mb-3" />
-              <h3 className="text-base font-medium text-foreground mb-1">No Account Data</h3>
-              <p className="text-sm text-muted-foreground">
+            <div className="flex flex-col items-center justify-center py-4 text-center bg-background/30 rounded-lg">
+              <DollarSign className="h-8 w-8 text-muted-foreground mb-2" />
+              <h3 className="text-sm font-medium text-foreground mb-1">No Account Data</h3>
+              <p className="text-xs text-muted-foreground">
                 Click "Refresh Portfolio" to load your account information
               </p>
             </div>
@@ -670,40 +668,71 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
             </div>
             {portfolio.length > 0 ? (
             <div className="w-full overflow-x-auto">
-              <Table className="w-full text-sm sm:text-base">
+              <Table className="w-full text-sm">
                 <TableHeader>
-                  <TableRow className="text-xs sm:text-sm">
-                    <SortableHeader field="symbol">Symbol</SortableHeader>
-                    <SortableHeader field="dayChange">
-                      <div className="text-right w-full">Chg</div>
-                    </SortableHeader>
-                    <SortableHeader field="dayChangePercent">
-                      <div className="text-right w-full">Chg %</div>
-                    </SortableHeader>
-                    <SortableHeader field="secType">Type</SortableHeader>
-                    <SortableHeader field="country">Country</SortableHeader>
-                    <SortableHeader field="industry">Industry</SortableHeader>
-                    <SortableHeader field="category">Category</SortableHeader>
-                    <SortableHeader field="currency">Curr.</SortableHeader>
-                    <SortableHeader field="position">
-                      <div className="text-right w-full">Qty</div>
-                    </SortableHeader>
-                    <SortableHeader field="averageCost">
-                      <div className="text-right w-full">Avg Cost</div>
-                    </SortableHeader>
-                    <SortableHeader field="marketPrice">
-                      <div className="text-right w-full">Current Price</div>
-                    </SortableHeader>
-                    <SortableHeader field="pnlPercent">
-                      <div className="text-right w-full">P&L %</div>
-                    </SortableHeader>
-                    <SortableHeader field="unrealizedPNL">
-                      <div className="text-right w-full">P&L (Currency)</div>
-                    </SortableHeader>
-                    <TableHead className="text-right">P&L ({baseCurrency})</TableHead>
-                    <SortableHeader field="marketValue">
-                      <div className="text-right w-full">Market Value ({baseCurrency})</div>
-                    </SortableHeader>
+                  <TableRow className="text-xs">
+                    <TableHead className="sticky left-0 z-10 border-r px-2 w-20 min-w-[80px] bg-background">
+                      <SortableHeader field="symbol">Symbol</SortableHeader>
+                    </TableHead>
+                    <TableHead className="px-2 w-20">
+                      <SortableHeader field="dayChangePercent">
+                        <div className="text-right w-full">
+                          <div>Chg</div>
+                          <div>Chg %</div>
+                        </div>
+                      </SortableHeader>
+                    </TableHead>
+                    <TableHead className="px-2 w-24">
+                      <SortableHeader field="averageCost">
+                        <div className="text-right w-full">Avg Cost</div>
+                      </SortableHeader>
+                    </TableHead>
+                    <TableHead className="px-2 w-16">
+                      <SortableHeader field="position">
+                        <div className="text-right w-full">Qty</div>
+                      </SortableHeader>
+                    </TableHead>
+                    <TableHead className="px-2 w-24">
+                      <SortableHeader field="marketPrice">
+                        <div className="text-right w-full">Current Price</div>
+                      </SortableHeader>
+                    </TableHead>
+                    <TableHead className="px-2">
+                      <SortableHeader field="pnlPercent">
+                        <div className="text-right w-full min-w-[90px]">
+                          <div>Unrealized P&L</div>
+                          <div>P&L %</div>
+                        </div>
+                      </SortableHeader>
+                    </TableHead>
+                    <TableHead className="px-2">
+                      <div className="text-right w-full min-w-[90px]">P&L ({baseCurrency})</div>
+                    </TableHead>
+                    <TableHead className="px-2">
+                      <SortableHeader field="marketValue">
+                        <div className="text-right w-full min-w-[100px]">Market Value ({baseCurrency})</div>
+                      </SortableHeader>
+                    </TableHead>
+                    <TableHead className="px-2 w-16">
+                      <SortableHeader field="secType">
+                        <div className="text-center w-full">Type</div>
+                      </SortableHeader>
+                    </TableHead>
+                    <TableHead className="px-2 w-20">
+                      <SortableHeader field="country">
+                        <div className="text-center w-full">Country</div>
+                      </SortableHeader>
+                    </TableHead>
+                    <TableHead className="px-2 w-24">
+                      <SortableHeader field="industry">
+                        <div className="text-center w-full">Industry</div>
+                      </SortableHeader>
+                    </TableHead>
+                    <TableHead className="px-2 w-24">
+                      <SortableHeader field="category">
+                        <div className="text-center w-full">Category</div>
+                      </SortableHeader>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -715,100 +744,116 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
                     const isDayChangePositive = (position.dayChange || 0) >= 0;
                     
                     return (
-                      <TableRow key={index} className="text-xs sm:text-sm">
-                        <TableCell className="font-medium whitespace-nowrap">{position.symbol}</TableCell>
-                        <TableCell className={`text-right font-medium whitespace-nowrap ${isDayChangePositive ? 'text-profit' : 'text-loss'}`}>
-                          {position.dayChange !== undefined ? (
-                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                              {isDayChangePositive ? (
-                                <TrendingUp className="h-3 w-3" />
-                              ) : (
-                                <TrendingDown className="h-3 w-3" />
-                              )}
-                              {formatCurrency(position.dayChange, position.currency)}
+                      <TableRow key={index} className="text-xs">
+                        <TableCell className="sticky left-0 z-10 border-r font-medium whitespace-nowrap px-2 bg-background">
+                          {position.symbol}
+                        </TableCell>
+                        <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isDayChangePositive ? 'text-profit' : 'text-loss'}`}>
+                          {position.dayChange !== undefined && position.dayChangePercent !== undefined ? (
+                            <div className="flex flex-col items-end gap-0">
+                              <div className="flex items-center justify-end gap-1">
+                                {isDayChangePositive ? (
+                                  <TrendingUp className="h-3 w-3" />
+                                ) : (
+                                  <TrendingDown className="h-3 w-3" />
+                                )}
+                                {formatCurrency(position.dayChange, position.currency)}
+                              </div>
+                              <div className="flex items-center justify-end gap-1">
+                                {position.dayChangePercent.toFixed(2)}%
+                              </div>
                             </div>
                           ) : (
                             'N/A'
                           )}
                         </TableCell>
-                        <TableCell className={`text-right font-medium whitespace-nowrap ${isDayChangePositive ? 'text-profit' : 'text-loss'}`}>
-                          {position.dayChangePercent !== undefined ? (
-                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                              {isDayChangePositive ? (
-                                <TrendingUp className="h-3 w-3" />
-                              ) : (
-                                <TrendingDown className="h-3 w-3" />
-                              )}
-                              {position.dayChangePercent.toFixed(2)}%
-                            </div>
-                          ) : (
-                            'N/A'
-                          )}
-                        </TableCell>
-                        <TableCell className="font-medium">{position.secType}</TableCell>
-                        <TableCell className="whitespace-nowrap">{getCountryFromExchange(position)}</TableCell>
-                        <TableCell className="text-xs sm:text-sm max-w-[120px] truncate" title={position.industry || 'N/A'}>{position.industry || 'N/A'}</TableCell>
-                        <TableCell className="text-xs sm:text-sm max-w-[120px] truncate" title={position.category || 'N/A'}>{position.category || 'N/A'}</TableCell>
-                        <TableCell className="whitespace-nowrap">{position.currency}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">{position.position.toLocaleString()}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">
+                        <TableCell className="text-right whitespace-nowrap px-2">
                           {formatCurrency(position.averageCost, position.currency)}
                         </TableCell>
-                        <TableCell className="text-right whitespace-nowrap">
+                        <TableCell className="text-right whitespace-nowrap px-2">{position.position.toLocaleString()}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap px-2">
                           {formatCurrency(position.marketPrice, position.currency)}
                         </TableCell>
-                        <TableCell className={`text-right font-medium whitespace-nowrap ${isPositive ? 'text-profit' : 'text-loss'}`}>
-                          <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                            {isPositive ? (
-                              <TrendingUp className="h-4 w-4" />
-                            ) : (
-                              <TrendingDown className="h-4 w-4" />
-                            )}
-                            {pnlPercentage.toFixed(2)}%
+                        <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isPositive ? 'text-profit' : 'text-loss'}`}>
+                          <div className="flex flex-col items-end gap-0">
+                            <div className="flex items-center justify-end gap-1">
+                              {isPositive ? (
+                                <TrendingUp className="h-3 w-3" />
+                              ) : (
+                                <TrendingDown className="h-3 w-3" />
+                              )}
+                              {formatCurrency(position.unrealizedPNL, position.currency)}
+                            </div>
+                            <div className="flex items-center justify-end gap-1">
+                              {pnlPercentage.toFixed(2)}%
+                            </div>
                           </div>
                         </TableCell>
-                        <TableCell className={`text-right font-medium whitespace-nowrap ${isPositive ? 'text-profit' : 'text-loss'}`}>
-                          {formatCurrency(position.unrealizedPNL, position.currency)}
-                        </TableCell>
-                        <TableCell className={`text-right font-medium whitespace-nowrap ${isPositive ? 'text-profit' : 'text-loss'}`}>
+                        <TableCell className={`text-right font-medium whitespace-nowrap px-2 ${isPositive ? 'text-profit' : 'text-loss'}`}>
                           {formatCurrency(pnlInHKD, baseCurrency)}
                         </TableCell>
-                        <TableCell className="text-right font-medium whitespace-nowrap">
+                        <TableCell className="text-right font-medium whitespace-nowrap px-2">
                           {formatCurrency(marketValueInHKD, baseCurrency)}
+                        </TableCell>
+                        <TableCell className="text-center text-xs px-2">{position.secType}</TableCell>
+                        <TableCell className="text-center text-xs px-2">{getCountryFromExchange(position)}</TableCell>
+                        <TableCell className="text-center text-xs px-2 truncate" title={position.industry || 'N/A'}>
+                          {position.industry || 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center text-xs px-2 truncate" title={position.category || 'N/A'}>
+                          {position.category || 'N/A'}
                         </TableCell>
                       </TableRow>
                     );
                   })}
                     {/* Totals Row */}
-                    <TableRow className="bg-muted/50 font-semibold border-t-2 text-xs sm:text-sm">
-                      <TableCell className="text-left whitespace-nowrap font-bold">Total:</TableCell>
-                      <TableCell className={`text-right font-bold whitespace-nowrap ${calculateTotals().totalDayChangeHKD >= 0 ? 'text-profit' : 'text-loss'}`}>
-                        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                          {calculateTotals().totalDayChangeHKD >= 0 ? (
-                            <TrendingUp className="h-4 w-4" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4" />
-                          )}
-                          {formatCurrency(calculateTotals().totalDayChangeHKD, baseCurrency)}
+                    <TableRow className="bg-muted/50 font-semibold border-t-2 text-xs">
+                      <TableCell className="sticky left-0 z-10 border-r text-left whitespace-nowrap font-bold px-2 bg-muted/50">
+                        Total:
+                      </TableCell>
+                      <TableCell className={`text-right font-bold whitespace-nowrap px-2 ${calculateTotals().totalDayChangeHKD >= 0 ? 'text-profit' : 'text-loss'}`}>
+                        <div className="flex flex-col items-end gap-0">
+                          <div className="flex items-center justify-end gap-1">
+                            {calculateTotals().totalDayChangeHKD >= 0 ? (
+                              <TrendingUp className="h-3 w-3" />
+                            ) : (
+                              <TrendingDown className="h-3 w-3" />
+                            )}
+                            {formatCurrency(calculateTotals().totalDayChangeHKD, baseCurrency)}
+                          </div>
+                          <div className="flex items-center justify-end gap-1">
+                            {calculateTotals().totalDayChangePercent.toFixed(2)}%
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className={`text-right font-bold whitespace-nowrap ${calculateTotals().totalDayChangePercent >= 0 ? 'text-profit' : 'text-loss'}`}>
-                        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                          {calculateTotals().totalDayChangePercent >= 0 ? (
-                            <TrendingUp className="h-4 w-4" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4" />
-                          )}
-                          {calculateTotals().totalDayChangePercent.toFixed(2)}%
+                      <TableCell className="px-2"></TableCell>
+                      <TableCell className="px-2"></TableCell>
+                      <TableCell className="px-2"></TableCell>
+                      <TableCell className={`text-right font-bold whitespace-nowrap px-2 ${calculateTotals().totalPnLHKD >= 0 ? 'text-profit' : 'text-loss'}`}>
+                        <div className="flex flex-col items-end gap-0">
+                          <div className="flex items-center justify-end gap-1">
+                            {calculateTotals().totalPnLHKD >= 0 ? (
+                              <TrendingUp className="h-3 w-3" />
+                            ) : (
+                              <TrendingDown className="h-3 w-3" />
+                            )}
+                            {formatCurrency(calculateTotals().totalPnLHKD, baseCurrency)}
+                          </div>
+                          <div>
+                            {/* P&L % calculation for total would go here if needed */}
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell colSpan={10}></TableCell>
-                      <TableCell className={`text-right font-bold whitespace-nowrap ${calculateTotals().totalPnLHKD >= 0 ? 'text-profit' : 'text-loss'}`}>
+                      <TableCell className={`text-right font-bold whitespace-nowrap px-2 ${calculateTotals().totalPnLHKD >= 0 ? 'text-profit' : 'text-loss'}`}>
                         {formatCurrency(calculateTotals().totalPnLHKD, baseCurrency)}
                       </TableCell>
-                      <TableCell className="text-right font-bold whitespace-nowrap">
+                      <TableCell className="text-right font-bold whitespace-nowrap px-2">
                         {formatCurrency(calculateTotals().totalMarketValueHKD, baseCurrency)}
                       </TableCell>
+                      <TableCell className="px-2"></TableCell>
+                      <TableCell className="px-2"></TableCell>
+                      <TableCell className="px-2"></TableCell>
+                      <TableCell className="px-2"></TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>

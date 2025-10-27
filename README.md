@@ -576,6 +576,12 @@ For issues and questions:
 ## 🔄 Updates
 
 ### Recent Changes
+- ✅ **Enhanced Portfolio Tables**: Optimized table layouts with sticky columns, compact design, and improved mobile responsiveness
+- ✅ **Tooltip Action Buttons**: Space-saving hover tooltips for edit/delete actions in Other Portfolios table
+- ✅ **Consistent Color Scheme**: Unified profit/loss colors (`text-profit`/`text-loss`) across both portfolio tables
+- ✅ **Mobile-Optimized Account Boxes**: Smaller, responsive account balance displays for better mobile experience
+- ✅ **Sticky Symbol Columns**: Symbol columns remain visible during horizontal scrolling for better navigation
+- ✅ **Grouped Data Columns**: Combined Chg/Chg% and Unrealized P&L/P&L% into single columns for space efficiency
 - ✅ **Automatic 30-Minute Data Refresh**: Currency → IB Portfolio → Manual Investments refresh cycle
 - ✅ **Smart IB Refresh**: Automatically refreshes IB data for users with configured settings
 - ✅ **Last Update Timestamps**: Real-time display of when each data type was last refreshed
