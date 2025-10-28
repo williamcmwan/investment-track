@@ -45,7 +45,7 @@ export interface EnrichedManualPosition extends ManualPosition {
   marketState?: string;
 }
 
-export class ManualInvestmentService {
+export class OtherPortfolioService {
   private static db: Database.Database | null = null;
   private static lastRefreshTime: number | null = null;
   private static autoRefreshInterval: NodeJS.Timeout | null = null;

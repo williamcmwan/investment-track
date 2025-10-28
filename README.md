@@ -210,7 +210,32 @@ The application features an intelligent **30-minute automatic refresh cycle** th
 
 ## 🔌 Interactive Brokers Integration
 
-The application features comprehensive Interactive Brokers integration with user-configurable connections and real-time portfolio data including day change tracking for stocks, crypto, and bonds.
+The application features comprehensive Interactive Brokers integration with user-configurable connections, real-time portfolio data including day change tracking for stocks, crypto, and bonds, plus multi-currency cash balance tracking.
+
+### 💰 Multi-Currency Cash Balances
+The IB integration now provides detailed cash balance tracking across all currencies in your account:
+
+#### Features:
+- **Multi-Currency Display**: Shows cash balances for each currency separately (USD, HKD, EUR, GBP, JPY, etc.)
+- **USD Conversion**: Automatic conversion to USD using real-time exchange rates
+- **HKD Conversion**: Conversion to base currency (HKD) for portfolio comparison
+- **Database Storage**: Persistent storage with `market_value_hkd` and `market_value_usd` columns
+- **Compact Table Design**: Space-efficient table layout that doesn't take full screen width
+- **Real-time Updates**: Cash balances refresh automatically with portfolio data
+
+#### Display Format:
+| Currency | Amount | Market Value (USD) | Market Value (HKD) |
+|----------|--------|-------------------|-------------------|
+| USD | $144,431.19 | $144,431.19 | HK$1,126,563.31 |
+| HKD | HK$10,000.00 | $1,282.05 | HK$10,000.00 |
+| EUR | €13,502.92 | $14,553.15 | HK$113,514.56 |
+| **Total:** | | **$418,733.80** | **HK$3,265,923.44** |
+
+#### Technical Implementation:
+- **IB API Integration**: Uses `$LEDGER:ALL` account summary for comprehensive currency data
+- **Smart Filtering**: Processes only `CashBalance` tags to avoid duplication
+- **Exchange Rate Integration**: Automatic USD conversion using existing exchange rate service
+- **Database Schema**: New `cash_balances` table with proper currency tracking
 
 ## 📊 Manual Investment Accounts
 
@@ -336,6 +361,8 @@ The IB integration now provides comprehensive day change data for all security t
 - `POST /api/integration/ib/balance/refresh` - Force refresh account balance
 - `POST /api/integration/ib/portfolio` - Get portfolio positions (cached)
 - `POST /api/integration/ib/portfolio/refresh` - Force refresh portfolio data
+- `POST /api/integration/ib/cash` - Get cash balances by currency (cached)
+- `POST /api/integration/ib/cash/refresh` - Force refresh cash balances
 - `POST /api/integration/ib/account-data` - Get combined account data
 - `POST /api/integration/ib/refresh-all` - Force refresh all IB data
 
@@ -576,6 +603,15 @@ For issues and questions:
 ## 🔄 Updates
 
 ### Recent Changes
+- ✅ **Multi-Currency Cash Balances**: Interactive Brokers cash balances now display by currency with USD conversion
+- ✅ **Enhanced IB Portfolio View**: Added USD market value totals for both positions and cash balances
+- ✅ **Database Schema Updates**: Renamed `market_value` to `market_value_hkd` for clarity in cash balances
+- ✅ **Component Refactoring**: 
+  - `IntegrationView` → `IBPortfolioView` (clearer IB-specific naming)
+  - `ManualInvestmentAccounts` → `OtherPortfolioView` (better describes manual/other investments)
+  - `manualInvestmentService` → `otherPortfolioService` (consistent naming)
+- ✅ **Service Consolidation**: Merged `enhancedExchangeRateService` into `exchangeRateService` to eliminate redundancy
+- ✅ **Compact Table Design**: Cash balances table uses auto-width instead of full-screen for better space utilization
 - ✅ **Enhanced Portfolio Tables**: Optimized table layouts with sticky columns, compact design, and improved mobile responsiveness
 - ✅ **Tooltip Action Buttons**: Space-saving hover tooltips for edit/delete actions in Other Portfolios table
 - ✅ **Consistent Color Scheme**: Unified profit/loss colors (`text-profit`/`text-loss`) across both portfolio tables

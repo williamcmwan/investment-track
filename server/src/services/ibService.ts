@@ -31,6 +31,13 @@ interface PortfolioPosition {
   dayChangePercent?: number;
 }
 
+interface CashBalance {
+  currency: string;
+  amount: number;
+  marketValueHKD: number;
+  marketValueUSD?: number;
+}
+
 interface CachedData<T> {
   data: T;
   timestamp: number;
@@ -49,6 +56,7 @@ export class IBService {
   private static isRequestInProgress = false;
   private static lastReqId = 0;
   private static portfolioPositions: PortfolioPosition[] = [];
+  private static cashBalances: CashBalance[] = [];
   private static isPortfolioRequestInProgress = false;
   private static keepAliveInterval: NodeJS.Timeout | null = null;
   private static lastActivityTime = 0;
@@ -60,6 +68,7 @@ export class IBService {
   // Cache storage (in-memory for fast access)
   private static balanceCache: CachedData<AccountSummary> | null = null;
   private static portfolioCache: CachedData<PortfolioPosition[]> | null = null;
+  private static cashCache: CachedData<CashBalance[]> | null = null;
 
   // Cache auto-refresh times (in milliseconds)
   private static readonly AUTO_REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes - auto refresh if no manual refresh
@@ -70,6 +79,7 @@ export class IBService {
   private static readonly CACHE_DIR = path.join(process.cwd(), 'cache');
   private static readonly BALANCE_CACHE_FILE = path.join(IBService.CACHE_DIR, 'balance.json');
   private static readonly PORTFOLIO_CACHE_FILE = path.join(IBService.CACHE_DIR, 'portfolio.json');
+  private static readonly CASH_CACHE_FILE = path.join(IBService.CACHE_DIR, 'cash.json');
 
   // Get user-specific connection settings
   static getUserConnectionSettings(userSettings?: { host: string; port: number; client_id: number }): { host: string; port: number; clientId: number } {
@@ -240,6 +250,37 @@ export class IBService {
       isRefreshing: false
     };
     console.log('Portfolio cached in memory');
+  }
+
+  private static getCachedCash(): CashBalance[] | null {
+    console.log('getCachedCash called');
+
+    // Load from file if not in memory
+    if (!this.cashCache) {
+      console.log('Memory cache empty, trying to load from file:', this.CASH_CACHE_FILE);
+      this.cashCache = this.loadCacheFromFile<CashBalance[]>(this.CASH_CACHE_FILE);
+    }
+
+    // Always return cached data if available
+    if (this.cashCache) {
+      const cacheAge = Date.now() - this.cashCache.timestamp;
+      console.log(`Returning cached cash balances (age: ${Math.round(cacheAge / 1000 / 60)} minutes)`);
+      return this.cashCache.data;
+    }
+
+    console.log('No cached cash balances found');
+    return null;
+  }
+
+  private static setCachedCash(data: CashBalance[]): void {
+    this.cashCache = {
+      data,
+      timestamp: Date.now(),
+      isRefreshing: false
+    };
+    // Save to file for persistence
+    this.saveCacheToFile(this.CASH_CACHE_FILE, this.cashCache);
+    console.log('Cash balances cached in memory and file');
   }
 
   // Persist IB portfolio to DB (source = 'IB') for a given main account
@@ -692,22 +733,24 @@ export class IBService {
             if (tag === 'Currency') {
               this.accountSummaryData.set('Currency', currency);
             }
+            
+            // Log all account summary data to see what's available
+            console.log(`Account summary data: ${tag} = ${value} (${currency})`);
           }
         };
 
         const summaryEndHandler = (_reqId: number) => {
           if (_reqId === reqId && !isResolved) {
             const netLiquidation = parseFloat(this.accountSummaryData.get('NetLiquidation') || '0');
-            const totalCashValue = parseFloat(this.accountSummaryData.get('TotalCashValue') || '0');
             const currency = this.accountSummaryData.get('Currency') || 'USD';
 
             cleanup();
 
             resolve({
-              balance: netLiquidation || totalCashValue,
+              balance: netLiquidation,
               currency: currency,
-              netLiquidation: netLiquidation,
-              totalCashValue: totalCashValue
+              netLiquidation: netLiquidation
+              // totalCashValue will be handled separately by cash balance method
             });
           }
         };
@@ -715,11 +758,11 @@ export class IBService {
         this.ibApi!.on(EventName.accountSummary, summaryHandler);
         this.ibApi!.on(EventName.accountSummaryEnd, summaryEndHandler);
 
-        // Request account summary
+        // Request account summary (avoid TotalCashValue to prevent conflicts with cash balance requests)
         this.ibApi!.reqAccountSummary(
           reqId,
           'All',
-          'NetLiquidation,TotalCashValue,Currency'
+          'NetLiquidation,Currency'
         );
       });
     } catch (error) {
@@ -1077,6 +1120,7 @@ export class IBService {
       }
 
       this.portfolioPositions = [];
+      this.cashBalances = [];
       const mainAccountId = (userSettings as any)?.target_account_id ?? null;
 
       return new Promise((resolve, reject) => {
@@ -1120,8 +1164,27 @@ export class IBService {
           realizedPNL?: number,
           accountName?: string
         ) => {
-          // Skip cash positions
+          // Log all contracts to debug cash positions
+          console.log('Portfolio contract received:', {
+            symbol: contract.symbol,
+            secType: contract.secType,
+            currency: contract.currency,
+            position: position,
+            marketValue: marketValue
+          });
+
+          // Handle cash positions separately
           if (contract.secType === 'CASH') {
+            console.log('💰 Found cash position:', {
+              currency: contract.symbol || contract.currency || 'USD',
+              amount: position,
+              marketValueHKD: marketValue
+            });
+            this.cashBalances.push({
+              currency: contract.symbol || contract.currency || 'USD',
+              amount: position,
+              marketValueHKD: marketValue
+            });
             return;
           }
 
@@ -1283,6 +1346,9 @@ export class IBService {
 
             // Update in-memory cache
             this.setCachedPortfolio(enrichedPositions);
+            
+            console.log(`💰 Captured ${this.cashBalances.length} cash positions:`, this.cashBalances);
+            this.setCachedCash(this.cashBalances);
 
             cleanup();
             resolve(enrichedPositions);
@@ -1324,13 +1390,15 @@ export class IBService {
   }
 
   // Get cache status for debugging
-  static getCacheStatus(): { balance: string; portfolio: string } {
+  static getCacheStatus(): { balance: string; portfolio: string; cash: string } {
     const balanceAge = this.balanceCache ? Date.now() - this.balanceCache.timestamp : null;
     const portfolioAge = this.portfolioCache ? Date.now() - this.portfolioCache.timestamp : null;
+    const cashAge = this.cashCache ? Date.now() - this.cashCache.timestamp : null;
 
     return {
       balance: balanceAge ? `${Math.round(balanceAge / 1000)}s old` : 'No cache',
-      portfolio: portfolioAge ? `${Math.round(portfolioAge / 1000)}s old` : 'No cache'
+      portfolio: portfolioAge ? `${Math.round(portfolioAge / 1000)}s old` : 'No cache',
+      cash: cashAge ? `${Math.round(cashAge / 1000)}s old` : 'No cache'
     };
   }
 
@@ -1344,10 +1412,434 @@ export class IBService {
     return this.portfolioCache ? this.portfolioCache.timestamp : null;
   }
 
+  // Get cash balances (from database first, then cache)
+  static async getCashBalances(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<CashBalance[]> {
+    console.log('💰 getCashBalances called');
+
+    // Try to load from database first
+    const mainAccountId = userSettings.target_account_id ?? null;
+    const dbData = await this.loadCashBalancesFromDB(mainAccountId);
+    if (dbData.length > 0) {
+      console.log('✅ Using cash balances from database');
+      this.setCachedCash(dbData);
+      return dbData;
+    }
+
+    // Return cached data if available
+    const cached = this.getCachedCash();
+    if (cached) {
+      console.log('✅ Using cached cash balance data');
+      return cached;
+    }
+
+    // No database or cache data available, fetch fresh data
+    console.log('❌ No cached cash balance available, fetching fresh data');
+    const freshData = await this.fetchCashBalancesUsingAccountSummary(userSettings);
+    
+    // Calculate USD values and save to database
+    const enrichedData = await this.enrichCashBalancesWithUSD(freshData);
+    
+    if (mainAccountId) {
+      await this.saveCashBalancesToDB(mainAccountId, enrichedData);
+    }
+    
+    this.setCachedCash(enrichedData);
+    return enrichedData;
+  }
+
+  // Force refresh cash balances
+  static async forceRefreshCashBalances(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<CashBalance[]> {
+    console.log('💰 Force refreshing cash balances...');
+    
+    const freshData = await this.fetchCashBalancesUsingAccountSummary(userSettings);
+    
+    // Calculate USD values and save to database
+    const enrichedData = await this.enrichCashBalancesWithUSD(freshData);
+    
+    const mainAccountId = userSettings.target_account_id ?? null;
+    if (mainAccountId) {
+      await this.saveCashBalancesToDB(mainAccountId, enrichedData);
+    }
+    
+    this.setCachedCash(enrichedData);
+    LastUpdateService.updateIBPortfolioTime();
+    
+    return enrichedData;
+  }
+
+  // Enrich cash balances with USD values using exchange rates
+  private static async enrichCashBalancesWithUSD(cashBalances: CashBalance[]): Promise<CashBalance[]> {
+    const enrichedBalances: CashBalance[] = [];
+    
+    for (const cash of cashBalances) {
+      let marketValueUSD = cash.marketValueHKD;
+      
+      if (cash.currency !== 'USD') {
+        try {
+          // Get exchange rate to USD
+          const { ExchangeRateService } = await import('./exchangeRateService.js');
+          const rate = await ExchangeRateService.getExchangeRate(cash.currency, 'USD');
+          marketValueUSD = cash.marketValueHKD * rate;
+        } catch (error) {
+          console.error(`Failed to get USD rate for ${cash.currency}:`, error);
+          marketValueUSD = cash.marketValueHKD; // Fallback to original value
+        }
+      }
+      
+      enrichedBalances.push({
+        ...cash,
+        marketValueUSD
+      });
+    }
+    
+    return enrichedBalances;
+  }
+
+  // Get cash timestamp
+  static getCashTimestamp(): number | null {
+    return this.cashCache ? this.cashCache.timestamp : null;
+  }
+
+  // Save cash balances to database
+  private static async saveCashBalancesToDB(mainAccountId: number, cashBalances: CashBalance[]): Promise<void> {
+    try {
+      const { dbRun } = await import('../database/connection.js');
+      
+      console.log(`💾 Saving ${cashBalances.length} cash balances to DB for account ${mainAccountId}...`);
+      
+      // Delete existing cash balances for this account
+      await dbRun('DELETE FROM cash_balances WHERE main_account_id = ? AND source = ?', [mainAccountId, 'IB']);
+
+      if (cashBalances.length === 0) {
+        console.log('💾 No cash balances to save');
+        return;
+      }
+
+      // Insert new cash balances
+      for (const cash of cashBalances) {
+        await dbRun(`
+          INSERT INTO cash_balances (
+            main_account_id, currency, amount, market_value_hkd, market_value_usd, source, 
+            last_updated, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `, [
+          mainAccountId,
+          cash.currency,
+          cash.amount,
+          cash.marketValueHKD,
+          cash.marketValueUSD || null,
+          'IB'
+        ]);
+      }
+
+      console.log(`💾 Saved ${cashBalances.length} cash balances to DB`);
+    } catch (error) {
+      console.error('❌ Failed to save cash balances to DB:', error);
+    }
+  }
+
+  // Load cash balances from database
+  private static async loadCashBalancesFromDB(mainAccountId?: number | null): Promise<CashBalance[]> {
+    try {
+      const { dbAll } = await import('../database/connection.js');
+      
+      let rows: any[];
+      if (mainAccountId != null) {
+        rows = await dbAll(
+          'SELECT * FROM cash_balances WHERE main_account_id = ? AND source = ? ORDER BY currency',
+          [mainAccountId, 'IB']
+        );
+      } else {
+        rows = await dbAll(
+          'SELECT * FROM cash_balances WHERE source = ? ORDER BY main_account_id, currency',
+          ['IB']
+        );
+      }
+
+      const cashBalances: CashBalance[] = rows.map((row: any) => ({
+        currency: row.currency,
+        amount: row.amount,
+        marketValueHKD: row.market_value_hkd,
+        marketValueUSD: row.market_value_usd
+      }));
+
+      console.log(`📥 Loaded ${cashBalances.length} cash balances from DB${mainAccountId != null ? ' for account ' + mainAccountId : ''}`);
+      return cashBalances;
+    } catch (error) {
+      console.error('❌ Failed to load cash balances from DB:', error);
+      return [];
+    }
+  }
+
+
+
+  // Method using account summary to get cash balances by currency (based on working example)
+  private static async fetchCashBalancesUsingAccountSummary(userSettings?: { host: string; port: number; client_id: number }): Promise<CashBalance[]> {
+    console.log('💰 Fetching cash balances using TotalCashValue by currency...');
+    
+    // Wait if another request is in progress
+    while (this.isRequestInProgress) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // Add a small delay to ensure previous requests are fully processed
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    this.isRequestInProgress = true;
+
+    try {
+      await this.ensureConnection(userSettings);
+
+      if (!this.ibApi) {
+        throw new Error('IB API not initialized');
+      }
+
+      const reqId = 3; // Use different ID
+      const balances: Record<string, number> = {}; // Store balances by currency like in the example
+      let realCurrency = 'USD'; // Default to USD, will be updated from RealCurrency tag
+
+      // Always cancel any existing subscription first
+      try {
+        this.ibApi.cancelAccountSummary(reqId);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (err) {
+        // Ignore cancellation errors
+      }
+
+      return new Promise((resolve, reject) => {
+        let isResolved = false;
+
+        const timeout = setTimeout(() => {
+          if (!isResolved) {
+            cleanup();
+            reject(new Error('Timeout waiting for TotalCashValue data'));
+          }
+        }, 15000);
+
+        const cleanup = () => {
+          if (isResolved) return;
+          isResolved = true;
+
+          clearTimeout(timeout);
+
+          // Remove event listeners
+          this.ibApi!.off(EventName.accountSummary, summaryHandler);
+          this.ibApi!.off(EventName.accountSummaryEnd, summaryEndHandler);
+
+          // Cancel the subscription
+          try {
+            this.ibApi!.cancelAccountSummary(reqId);
+          } catch (err) {
+            console.error('Error canceling account summary:', err);
+          }
+
+          this.isRequestInProgress = false;
+        };
+
+        const summaryHandler = (
+          _reqId: number,
+          _account: string,
+          tag: string,
+          value: string,
+          currency: string
+        ) => {
+          if (_reqId === reqId) {
+            // Use only CashBalance to avoid duplication, and skip BASE (which is the total)
+            if (tag === 'CashBalance' && currency !== 'BASE') {
+              const amount = parseFloat(value);
+              
+              if (amount !== 0) { // Only store non-zero balances
+                balances[currency] = amount;
+                console.log(`💰 Cash balance: ${currency} = ${amount}`);
+              }
+            } else if (tag === 'RealCurrency') {
+              realCurrency = value;
+            }
+          }
+        };
+
+        const summaryEndHandler = (_reqId: number) => {
+          if (_reqId === reqId && !isResolved) {
+            console.log(`💰 Found ${Object.keys(balances).length} cash balances`);
+            
+            // Convert to CashBalance array, handling BASE currency conversion
+            const cashBalances: CashBalance[] = [];
+            for (const [currency, amount] of Object.entries(balances)) {
+              // Convert BASE to real currency, or use currency as-is
+              const actualCurrency = currency === 'BASE' ? realCurrency : currency;
+              
+              cashBalances.push({
+                currency: actualCurrency,
+                amount: amount,
+                marketValueHKD: amount // For cash, market value equals amount
+              });
+            }
+
+
+            cleanup();
+            resolve(cashBalances);
+          }
+        };
+
+        this.ibApi!.on(EventName.accountSummary, summaryHandler);
+        this.ibApi!.on(EventName.accountSummaryEnd, summaryEndHandler);
+
+        // Request account summary with $LEDGER:ALL to get all currency data (like the working example)
+        this.ibApi!.reqAccountSummary(
+          reqId,
+          'All',
+          '$LEDGER:ALL'
+        );
+      });
+    } catch (error) {
+      this.isRequestInProgress = false;
+      throw error;
+    }
+  }
+
+  // Internal method to fetch cash balances using account updates (better for multi-currency)
+  private static async fetchCashBalancesFresh(userSettings?: { host: string; port: number; client_id: number }): Promise<CashBalance[]> {
+    console.log('💰 Fetching cash balances using account updates...');
+    
+    // Wait if another request is in progress
+    while (this.isRequestInProgress || this.isPortfolioRequestInProgress) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // Add a small delay to ensure previous requests are fully processed
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    this.isPortfolioRequestInProgress = true;
+
+    try {
+      await this.ensureConnection(userSettings);
+
+      if (!this.ibApi) {
+        throw new Error('IB API not initialized');
+      }
+
+      const cashBalances: CashBalance[] = [];
+
+      return new Promise((resolve, reject) => {
+        let isResolved = false;
+
+        const timeout = setTimeout(() => {
+          if (!isResolved) {
+            cleanup();
+            reject(new Error('Timeout waiting for cash balance data'));
+          }
+        }, 20000);
+
+        const cleanup = () => {
+          if (isResolved) return;
+          isResolved = true;
+
+          clearTimeout(timeout);
+
+          // Remove event listeners
+          this.ibApi!.off(EventName.updatePortfolio, portfolioHandler);
+          this.ibApi!.off(EventName.updateAccountValue, accountValueHandler);
+          this.ibApi!.off(EventName.accountDownloadEnd, downloadEndHandler);
+
+          // Unsubscribe from account updates
+          try {
+            this.ibApi!.reqAccountUpdates(false, '');
+            console.log('💰 Unsubscribed from account updates for cash balances');
+          } catch (err) {
+            console.error('Error unsubscribing from account updates:', err);
+          }
+
+          this.isPortfolioRequestInProgress = false;
+        };
+
+        // Handle portfolio updates (including cash positions)
+        const portfolioHandler = (
+          contract: any,
+          position: number,
+          marketPrice: number,
+          marketValue: number,
+          averageCost?: number,
+          unrealizedPNL?: number,
+          realizedPNL?: number,
+          accountName?: string
+        ) => {
+          // Only capture cash positions
+          if (contract.secType === 'CASH') {
+            console.log('💰 Found cash position via portfolio:', {
+              symbol: contract.symbol,
+              currency: contract.currency,
+              position: position,
+              marketValue: marketValue
+            });
+            
+            cashBalances.push({
+              currency: contract.symbol || contract.currency || 'USD',
+              amount: position,
+              marketValueHKD: marketValue
+            });
+          }
+        };
+
+        // Handle account value updates (alternative way to get cash by currency)
+        const accountValueHandler = (
+          key: string,
+          value: string,
+          currency: string,
+          accountName: string
+        ) => {
+          // Look for cash balance keys
+          if (key === 'CashBalance' || key === 'SettledCash') {
+            const amount = parseFloat(value);
+            if (amount !== 0) {
+              console.log(`💰 Found cash via account value: ${key} = ${amount} ${currency}`);
+              
+              // Check if we already have this currency from portfolio
+              const existingIndex = cashBalances.findIndex(cb => cb.currency === currency);
+              if (existingIndex === -1) {
+                cashBalances.push({
+                  currency: currency,
+                  amount: amount,
+                  marketValueHKD: amount
+                });
+              } else {
+                // Update existing entry if this gives us more accurate data
+                const existing = cashBalances[existingIndex];
+                if (existing) {
+                  existing.amount = amount;
+                  existing.marketValueHKD = amount;
+                }
+              }
+            }
+          }
+        };
+
+        const downloadEndHandler = async (accountName: string) => {
+          if (!isResolved) {
+            console.log(`💰 Account download ended, found ${cashBalances.length} cash positions:`, cashBalances);
+            cleanup();
+            resolve(cashBalances);
+          }
+        };
+
+        this.ibApi!.on(EventName.updatePortfolio, portfolioHandler);
+        this.ibApi!.on(EventName.updateAccountValue, accountValueHandler);
+        this.ibApi!.on(EventName.accountDownloadEnd, downloadEndHandler);
+
+        // Request account updates to get both portfolio and account values
+        this.ibApi!.reqAccountUpdates(true, '');
+        console.log('💰 Requested account updates for cash balances');
+      });
+    } catch (error) {
+      this.isPortfolioRequestInProgress = false;
+      throw error;
+    }
+  }
+
   // Get cache statistics for reporting
   static getCacheStats(): {
     balance: { hasCache: boolean; timestamp: number | null; ageMinutes: number | null; isRefreshing: boolean };
     portfolio: { hasCache: boolean; timestamp: number | null; ageMinutes: number | null; isRefreshing: boolean };
+    cash: { hasCache: boolean; timestamp: number | null; ageMinutes: number | null; isRefreshing: boolean };
   } {
     const now = Date.now();
 
@@ -1363,6 +1855,12 @@ export class IBService {
         timestamp: this.portfolioCache?.timestamp || null,
         ageMinutes: this.portfolioCache ? Math.round((now - this.portfolioCache.timestamp) / 1000 / 60) : null,
         isRefreshing: this.portfolioCache?.isRefreshing || false
+      },
+      cash: {
+        hasCache: !!this.cashCache,
+        timestamp: this.cashCache?.timestamp || null,
+        ageMinutes: this.cashCache ? Math.round((now - this.cashCache.timestamp) / 1000 / 60) : null,
+        isRefreshing: this.cashCache?.isRefreshing || false
       }
     };
   }

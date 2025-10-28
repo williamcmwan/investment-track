@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { CurrencyPairModel, CreateCurrencyPairData, UpdateCurrencyPairData } from '../models/CurrencyPair.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
 import { ExchangeRateService } from '../services/exchangeRateService.js';
-import { EnhancedExchangeRateService } from '../services/enhancedExchangeRateService.js';
+
 
 const router = express.Router();
 
@@ -82,7 +82,7 @@ router.use(authenticateToken);
 router.post('/update-rates-enhanced', async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user?.id || 0;
-    await EnhancedExchangeRateService.updateAllCurrencyPairs(userId);
+    await ExchangeRateService.updateAllCurrencyPairs(userId);
     
     // Return updated pairs for the authenticated user
     const pairs = await CurrencyPairModel.findByUserId(userId);
@@ -119,7 +119,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     // If refresh requested, update all pairs first (multi-source enhanced accuracy)
     if (refresh) {
       try {
-        await EnhancedExchangeRateService.updateAllCurrencyPairs(userId);
+        await ExchangeRateService.updateAllCurrencyPairs(userId);
       } catch (e) {
         console.warn('Currency refresh failed, returning cached pairs instead');
       }

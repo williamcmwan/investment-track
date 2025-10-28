@@ -74,11 +74,11 @@ interface MainAccount {
     profitLossPercent: number;
 }
 
-interface ManualInvestmentAccountsProps {
+interface OtherPortfolioViewProps {
     accounts: MainAccount[];
 }
 
-const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ accounts = [] }) => {
+const OtherPortfolioView: React.FC<OtherPortfolioViewProps> = ({ accounts = [] }) => {
     const { toast } = useToast();
     const [positions, setPositions] = useState<ManualPosition[]>([]);
     const [loading, setLoading] = useState(false);
@@ -1065,4 +1065,4 @@ const ManualInvestmentAccounts: React.FC<ManualInvestmentAccountsProps> = ({ acc
     );
 };
 
-export default ManualInvestmentAccounts;
+export default OtherPortfolioView;

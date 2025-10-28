@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { PerformanceHistoryService } from './performanceHistoryService.js';
 import { dbAll } from '../database/connection.js';
 import { ExchangeRateService } from './exchangeRateService.js';
-import { ManualInvestmentService } from './manualInvestmentService.js';
+import { OtherPortfolioService } from './otherPortfolioService.js';
 import { IBService } from './ibService.js';
 import { LastUpdateService } from './lastUpdateService.js';
 import { IBConnectionService } from './ibConnectionService.js';
@@ -243,7 +243,7 @@ export class SchedulerService {
       // Step 3: Refresh Manual Investment Market Data
       console.log('💼 Step 3/3: Refreshing manual investment market data...');
       try {
-        await ManualInvestmentService.updateAllMarketData('default');
+        await OtherPortfolioService.updateAllMarketData('default');
         LastUpdateService.updateManualInvestmentsTime();
         console.log('✅ Manual investment market data refreshed successfully');
       } catch (error) {

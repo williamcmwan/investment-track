@@ -376,6 +376,34 @@ class ApiClient {
     });
   }
 
+  async getIBCashBalances() {
+    return this.request<{
+      data: Array<{
+        currency: string;
+        amount: number;
+        marketValue: number;
+      }>;
+      timestamp?: number;
+    }>('/integration/ib/cash', {
+      method: 'POST',
+    });
+  }
+
+  async forceRefreshIBCashBalances() {
+    return this.request<{
+      data: Array<{
+        currency: string;
+        amount: number;
+        marketValue: number;
+      }>;
+      timestamp?: number;
+    }>('/integration/ib/cash/refresh', {
+      method: 'POST',
+    });
+  }
+
+
+
   // Manual Investment endpoints
   async getManualPositions() {
     return this.request<any[]>('/manual-investments/positions');

@@ -1,10 +1,10 @@
 import express from 'express';
-import { ManualInvestmentService } from '../services/manualInvestmentService';
+import { OtherPortfolioService } from '../services/otherPortfolioService';
 
 const router = express.Router();
 
 // Initialize database on first load
-ManualInvestmentService.initializeDatabase().catch(console.error);
+OtherPortfolioService.initializeDatabase().catch(console.error);
 
 
 
@@ -19,10 +19,10 @@ router.get('/positions', async (req, res) => {
     
     let positions;
     if (accountId) {
-      positions = ManualInvestmentService.getManualPositions(accountId);
+      positions = OtherPortfolioService.getManualPositions(accountId);
     } else {
       // Use getAllManualPositions instead of getEnrichedManualPositions to avoid auto-refresh
-      positions = ManualInvestmentService.getAllManualPositions(userId);
+      positions = OtherPortfolioService.getAllManualPositions(userId);
     }
     
     return res.json(positions);
@@ -77,10 +77,10 @@ router.post('/positions', async (req, res) => {
     
     console.log('📊 Creating position with processed data:', positionData);
 
-    const position = ManualInvestmentService.addManualPosition(positionData);
+    const position = OtherPortfolioService.addManualPosition(positionData);
     
     // Try to get market data immediately
-    await ManualInvestmentService.updatePositionMarketData(position.id);
+    await OtherPortfolioService.updatePositionMarketData(position.id);
     
     return res.status(201).json(position);
   } catch (error) {
@@ -104,12 +104,12 @@ router.put('/positions/:id', async (req, res) => {
     if (updates.marketPrice) updates.marketPrice = parseFloat(updates.marketPrice);
     if (updates.symbol) updates.symbol = updates.symbol.toUpperCase();
     
-    const success = ManualInvestmentService.updateManualPosition(positionId, updates);
+    const success = OtherPortfolioService.updateManualPosition(positionId, updates);
     
     if (success) {
       // Update market data if symbol changed (but not if price was manually set)
       if (updates.symbol && !updates.marketPrice) {
-        await ManualInvestmentService.updatePositionMarketData(positionId);
+        await OtherPortfolioService.updatePositionMarketData(positionId);
       }
       
       return res.json({ success: true });
@@ -129,7 +129,7 @@ router.put('/positions/:id', async (req, res) => {
 router.delete('/positions/:id', async (req, res) => {
   try {
     const positionId = parseInt(req.params.id);
-    const success = ManualInvestmentService.deleteManualPosition(positionId);
+    const success = OtherPortfolioService.deleteManualPosition(positionId);
     
     if (success) {
       res.json({ success: true });
@@ -149,10 +149,10 @@ router.delete('/positions/:id', async (req, res) => {
 router.post('/positions/refresh-market-data', async (req, res) => {
   try {
     const userId = req.body.userId || 'default';
-    const result = await ManualInvestmentService.updateAllMarketData(userId);
+    const result = await OtherPortfolioService.updateAllMarketData(userId);
     
     // Include last refresh time in response
-    const lastRefreshTime = ManualInvestmentService.getLastRefreshTime();
+    const lastRefreshTime = OtherPortfolioService.getLastRefreshTime();
     
     res.json({
       ...result,
@@ -170,7 +170,7 @@ router.post('/positions/refresh-market-data', async (req, res) => {
  */
 router.get('/refresh-status', async (req, res) => {
   try {
-    const lastRefreshTime = ManualInvestmentService.getLastRefreshTime();
+    const lastRefreshTime = OtherPortfolioService.getLastRefreshTime();
     const now = Date.now();
     const timeSinceLastRefresh = lastRefreshTime ? now - lastRefreshTime : null;
     const nextAutoRefresh = lastRefreshTime ? lastRefreshTime + (30 * 60 * 1000) : null;
@@ -213,7 +213,7 @@ router.get('/all-last-updates', async (req, res) => {
 router.get('/summary', async (req, res) => {
   try {
     const userId = req.query.userId as string || 'default';
-    const summary = ManualInvestmentService.getManualPortfolioSummary(userId);
+    const summary = OtherPortfolioService.getManualPortfolioSummary(userId);
     res.json(summary);
   } catch (error) {
     console.error('Error getting portfolio summary:', error);

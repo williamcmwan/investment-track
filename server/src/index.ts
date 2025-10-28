@@ -17,7 +17,7 @@ import integrationRoutes from './routes/integration.js';
 import manualInvestmentRoutes from './routes/manualInvestments.js';
 import { SchedulerService } from './services/schedulerService.js';
 import { IBService } from './services/ibService.js';
-import { ManualInvestmentService } from './services/manualInvestmentService.js';
+import { OtherPortfolioService } from './services/otherPortfolioService.js';
 
 // Load environment variables
 dotenv.config();
@@ -128,7 +128,7 @@ const server = app.listen(PORT, () => {
   SchedulerService.initialize();
   IBService.initialize();
   // Ensure unified portfolios table is initialized at startup
-  ManualInvestmentService.initializeDatabase().catch(console.error);
+  OtherPortfolioService.initializeDatabase().catch(console.error);
 });
 
 // Graceful shutdown handling

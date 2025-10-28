@@ -24,8 +24,8 @@ import {
 import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
 import CurrencyView from "./CurrencyView";
-import IntegrationView from "./IntegrationView";
-import ManualInvestmentAccounts from "./ManualInvestmentAccounts";
+import IBPortfolioView from "./IBPortfolioView";
+import OtherPortfolioView from "./OtherPortfolioView";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
@@ -1120,7 +1120,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
             />
           )}
           {currentView === "manual-investments" && (
-            <ManualInvestmentAccounts accounts={accounts} />
+            <OtherPortfolioView accounts={accounts} />
           )}
           {currentView === "currency" && (
             <CurrencyView 
@@ -1128,7 +1128,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
             />
           )}
           {currentView === "integration" && (
-            <IntegrationView 
+            <IBPortfolioView 
               baseCurrency={baseCurrency}
               onAccountUpdate={async () => {
                 await loadAccounts();

@@ -231,6 +231,53 @@ router.post('/ib/cleanup', authenticateToken, async (req, res) => {
   }
 });
 
+// Get IB cash balances (cached)
+router.post('/ib/cash', authenticateToken, async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    
+    // Get user's IB settings
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    
+    if (!userSettings) {
+      return res.status(400).json({ error: 'IB connection not configured. Please configure your IB settings first.' });
+    }
+    
+    const result = await IBService.getCashBalances(userSettings);
+    const timestamp = IBService.getCashTimestamp();
+    return res.json({ data: result, timestamp });
+  } catch (error) {
+    console.error('Error getting IB cash balances:', error);
+    return res.status(500).json({ error: 'Failed to get IB cash balances' });
+  }
+});
+
+// Force refresh IB cash balances
+router.post('/ib/cash/refresh', authenticateToken, async (req, res) => {
+  try {
+    console.log('🔄 Force refresh cash balances endpoint called');
+    const userId = (req as any).user.id;
+    
+    // Get user's IB settings
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    
+    if (!userSettings) {
+      return res.status(400).json({ error: 'IB connection not configured. Please configure your IB settings first.' });
+    }
+    
+    const result = await IBService.forceRefreshCashBalances(userSettings);
+    const timestamp = IBService.getCashTimestamp();
+    console.log('✅ Cash balances refresh successful, returning data');
+    return res.json({ data: result, timestamp });
+  } catch (error) {
+    console.error('❌ Error refreshing IB cash balances:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to refresh IB cash balances';
+    return res.status(500).json({ error: errorMessage });
+  }
+});
+
+
+
 // Disconnect from IB Gateway
 router.post('/ib/disconnect', authenticateToken, async (req, res) => {
   try {

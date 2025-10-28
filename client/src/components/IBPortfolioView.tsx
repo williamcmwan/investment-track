@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api";
 import IBConfigDialog from "./IBConfigDialog";
 
-interface IntegrationViewProps {
+interface IBPortfolioViewProps {
   baseCurrency: string;
   onAccountUpdate?: () => void;
 }
@@ -48,10 +48,17 @@ interface PortfolioPosition {
   dayChangePercent?: number;
 }
 
+interface CashBalance {
+  currency: string;
+  amount: number;
+  marketValueHKD: number;
+  marketValueUSD?: number;
+}
+
 type SortField = 'symbol' | 'secType' | 'currency' | 'position' | 'averageCost' | 'marketPrice' | 'pnlPercent' | 'unrealizedPNL' | 'marketValue' | 'country' | 'industry' | 'category' | 'dayChange' | 'dayChangePercent';
 type SortDirection = 'asc' | 'desc';
 
-const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps) => {
+const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps) => {
   const { toast } = useToast();
   const [isConnecting, setIsConnecting] = useState(false);
   const [accountBalance, setAccountBalance] = useState<number | null>(null);
@@ -60,6 +67,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
   const [accountCurrency, setAccountCurrency] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([]);
+  const [cashBalances, setCashBalances] = useState<CashBalance[]>([]);
   const [isLoadingPortfolio, setIsLoadingPortfolio] = useState(false);
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
   const [sortField, setSortField] = useState<SortField>('symbol');
@@ -152,6 +160,26 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
         console.log('❌ Error loading cached portfolio:', error);
       }
 
+      try {
+        console.log('💰 Trying to load cached cash balances...');
+        const cashResponse = await apiClient.getIBCashBalances();
+        console.log('Cash response:', cashResponse);
+
+        if (cashResponse.data && cashResponse.data.data && cashResponse.data.data.length > 0) {
+          console.log('✅ Found cached cash balances with', cashResponse.data.data.length, 'currencies');
+          setCashBalances(cashResponse.data.data);
+        } else {
+          console.log('❌ No cached cash balance data or empty array');
+          console.log('Cash response structure:', {
+            hasData: !!cashResponse.data,
+            dataStructure: cashResponse.data ? Object.keys(cashResponse.data) : 'no data',
+            error: cashResponse.error
+          });
+        }
+      } catch (error) {
+        console.log('❌ Error loading cached cash balances:', error);
+      }
+
       console.log('🏁 Initial data loading complete');
     };
 
@@ -186,10 +214,11 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
     setIsLoadingPortfolio(true);
 
     try {
-      // Force refresh both balance and portfolio to get fresh data
-      const [balanceResponse, portfolioResponse] = await Promise.all([
+      // Force refresh balance, portfolio, and cash balances to get fresh data
+      const [balanceResponse, portfolioResponse, cashResponse] = await Promise.all([
         apiClient.forceRefreshIBBalance(),
-        apiClient.forceRefreshIBPortfolio()
+        apiClient.forceRefreshIBPortfolio(),
+        apiClient.forceRefreshIBCashBalances()
       ]);
 
       console.log('Balance response:', balanceResponse);
@@ -212,6 +241,14 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
         throw new Error(portfolioResponse.error);
       }
 
+      if (cashResponse.error) {
+        console.error('Cash balances error detected:', cashResponse.error);
+        if (cashResponse.error.includes('not configured')) {
+          throw new Error('IB connection not configured. Please click "Configure" to set up your Interactive Brokers connection.');
+        }
+        throw new Error(cashResponse.error);
+      }
+
       // Verify we have data
       if (!balanceResponse.data) {
         throw new Error("No balance data received from server");
@@ -219,6 +256,10 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
 
       if (!portfolioResponse.data) {
         throw new Error("No portfolio data received from server");
+      }
+
+      if (!cashResponse.data || !cashResponse.data.data) {
+        throw new Error("No cash balance data received from server");
       }
 
       // Update balance
@@ -237,8 +278,13 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
       // Update portfolio
       setPortfolio(portfolioResponse.data);
 
-      // Fetch exchange rates for all currencies in portfolio
-      const uniqueCurrencies = [...new Set(portfolioResponse.data.map(p => p.currency))];
+      // Update cash balances
+      setCashBalances(cashResponse.data.data);
+
+      // Fetch exchange rates for all currencies in portfolio and cash
+      const portfolioCurrencies = [...new Set(portfolioResponse.data.map(p => p.currency))];
+      const cashCurrencies = [...new Set(cashResponse.data.data.map(c => c.currency))];
+      const uniqueCurrencies = [...new Set([...portfolioCurrencies, ...cashCurrencies])];
       const rates: Record<string, number> = {};
 
       for (const currency of uniqueCurrencies) {
@@ -432,6 +478,24 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
     return { totalPnLHKD, totalMarketValueHKD, totalDayChangeHKD, totalDayChangePercent };
   };
 
+  const calculatePortfolioMarketValueUSD = () => {
+    // First calculate total market value in HKD (same as table total)
+    const totalMarketValueHKD = portfolio.reduce((sum, position) => {
+      return sum + convertToHKD(position.marketValue, position.currency);
+    }, 0);
+    
+    // Convert HKD to USD using the inverse of USD to HKD rate
+    // exchangeRates['USD'] contains the USD to HKD rate, so we divide by it to get HKD to USD
+    const usdToHkdRate = exchangeRates['USD'] || 7.8; // Fallback rate if not available
+    return totalMarketValueHKD / usdToHkdRate;
+  };
+
+  const calculateCashMarketValueUSD = () => {
+    return cashBalances.reduce((sum, cash) => {
+      return sum + (cash.marketValueUSD || cash.marketValueHKD);
+    }, 0);
+  };
+
   const getSortedPortfolio = () => {
     const sorted = [...portfolio].sort((a, b) => {
       let aValue: any;
@@ -586,6 +650,7 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
                   <Settings className="h-4 w-4" />
                   Configure
                 </Button>
+
                 <Button
                   onClick={handleRefreshAll}
                   disabled={isConnecting || isLoadingPortfolio}
@@ -658,10 +723,17 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
           {/* Portfolio Positions */}
           <div className="border-t pt-6 -mx-4 sm:mx-0">
             <div className="flex items-center justify-between mb-4 px-4 sm:px-0">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Activity className="h-5 w-5 text-primary" />
-                Positions
-              </h3>
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-primary" />
+                  Positions
+                </h3>
+                {portfolio.length > 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    Market Value (USD): <span className="font-medium text-foreground">{formatCurrency(calculatePortfolioMarketValueUSD(), 'USD')}</span>
+                  </div>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground sm:hidden">
                 Scroll →
               </p>
@@ -868,6 +940,92 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
               </div>
             )}
           </div>
+
+          {/* Cash Currency Balances */}
+          <div className="border-t pt-6 -mx-4 sm:mx-0">
+            <div className="flex items-center gap-4 mb-4 px-4 sm:px-0">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                Cash Balances
+              </h3>
+              {cashBalances.length > 0 && (
+                <div className="text-sm text-muted-foreground">
+                  Market Value (USD): <span className="font-medium text-foreground">{formatCurrency(calculateCashMarketValueUSD(), 'USD')}</span>
+                </div>
+              )}
+            </div>
+            {cashBalances.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table className="text-sm w-auto">
+                  <TableHeader>
+                    <TableRow className="text-xs">
+                      <TableHead className="px-3 text-left">Currency</TableHead>
+                      <TableHead className="px-3 text-right">Amount</TableHead>
+                      <TableHead className="px-3 text-right">Market Value (USD)</TableHead>
+                      <TableHead className="px-3 text-right">Market Value ({baseCurrency})</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {cashBalances.map((cash, index) => {
+                      const marketValueInHKD = convertToHKD(cash.marketValueHKD, cash.currency);
+                      const marketValueUSD = cash.marketValueUSD || cash.marketValueHKD;
+
+                      return (
+                        <TableRow key={index} className="text-xs">
+                          <TableCell className="font-medium px-3">
+                            {cash.currency}
+                          </TableCell>
+                          <TableCell className="text-right px-3 whitespace-nowrap">
+                            {formatCurrency(cash.amount, cash.currency)}
+                          </TableCell>
+                          <TableCell className="text-right px-3 whitespace-nowrap">
+                            {formatCurrency(marketValueUSD, 'USD')}
+                          </TableCell>
+                          <TableCell className="text-right font-medium px-3 whitespace-nowrap">
+                            {formatCurrency(marketValueInHKD, baseCurrency)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {/* Total Row */}
+                    <TableRow className="bg-muted/50 font-semibold border-t-2 text-xs">
+                      <TableCell className="text-left font-bold px-3">
+                        Total:
+                      </TableCell>
+                      <TableCell className="px-3"></TableCell>
+                      <TableCell className="text-right font-bold px-3 whitespace-nowrap">
+                        {formatCurrency(
+                          cashBalances.reduce((sum, cash) => {
+                            return sum + (cash.marketValueUSD || cash.marketValueHKD);
+                          }, 0),
+                          'USD'
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-bold px-3 whitespace-nowrap">
+                        {formatCurrency(
+                          cashBalances.reduce((sum, cash) => {
+                            return sum + convertToHKD(cash.marketValueHKD, cash.currency);
+                          }, 0),
+                          baseCurrency
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center bg-background/30 rounded-lg">
+                <DollarSign className="h-10 w-10 text-muted-foreground mb-3" />
+                <h3 className="text-base font-medium text-foreground mb-1">No Cash Balances</h3>
+                <p className="text-sm text-muted-foreground">
+                  {portfolio.length > 0 
+                    ? "Cash balances may be included in your total account value above"
+                    : "Click \"Refresh Portfolio\" to load your cash positions"
+                  }
+                </p>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -881,4 +1039,4 @@ const IntegrationView = ({ baseCurrency, onAccountUpdate }: IntegrationViewProps
   );
 };
 
-export default IntegrationView;
+export default IBPortfolioView;
