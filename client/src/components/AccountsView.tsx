@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { apiClient } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,10 +83,18 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
   const [newAccount, setNewAccount] = useState({
     name: "",
     currency: "",
-    accountType: activeTab === "investment" ? "INVESTMENT" : "BANK",
+    accountType: "INVESTMENT",
     originalCapital: 0,
     currentBalance: 0
   });
+
+  // Update account type when tab changes
+  React.useEffect(() => {
+    setNewAccount(prev => ({
+      ...prev,
+      accountType: activeTab === "investment" ? "INVESTMENT" : "BANK"
+    }));
+  }, [activeTab]);
 
   const [balanceUpdate, setBalanceUpdate] = useState({
     balance: 0,
@@ -147,7 +155,12 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
   // Handle account creation
   const handleCreateAccount = async () => {
     try {
-      const response = await apiClient.createAccount(newAccount);
+      // Ensure bank accounts have originalCapital set to 0
+      const accountData = {
+        ...newAccount,
+        originalCapital: newAccount.accountType === 'BANK' ? 0 : newAccount.originalCapital
+      };
+      const response = await apiClient.createAccount(accountData);
       if (response.data) {
         toast({
           title: "Success",
@@ -735,11 +748,11 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="account-name">
-                {newAccount.accountType === 'BANK' ? 'Bank Name' : 'Broker Name'}
+                {newAccount.accountType === 'BANK' ? 'Bank Account Name' : 'Broker Name'}
               </Label>
               <Input
                 id="account-name"
-                placeholder={newAccount.accountType === 'BANK' ? 'e.g., HSBC, Chase Bank' : 'e.g., Interactive Brokers'}
+                placeholder={newAccount.accountType === 'BANK' ? 'e.g., HSBC Checking, Chase Savings' : 'e.g., Interactive Brokers'}
                 className="bg-background/50"
                 value={newAccount.name}
                 onChange={(e) => setNewAccount({...newAccount, name: e.target.value})}
@@ -836,11 +849,11 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-name">
-                {editAccount.accountType === 'BANK' ? 'Bank Name' : 'Broker Name'}
+                {editAccount.accountType === 'BANK' ? 'Bank Account Name' : 'Broker Name'}
               </Label>
               <Input
                 id="edit-name"
-                placeholder={editAccount.accountType === 'BANK' ? 'e.g., HSBC, Chase Bank' : 'e.g., Interactive Brokers'}
+                placeholder={editAccount.accountType === 'BANK' ? 'e.g., HSBC Checking, Chase Savings' : 'e.g., Interactive Brokers'}
                 className="bg-background/50"
                 value={editAccount.name}
                 onChange={(e) => setEditAccount({...editAccount, name: e.target.value})}
