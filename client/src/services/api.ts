@@ -92,6 +92,7 @@ class ApiClient {
     name: string;
     currency: string;
     accountType: string;
+    accountNumber?: string;
     originalCapital: number;
     currentBalance: number;
   }) {
@@ -104,6 +105,7 @@ class ApiClient {
   async updateAccount(id: number, accountData: {
     name?: string;
     accountType?: string;
+    accountNumber?: string;
     originalCapital?: number;
     currentBalance?: number;
     date?: string;

@@ -33,6 +33,7 @@ interface Account {
   name: string;
   currency: string;
   accountType: string;
+  accountNumber?: string;
   originalCapital: number;
   currentBalance: number;
   lastUpdated: string;
@@ -84,6 +85,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
     name: "",
     currency: "",
     accountType: "INVESTMENT",
+    accountNumber: "",
     originalCapital: 0,
     currentBalance: 0
   });
@@ -105,6 +107,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
   const [editAccount, setEditAccount] = useState({
     name: "",
     accountType: "INVESTMENT",
+    accountNumber: "",
     originalCapital: 0
   });
 
@@ -226,6 +229,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
       const response = await apiClient.updateAccount(accountId, {
         name: editAccount.name,
         accountType: editAccount.accountType,
+        accountNumber: editAccount.accountNumber,
         originalCapital: editAccount.originalCapital
       });
       
@@ -236,7 +240,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
         });
         // Close dialog first
         setEditingAccount(null);
-        setEditAccount({ name: "", accountType: "INVESTMENT", originalCapital: 0 });
+        setEditAccount({ name: "", accountType: "INVESTMENT", accountNumber: "", originalCapital: 0 });
         // Reload accounts immediately
         onAccountUpdate();
       } else {
@@ -262,6 +266,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
       name: "", 
       currency: "", 
       accountType: activeTab === "investment" ? "INVESTMENT" : "BANK", 
+      accountNumber: "",
       originalCapital: 0, 
       currentBalance: 0 
     });
@@ -382,7 +387,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
   // Handle edit dialog close
   const handleEditDialogClose = () => {
     setEditingAccount(null);
-    setEditAccount({ name: "", accountType: "INVESTMENT", originalCapital: 0 });
+    setEditAccount({ name: "", accountType: "INVESTMENT", accountNumber: "", originalCapital: 0 });
   };
 
   // Open edit dialog
@@ -391,6 +396,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
     setEditAccount({
       name: account.name,
       accountType: account.accountType,
+      accountNumber: account.accountNumber || "",
       originalCapital: account.originalCapital
     });
   };
@@ -489,6 +495,10 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
     <div className="grid gap-6">
       {accountsList
         .sort((a, b) => {
+          // Sort bank accounts by name, investment accounts by balance
+          if (a.accountType === 'BANK' && b.accountType === 'BANK') {
+            return a.name.localeCompare(b.name);
+          }
           // Sort by current balance converted to base currency (descending - highest first)
           const balanceA = convertToBaseCurrency(a.currentBalance, a.currency);
           const balanceB = convertToBaseCurrency(b.currentBalance, b.currency);
@@ -503,8 +513,13 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                   <span className="text-lg">{account.accountType === 'BANK' ? '🏦' : getCurrencyFlag(account.currency)}</span>
                 </div>
                 <div className="flex items-center gap-3 group">
-                  <div className="flex items-center gap-3">
-                    <CardTitle className="text-foreground">{account.name}</CardTitle>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-foreground">{account.name}</CardTitle>
+                      {account.accountNumber && (
+                        <span className="text-foreground">({account.accountNumber})</span>
+                      )}
+                    </div>
                     <CardDescription>
                       {account.accountType === 'BANK' ? 'Bank Account' : 'Investment Account'} • {account.currency}
                     </CardDescription>
@@ -532,8 +547,28 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
             </div>
           </CardHeader>
           <CardContent>
-            <div className={`grid grid-cols-1 sm:grid-cols-2 ${account.accountType === 'BANK' ? 'lg:grid-cols-2' : 'lg:grid-cols-4'} gap-4`}>
-              {account.accountType === 'INVESTMENT' && (
+            {account.accountType === 'BANK' ? (
+              // Compact layout for bank accounts
+              <div>
+                <span className="font-semibold text-foreground">
+                  Current Balance: {formatCurrency(account.currentBalance, account.currency)} 
+                  <span className="text-xs text-muted-foreground ml-2 font-normal">
+                    Last updated: {new Date(account.lastUpdated).toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    })} {new Date(account.lastUpdated).toLocaleTimeString('en-GB', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false
+                    })}
+                  </span>
+                </span>
+              </div>
+            ) : (
+              // Full layout for investment accounts
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">Original Capital</p>
                   <p className="text-lg font-semibold text-foreground">
@@ -543,19 +578,17 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                     ≈ {formatCurrency(convertToBaseCurrency(account.originalCapital, account.currency), baseCurrency)}
                   </p>
                 </div>
-              )}
-              
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Current Balance</p>
-                <p className="text-lg font-semibold text-foreground">
-                  {formatCurrency(account.currentBalance, account.currency)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  ≈ {formatCurrency(convertToBaseCurrency(account.currentBalance, account.currency), baseCurrency)}
-                </p>
-              </div>
-              
-              {account.accountType === 'INVESTMENT' && (
+                
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Current Balance</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {formatCurrency(account.currentBalance, account.currency)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    ≈ {formatCurrency(convertToBaseCurrency(account.currentBalance, account.currency), baseCurrency)}
+                  </p>
+                </div>
+                
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">Profit/Loss</p>
                   <p className={`text-lg font-semibold ${account.profitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
@@ -565,26 +598,26 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                     ≈ {formatCurrency(convertToBaseCurrency(account.profitLoss, account.currency), baseCurrency)}
                   </p>
                 </div>
-              )}
-              
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Last Updated</p>
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm text-foreground">
-                    {new Date(account.lastUpdated).toLocaleString('en-GB', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                      hour12: false
-                    })}
-                  </p>
+                
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Last Updated</p>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm text-foreground">
+                      {new Date(account.lastUpdated).toLocaleString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                      })}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </CardContent>
           
           {/* Expandable History Section */}
@@ -759,6 +792,16 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="account-number">Account Number (Optional)</Label>
+              <Input
+                id="account-number"
+                placeholder={newAccount.accountType === 'BANK' ? 'e.g., 1234567890' : 'e.g., U1234567'}
+                className="bg-background/50"
+                value={newAccount.accountNumber}
+                onChange={(e) => setNewAccount({...newAccount, accountNumber: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="currency">Base Currency</Label>
               <Select value={newAccount.currency} onValueChange={(value) => setNewAccount({...newAccount, currency: value})}>
                 <SelectTrigger className="bg-background/50">
@@ -857,6 +900,16 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                 className="bg-background/50"
                 value={editAccount.name}
                 onChange={(e) => setEditAccount({...editAccount, name: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-account-number">Account Number (Optional)</Label>
+              <Input
+                id="edit-account-number"
+                placeholder={editAccount.accountType === 'BANK' ? 'e.g., 1234567890' : 'e.g., U1234567'}
+                className="bg-background/50"
+                value={editAccount.accountNumber}
+                onChange={(e) => setEditAccount({...editAccount, accountNumber: e.target.value})}
               />
             </div>
             {editAccount.accountType === 'INVESTMENT' && (

@@ -14,6 +14,7 @@ const createAccountSchema = z.object({
   name: z.string().min(1),
   currency: z.string().min(3).max(3),
   accountType: z.enum(['INVESTMENT', 'BANK']).default('INVESTMENT'),
+  accountNumber: z.string().optional(),
   originalCapital: z.number().nonnegative(),
   currentBalance: z.number().nonnegative()
 });
@@ -21,6 +22,7 @@ const createAccountSchema = z.object({
 const updateAccountSchema = z.object({
   name: z.string().min(1).optional(),
   accountType: z.enum(['INVESTMENT', 'BANK']).optional(),
+  accountNumber: z.string().optional(),
   originalCapital: z.number().nonnegative().optional(),
   currentBalance: z.number().nonnegative().optional()
 });
