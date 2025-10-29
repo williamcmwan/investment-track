@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   PlusCircle, 
   Edit, 
@@ -21,7 +22,9 @@ import {
   ChevronDown,
   ChevronUp,
   History,
-  Trash2
+  Trash2,
+  Building2,
+  Landmark
 } from "lucide-react";
 
 interface Account {
@@ -29,6 +32,7 @@ interface Account {
   userId: number;
   name: string;
   currency: string;
+  accountType: string;
   originalCapital: number;
   currentBalance: number;
   lastUpdated: string;
@@ -55,6 +59,7 @@ interface AccountsViewProps {
 }
 
 const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurrency, onAccountUpdate }: AccountsViewProps) => {
+  const [activeTab, setActiveTab] = useState("investment");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set());
@@ -70,10 +75,15 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
   });
   const { toast } = useToast();
 
+  // Separate accounts by type
+  const investmentAccounts = accounts.filter(account => account.accountType === 'INVESTMENT');
+  const bankAccounts = accounts.filter(account => account.accountType === 'BANK');
+
   // Form states
   const [newAccount, setNewAccount] = useState({
     name: "",
     currency: "",
+    accountType: activeTab === "investment" ? "INVESTMENT" : "BANK",
     originalCapital: 0,
     currentBalance: 0
   });
@@ -86,6 +96,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
 
   const [editAccount, setEditAccount] = useState({
     name: "",
+    accountType: "INVESTMENT",
     originalCapital: 0
   });
 
@@ -201,6 +212,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
     try {
       const response = await apiClient.updateAccount(accountId, {
         name: editAccount.name,
+        accountType: editAccount.accountType,
         originalCapital: editAccount.originalCapital
       });
       
@@ -211,7 +223,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
         });
         // Close dialog first
         setEditingAccount(null);
-        setEditAccount({ name: "", originalCapital: 0 });
+        setEditAccount({ name: "", accountType: "INVESTMENT", originalCapital: 0 });
         // Reload accounts immediately
         onAccountUpdate();
       } else {
@@ -233,7 +245,13 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
   // Handle dialog close and form reset
   const handleDialogClose = () => {
     setIsAddDialogOpen(false);
-    setNewAccount({ name: "", currency: "", originalCapital: 0, currentBalance: 0 });
+    setNewAccount({ 
+      name: "", 
+      currency: "", 
+      accountType: activeTab === "investment" ? "INVESTMENT" : "BANK", 
+      originalCapital: 0, 
+      currentBalance: 0 
+    });
   };
 
   const handleUpdateBalanceDialogClose = () => {
@@ -351,7 +369,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
   // Handle edit dialog close
   const handleEditDialogClose = () => {
     setEditingAccount(null);
-    setEditAccount({ name: "", originalCapital: 0 });
+    setEditAccount({ name: "", accountType: "INVESTMENT", originalCapital: 0 });
   };
 
   // Open edit dialog
@@ -359,34 +377,369 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
     setEditingAccount(account);
     setEditAccount({
       name: account.name,
+      accountType: account.accountType,
       originalCapital: account.originalCapital
     });
   };
 
+  // Render summary cards for investment accounts
+  const renderInvestmentSummary = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Investment Accounts</CardTitle>
+          <Building2 className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-foreground">{investmentAccounts.length}</div>
+          <p className="text-xs text-muted-foreground">Active investment accounts</p>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Total Capital</CardTitle>
+          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-foreground">
+            {formatCurrency(investmentAccounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.originalCapital, acc.currency), 0), baseCurrency)}
+          </div>
+          <p className="text-xs text-muted-foreground">Investment capital ({baseCurrency} equivalent)</p>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Current Value</CardTitle>
+          <TrendingUp className="h-4 w-4 text-profit" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-foreground">
+            {formatCurrency(investmentAccounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.currentBalance, acc.currency), 0), baseCurrency)}
+          </div>
+          <p className="text-xs text-muted-foreground">Current balance ({baseCurrency} equivalent)</p>
+          <div className="mt-2 pt-2 border-t border-border/50">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Total P&L:</span>
+              <span className={`text-sm font-medium ${investmentAccounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0) > 0 ? 'text-profit' : 'text-loss'}`}>
+                {formatCurrency(investmentAccounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0), baseCurrency)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">P&L %:</span>
+              <span className={`text-sm font-medium ${investmentAccounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0) > 0 ? 'text-profit' : 'text-loss'}`}>
+                {(() => {
+                  const totalCapital = investmentAccounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.originalCapital, acc.currency), 0);
+                  const totalPnL = investmentAccounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0);
+                  return totalCapital > 0 ? `${((totalPnL / totalCapital) * 100).toFixed(2)}%` : '0.00%';
+                })()}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  // Render summary cards for bank accounts
+  const renderBankSummary = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Bank Accounts</CardTitle>
+          <Landmark className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-foreground">{bankAccounts.length}</div>
+          <p className="text-xs text-muted-foreground">Active bank accounts</p>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Total Balance</CardTitle>
+          <DollarSign className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-foreground">
+            {formatCurrency(bankAccounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.currentBalance, acc.currency), 0), baseCurrency)}
+          </div>
+          <p className="text-xs text-muted-foreground">Total bank balance ({baseCurrency} equivalent)</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  // Render accounts list
+  const renderAccountsList = (accountsList: Account[]) => (
+    <div className="grid gap-6">
+      {accountsList
+        .sort((a, b) => {
+          // Sort by current balance converted to base currency (descending - highest first)
+          const balanceA = convertToBaseCurrency(a.currentBalance, a.currency);
+          const balanceB = convertToBaseCurrency(b.currentBalance, b.currency);
+          return balanceB - balanceA;
+        })
+        .map((account) => (
+        <Card key={account.id} className="bg-gradient-card border-border shadow-card">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/20 rounded-lg">
+                  <span className="text-lg">{account.accountType === 'BANK' ? '🏦' : getCurrencyFlag(account.currency)}</span>
+                </div>
+                <div className="flex items-center gap-3 group">
+                  <div className="flex items-center gap-3">
+                    <CardTitle className="text-foreground">{account.name}</CardTitle>
+                    <CardDescription>
+                      {account.accountType === 'BANK' ? 'Bank Account' : 'Investment Account'} • {account.currency}
+                    </CardDescription>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="border-blue-500 text-blue-500 hover:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                    onClick={() => openEditDialog(account)}
+                  >
+                    <Edit className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+              {account.accountType === 'INVESTMENT' && (
+                <Badge variant={account.profitLoss > 0 ? "default" : "destructive"}>
+                  {account.profitLoss > 0 ? (
+                    <ArrowUpRight className="h-3 w-3 mr-1" />
+                  ) : (
+                    <ArrowDownRight className="h-3 w-3 mr-1" />
+                  )}
+                  {formatPercent(account.profitLossPercent)}
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${account.accountType === 'BANK' ? 'lg:grid-cols-2' : 'lg:grid-cols-4'} gap-4`}>
+              {account.accountType === 'INVESTMENT' && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Original Capital</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {formatCurrency(account.originalCapital, account.currency)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    ≈ {formatCurrency(convertToBaseCurrency(account.originalCapital, account.currency), baseCurrency)}
+                  </p>
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Current Balance</p>
+                <p className="text-lg font-semibold text-foreground">
+                  {formatCurrency(account.currentBalance, account.currency)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  ≈ {formatCurrency(convertToBaseCurrency(account.currentBalance, account.currency), baseCurrency)}
+                </p>
+              </div>
+              
+              {account.accountType === 'INVESTMENT' && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Profit/Loss</p>
+                  <p className={`text-lg font-semibold ${account.profitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
+                    {formatCurrency(account.profitLoss, account.currency)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    ≈ {formatCurrency(convertToBaseCurrency(account.profitLoss, account.currency), baseCurrency)}
+                  </p>
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Last Updated</p>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm text-foreground">
+                    {new Date(account.lastUpdated).toLocaleString('en-GB', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false
+                    })}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+          
+          {/* Expandable History Section */}
+          <Collapsible open={expandedAccounts.has(account.id)} onOpenChange={() => toggleAccountExpansion(account.id)}>
+            <div className="border-t border-border">
+              <div className="flex items-center justify-between px-4 py-3 hover:bg-background/50 transition-smooth">
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="flex items-center gap-2 p-0 h-auto"
+                  >
+                    <History className="h-4 w-4" />
+                    <span className="text-sm">Balance History</span>
+                    {expandedAccounts.has(account.id) ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </Button>
+                </CollapsibleTrigger>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-primary text-primary hover:bg-primary/10"
+                  onClick={() => openUpdateBalanceDialog(account)}
+                >
+                  <Edit className="h-3 w-3 mr-1" />
+                  Update
+                </Button>
+              </div>
+            </div>
+            <CollapsibleContent className="border-t border-border">
+              <div className="p-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border/50">
+                        <th className="text-left py-2 px-3 text-muted-foreground font-medium">Date</th>
+                        <th className="text-right py-2 px-3 text-muted-foreground font-medium">Balance</th>
+                        <th className="text-right py-2 px-3 text-muted-foreground font-medium">Change</th>
+                        <th className="text-left py-2 px-3 text-muted-foreground font-medium">Remark</th>
+                        <th className="text-center py-2 px-3 text-muted-foreground font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(account.history || [])
+                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                        .map((entry, index) => {
+                          const previousEntry = (account.history || [])
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                            [index + 1];
+                          
+                          const changePercent = previousEntry 
+                            ? ((entry.balance - previousEntry.balance) / previousEntry.balance) * 100
+                            : 0;
+                          
+                          const changeAmount = previousEntry 
+                            ? entry.balance - previousEntry.balance
+                            : 0;
+                          
+                          const changeAmountBaseCurrency = previousEntry 
+                            ? convertToBaseCurrency(entry.balance, account.currency) - convertToBaseCurrency(previousEntry.balance, account.currency)
+                            : 0;
+                          
+                          return (
+                            <tr key={entry.id} className="border-b border-border/30 hover:bg-background/30 transition-colors">
+                              <td className="py-3 px-3 text-muted-foreground">
+                                {formatDate(entry.date)}
+                              </td>
+                              <td className="py-3 px-3 text-right">
+                                <div>
+                                  <p className="font-medium text-foreground">
+                                    {formatCurrency(entry.balance, account.currency)}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    ≈ {formatCurrency(convertToBaseCurrency(entry.balance, account.currency), baseCurrency)}
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="py-3 px-3 text-right">
+                                {previousEntry ? (
+                                  <div>
+                                    <div className={`font-medium ${changePercent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                                      {changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%
+                                    </div>
+                                    <div className={`text-xs ${changeAmountBaseCurrency >= 0 ? 'text-profit' : 'text-loss'}`}>
+                                      {changeAmountBaseCurrency >= 0 ? '+' : ''}{formatCurrency(changeAmountBaseCurrency, baseCurrency)}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-3 text-muted-foreground">
+                                {entry.note}
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 border-blue-500 text-blue-500 hover:bg-blue-500/10"
+                                    onClick={() => openEditHistoryDialog(entry, account)}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 border-red-500 text-red-500 hover:bg-red-500/10"
+                                    onClick={() => handleDeleteHistory(entry, account)}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </Card>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      {/* Add Account Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogTrigger asChild>
-          <Button className="bg-gradient-primary hover:opacity-90 transition-smooth">
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Add Account
-          </Button>
-        </DialogTrigger>
+      {/* Tabs for Investment and Bank Accounts */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="flex items-center justify-between">
+          <TabsList className="grid w-fit grid-cols-2">
+            <TabsTrigger value="investment" className="flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Investment Accounts
+            </TabsTrigger>
+            <TabsTrigger value="bank" className="flex items-center gap-2">
+              <Landmark className="h-4 w-4" />
+              Bank Accounts
+            </TabsTrigger>
+          </TabsList>
+          
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-gradient-primary hover:opacity-90 transition-smooth">
+                <PlusCircle className="h-4 w-4 mr-2" />
+                Add {activeTab === "investment" ? "Investment" : "Bank"} Account
+              </Button>
+            </DialogTrigger>
         <DialogContent className="bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="text-foreground">Add Investment Account</DialogTitle>
+            <DialogTitle className="text-foreground">Add Account</DialogTitle>
             <DialogDescription>
-              Add a new broker account to track your investments.
+              Add a new investment account or bank account to track your finances.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="broker-name">Broker Name</Label>
+              <Label htmlFor="account-name">
+                {newAccount.accountType === 'BANK' ? 'Bank Name' : 'Broker Name'}
+              </Label>
               <Input
-                id="broker-name"
-                placeholder="e.g., Interactive Brokers"
+                id="account-name"
+                placeholder={newAccount.accountType === 'BANK' ? 'e.g., HSBC, Chase Bank' : 'e.g., Interactive Brokers'}
                 className="bg-background/50"
                 value={newAccount.name}
                 onChange={(e) => setNewAccount({...newAccount, name: e.target.value})}
@@ -409,23 +762,27 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                 </SelectContent>
               </Select>
             </div>
+            {newAccount.accountType === 'INVESTMENT' && (
+              <div className="space-y-2">
+                <Label htmlFor="capital">Original Capital</Label>
+                <Input
+                  id="capital"
+                  type="number"
+                  placeholder="100000"
+                  className="bg-background/50"
+                  value={newAccount.originalCapital || ""}
+                  onChange={(e) => setNewAccount({...newAccount, originalCapital: parseFloat(e.target.value) || 0})}
+                />
+              </div>
+            )}
             <div className="space-y-2">
-              <Label htmlFor="capital">Original Capital</Label>
-              <Input
-                id="capital"
-                type="number"
-                placeholder="100000"
-                className="bg-background/50"
-                value={newAccount.originalCapital || ""}
-                onChange={(e) => setNewAccount({...newAccount, originalCapital: parseFloat(e.target.value) || 0})}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="balance">Current Balance</Label>
+              <Label htmlFor="balance">
+                {newAccount.accountType === 'BANK' ? 'Current Balance' : 'Current Balance'}
+              </Label>
               <Input
                 id="balance"
                 type="number"
-                placeholder="125000"
+                placeholder={newAccount.accountType === 'BANK' ? '50000' : '125000'}
                 className="bg-background/50"
                 value={newAccount.currentBalance || ""}
                 onChange={(e) => setNewAccount({...newAccount, currentBalance: parseFloat(e.target.value) || 0})}
@@ -442,6 +799,18 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </div>
+
+        <TabsContent value="investment" className="space-y-6">
+          {renderInvestmentSummary()}
+          {renderAccountsList(investmentAccounts)}
+        </TabsContent>
+
+        <TabsContent value="bank" className="space-y-6">
+          {renderBankSummary()}
+          {renderAccountsList(bankAccounts)}
+        </TabsContent>
+      </Tabs>
 
       {/* Edit Account Dialog */}
       <Dialog open={editingAccount !== null} onOpenChange={handleEditDialogClose}>
@@ -454,27 +823,43 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Account Name</Label>
+              <Label htmlFor="edit-type">Account Type</Label>
+              <Select value={editAccount.accountType} onValueChange={(value) => setEditAccount({...editAccount, accountType: value})}>
+                <SelectTrigger className="bg-background/50">
+                  <SelectValue placeholder="Select account type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INVESTMENT">💼 Investment Account</SelectItem>
+                  <SelectItem value="BANK">🏦 Bank Account</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">
+                {editAccount.accountType === 'BANK' ? 'Bank Name' : 'Broker Name'}
+              </Label>
               <Input
                 id="edit-name"
-                placeholder="e.g., Interactive Brokers"
+                placeholder={editAccount.accountType === 'BANK' ? 'e.g., HSBC, Chase Bank' : 'e.g., Interactive Brokers'}
                 className="bg-background/50"
                 value={editAccount.name}
                 onChange={(e) => setEditAccount({...editAccount, name: e.target.value})}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-capital">Original Capital ({editingAccount?.currency})</Label>
-              <Input
-                id="edit-capital"
-                type="number"
-                step="0.01"
-                placeholder="10000"
-                className="bg-background/50"
-                value={editAccount.originalCapital || ""}
-                onChange={(e) => setEditAccount({...editAccount, originalCapital: parseFloat(e.target.value) || 0})}
-              />
-            </div>
+            {editAccount.accountType === 'INVESTMENT' && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-capital">Original Capital ({editingAccount?.currency})</Label>
+                <Input
+                  id="edit-capital"
+                  type="number"
+                  step="0.01"
+                  placeholder="10000"
+                  className="bg-background/50"
+                  value={editAccount.originalCapital || ""}
+                  onChange={(e) => setEditAccount({...editAccount, originalCapital: parseFloat(e.target.value) || 0})}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleEditDialogClose}>
@@ -489,285 +874,6 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Accounts</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">{accounts.length}</div>
-            <p className="text-xs text-muted-foreground">Active investment accounts</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Capital</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              {formatCurrency(accounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.originalCapital, acc.currency), 0), baseCurrency)}
-            </div>
-            <p className="text-xs text-muted-foreground">Original investment ({baseCurrency} equivalent)</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Current Value</CardTitle>
-            <TrendingUp className="h-4 w-4 text-profit" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              {formatCurrency(accounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.currentBalance, acc.currency), 0), baseCurrency)}
-            </div>
-            <p className="text-xs text-muted-foreground">Current balance ({baseCurrency} equivalent)</p>
-            <div className="mt-2 pt-2 border-t border-border/50">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Total P&L:</span>
-                <span className={`text-sm font-medium ${accounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0) > 0 ? 'text-profit' : 'text-loss'}`}>
-                  {formatCurrency(accounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0), baseCurrency)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">P&L %:</span>
-                <span className={`text-sm font-medium ${accounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0) > 0 ? 'text-profit' : 'text-loss'}`}>
-                  {(() => {
-                    const totalCapital = accounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.originalCapital, acc.currency), 0);
-                    const totalPnL = accounts.reduce((sum, acc) => sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0);
-                    return totalCapital > 0 ? `${((totalPnL / totalCapital) * 100).toFixed(2)}%` : '0.00%';
-                  })()}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Accounts List */}
-      <div className="grid gap-6">
-        {accounts
-          .sort((a, b) => {
-            // Sort by current balance converted to base currency (descending - highest first)
-            const balanceA = convertToBaseCurrency(a.currentBalance, a.currency);
-            const balanceB = convertToBaseCurrency(b.currentBalance, b.currency);
-            return balanceB - balanceA;
-          })
-          .map((account) => (
-          <Card key={account.id} className="bg-gradient-card border-border shadow-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/20 rounded-lg">
-                    <span className="text-lg">{getCurrencyFlag(account.currency)}</span>
-                  </div>
-                  <div className="flex items-center gap-3 group">
-                    <div className="flex items-center gap-3">
-                      <CardTitle className="text-foreground">{account.name}</CardTitle>
-                      <CardDescription>Base Currency: {account.currency}</CardDescription>
-                    </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="border-blue-500 text-blue-500 hover:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                      onClick={() => openEditDialog(account)}
-                    >
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-                <Badge variant={account.profitLoss > 0 ? "default" : "destructive"}>
-                  {account.profitLoss > 0 ? (
-                    <ArrowUpRight className="h-3 w-3 mr-1" />
-                  ) : (
-                    <ArrowDownRight className="h-3 w-3 mr-1" />
-                  )}
-                  {formatPercent(account.profitLossPercent)}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Original Capital</p>
-                  <p className="text-lg font-semibold text-foreground">
-                    {formatCurrency(account.originalCapital, account.currency)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    ≈ {formatCurrency(convertToBaseCurrency(account.originalCapital, account.currency), baseCurrency)}
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Current Balance</p>
-                  <p className="text-lg font-semibold text-foreground">
-                    {formatCurrency(account.currentBalance, account.currency)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    ≈ {formatCurrency(convertToBaseCurrency(account.currentBalance, account.currency), baseCurrency)}
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Profit/Loss</p>
-                  <p className={`text-lg font-semibold ${account.profitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
-                    {formatCurrency(account.profitLoss, account.currency)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    ≈ {formatCurrency(convertToBaseCurrency(account.profitLoss, account.currency), baseCurrency)}
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Last Updated</p>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <p className="text-sm text-foreground">
-                      {new Date(account.lastUpdated).toLocaleString('en-GB', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false
-                      })}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-            
-            {/* Expandable History Section */}
-            <Collapsible open={expandedAccounts.has(account.id)} onOpenChange={() => toggleAccountExpansion(account.id)}>
-              <div className="border-t border-border">
-                <div className="flex items-center justify-between px-4 py-3 hover:bg-background/50 transition-smooth">
-                  <CollapsibleTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="flex items-center gap-2 p-0 h-auto"
-                    >
-                      <History className="h-4 w-4" />
-                      <span className="text-sm">Balance History</span>
-                      {expandedAccounts.has(account.id) ? (
-                        <ChevronUp className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </CollapsibleTrigger>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="border-primary text-primary hover:bg-primary/10"
-                    onClick={() => openUpdateBalanceDialog(account)}
-                  >
-                    <Edit className="h-3 w-3 mr-1" />
-                    Update
-                  </Button>
-                </div>
-              </div>
-              <CollapsibleContent className="border-t border-border">
-                <div className="p-4">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border/50">
-                          <th className="text-left py-2 px-3 text-muted-foreground font-medium">Date</th>
-                          <th className="text-right py-2 px-3 text-muted-foreground font-medium">Balance</th>
-                          <th className="text-right py-2 px-3 text-muted-foreground font-medium">Change</th>
-                          <th className="text-left py-2 px-3 text-muted-foreground font-medium">Remark</th>
-                          <th className="text-center py-2 px-3 text-muted-foreground font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(account.history || [])
-                          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                          .map((entry, index) => {
-                            const previousEntry = (account.history || [])
-                              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                              [index + 1];
-                            
-                            const changePercent = previousEntry 
-                              ? ((entry.balance - previousEntry.balance) / previousEntry.balance) * 100
-                              : 0;
-                            
-                            const changeAmount = previousEntry 
-                              ? entry.balance - previousEntry.balance
-                              : 0;
-                            
-                            const changeAmountBaseCurrency = previousEntry 
-                              ? convertToBaseCurrency(entry.balance, account.currency) - convertToBaseCurrency(previousEntry.balance, account.currency)
-                              : 0;
-                            
-                            return (
-                              <tr key={entry.id} className="border-b border-border/30 hover:bg-background/30 transition-colors">
-                                <td className="py-3 px-3 text-muted-foreground">
-                                  {formatDate(entry.date)}
-                                </td>
-                                <td className="py-3 px-3 text-right">
-                                  <div>
-                                    <p className="font-medium text-foreground">
-                                      {formatCurrency(entry.balance, account.currency)}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      ≈ {formatCurrency(convertToBaseCurrency(entry.balance, account.currency), baseCurrency)}
-                                    </p>
-                                  </div>
-                                </td>
-                                <td className="py-3 px-3 text-right">
-                                  {previousEntry ? (
-                                    <div>
-                                      <div className={`font-medium ${changePercent >= 0 ? 'text-profit' : 'text-loss'}`}>
-                                        {changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%
-                                      </div>
-                                      <div className={`text-xs ${changeAmountBaseCurrency >= 0 ? 'text-profit' : 'text-loss'}`}>
-                                        {changeAmountBaseCurrency >= 0 ? '+' : ''}{formatCurrency(changeAmountBaseCurrency, baseCurrency)}
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <span className="text-muted-foreground">-</span>
-                                  )}
-                                </td>
-                                <td className="py-3 px-3 text-muted-foreground">
-                                  {entry.note}
-                                </td>
-                                <td className="py-3 px-3 text-center">
-                                  <div className="flex items-center justify-center gap-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-8 w-8 p-0 border-blue-500 text-blue-500 hover:bg-blue-500/10"
-                                      onClick={() => openEditHistoryDialog(entry, account)}
-                                    >
-                                      <Edit className="h-3 w-3" />
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-8 w-8 p-0 border-red-500 text-red-500 hover:bg-red-500/10"
-                                      onClick={() => handleDeleteHistory(entry, account)}
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </Card>
-        ))}
-      </div>
 
       {/* Update Balance Dialog */}
       <Dialog open={isUpdateBalanceDialogOpen} onOpenChange={setIsUpdateBalanceDialogOpen}>

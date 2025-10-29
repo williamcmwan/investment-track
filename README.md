@@ -6,10 +6,12 @@ A modern, full-stack investment tracking application built with React, Node.js, 
 
 - **Secure Authentication**: JWT-based auth with Two-Factor Authentication (2FA) support
 - **Multi-Currency Support**: Track investments in multiple currencies with automatic refresh
+- **Dual Account Types**: Separate Investment and Bank account management with tailored features
 - **Portfolio Analytics**: Comprehensive performance tracking and reporting
 - **Automatic Data Refresh**: 30-minute refresh cycle for Currency → IB Portfolio → Manual Investments
 - **Interactive Brokers Integration**: Real-time portfolio data with user-configurable connections
 - **Manual Investment Tracking**: Add positions from any broker with Yahoo Finance market data
+- **Bank Account Tracking**: Simple balance tracking without P&L calculations
 - **Real-time Data**: Live currency rates and portfolio updates with timestamp tracking
 - **Responsive Design**: Modern UI with mobile support
 - **Type Safety**: Full TypeScript implementation
@@ -327,6 +329,86 @@ The IB integration now provides comprehensive day change data for all security t
 - TWS Live: 7496 | TWS Paper: 7497
 - IB Gateway Live: 4001 | IB Gateway Paper: 4002
 
+## 🏦 Bank Account Management
+
+The application now supports dedicated Bank Account tracking alongside Investment Accounts, providing a comprehensive financial overview with tailored features for each account type.
+
+### 🆕 Dual Account Types
+The Accounts page is now organized into separate tabs for different account types:
+
+#### Investment Accounts Tab
+- **Portfolio Tracking**: Full P&L calculations with original capital tracking
+- **Performance Metrics**: Profit/loss percentages and total returns
+- **Multi-Currency Support**: Track investments across different currencies
+- **Balance History**: Complete transaction and balance change tracking
+
+#### Bank Accounts Tab  
+- **Simple Balance Tracking**: Focus on current balances without investment metrics
+- **No P&L Calculations**: Clean interface without original capital or profit/loss data
+- **Multi-Currency Support**: Track bank accounts in different currencies
+- **Balance History**: Track balance changes over time with notes
+
+### Key Features
+
+#### Tabbed Interface
+- **Investment Accounts**: Shows investment-specific metrics (capital, P&L, returns)
+- **Bank Accounts**: Shows banking-specific metrics (total balances, account count)
+- **Dynamic Add Button**: Changes to "Add Investment Account" or "Add Bank Account" based on active tab
+- **Separate Totals**: Each tab displays relevant summary cards for that account type
+
+#### Account Type Auto-Detection
+- **Smart Form Handling**: Account type automatically set based on active tab
+- **Simplified Dialogs**: No manual account type selection needed
+- **Contextual Labels**: Form fields adapt to account type (e.g., "Bank Name" vs "Broker Name")
+
+#### Tailored Display
+- **Investment Accounts**: Show original capital, current balance, P&L, and performance badges
+- **Bank Accounts**: Show current balance and last updated information only
+- **Responsive Layout**: Grid layouts adapt based on account type (2 vs 4 columns)
+- **Visual Indicators**: Bank accounts use 🏦 icon, investments use currency flags
+
+#### Database Schema
+- **Unified Storage**: Single `accounts` table with `account_type` field ('INVESTMENT' or 'BANK')
+- **Backward Compatibility**: Existing accounts automatically set as 'INVESTMENT' type
+- **Flexible P&L**: P&L calculations automatically return 0 for bank accounts
+- **Consistent API**: Same endpoints handle both account types seamlessly
+
+### Usage Examples
+
+#### Adding a Bank Account
+1. Navigate to **Accounts** page
+2. Click **Bank Accounts** tab
+3. Click **"Add Bank Account"** button
+4. Fill in bank details:
+   - Bank Name (e.g., "HSBC", "Chase Bank")
+   - Base Currency
+   - Current Balance
+5. Save - no original capital required
+
+#### Adding an Investment Account  
+1. Navigate to **Accounts** page
+2. Click **Investment Accounts** tab (default)
+3. Click **"Add Investment Account"** button
+4. Fill in investment details:
+   - Broker Name (e.g., "Interactive Brokers")
+   - Base Currency
+   - Original Capital
+   - Current Balance
+5. Save - full P&L tracking enabled
+
+#### Managing Both Account Types
+- **Unified Balance History**: Both account types support balance updates and history tracking
+- **Currency Conversion**: All balances convert to base currency for comparison
+- **Edit Capabilities**: Full edit support for both account types with appropriate fields
+- **Consistent Interface**: Same balance update and history management for both types
+
+### Technical Implementation
+- **Type-Safe**: Full TypeScript support for account type discrimination
+- **API Compatibility**: Existing API endpoints enhanced to handle both account types
+- **Database Migration**: Automatic migration adds `account_type` column with proper defaults
+- **Frontend Separation**: Clean tab-based UI with account type-specific rendering
+- **Validation**: Account type validation ensures data integrity
+
 ## 📊 API Endpoints
 
 ### Authentication
@@ -337,8 +419,8 @@ The IB integration now provides comprehensive day change data for all security t
 - `POST /api/2fa/verify-login` - Verify 2FA during login
 
 ### Accounts
-- `GET /api/accounts` - Get user accounts
-- `POST /api/accounts` - Create account
+- `GET /api/accounts` - Get user accounts (both investment and bank accounts)
+- `POST /api/accounts` - Create account (investment or bank account)
 - `PUT /api/accounts/:id` - Update account
 - `DELETE /api/accounts/:id` - Delete account
 
@@ -603,6 +685,8 @@ For issues and questions:
 ## 🔄 Updates
 
 ### Recent Changes
+- ✅ **Bank Account Management**: Added dedicated Bank Account tracking with tabbed interface and tailored features
+- ✅ **Dual Account Types**: Separate Investment and Bank account management with type-specific UI and calculations
 - ✅ **Multi-Currency Cash Balances**: Interactive Brokers cash balances now display by currency with USD conversion
 - ✅ **Enhanced IB Portfolio View**: Added USD market value totals for both positions and cash balances
 - ✅ **Database Schema Updates**: Renamed `market_value` to `market_value_hkd` for clarity in cash balances

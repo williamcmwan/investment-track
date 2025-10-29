@@ -1027,14 +1027,14 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               <div>
             <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
               {currentView === "overview" && "Dashboard Overview"}
-              {currentView === "accounts" && "Investment Accounts"}
+              {currentView === "accounts" && "Accounts"}
               {currentView === "currency" && "Currency Exchange"}
               {currentView === "integration" && "IB Portfolio"}
               {currentView === "manual-investments" && "Other Portfolios"}
             </h1>
             <p className="text-muted-foreground">
               {currentView === "overview" && "Monitor your investment performance"}
-              {currentView === "accounts" && "Manage your broker accounts"}
+              {currentView === "accounts" && "Manage your investment & bank accounts"}
               {currentView === "currency" && "Track currency exchange rates"}
               {currentView === "integration" && "Interactive Brokers portfolio and positions"}
               {currentView === "manual-investments" && "Add and manage other investment accounts manually"}

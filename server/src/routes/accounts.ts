@@ -13,14 +13,16 @@ router.use(authenticateToken);
 const createAccountSchema = z.object({
   name: z.string().min(1),
   currency: z.string().min(3).max(3),
-  originalCapital: z.number().positive(),
-  currentBalance: z.number().positive()
+  accountType: z.enum(['INVESTMENT', 'BANK']).default('INVESTMENT'),
+  originalCapital: z.number().nonnegative(),
+  currentBalance: z.number().nonnegative()
 });
 
 const updateAccountSchema = z.object({
   name: z.string().min(1).optional(),
-  originalCapital: z.number().positive().optional(),
-  currentBalance: z.number().positive().optional()
+  accountType: z.enum(['INVESTMENT', 'BANK']).optional(),
+  originalCapital: z.number().nonnegative().optional(),
+  currentBalance: z.number().nonnegative().optional()
 });
 
 // Get all accounts for user

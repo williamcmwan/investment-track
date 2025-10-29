@@ -5,6 +5,7 @@ export interface Account {
   userId: number;
   name: string;
   currency: string;
+  accountType: string;
   originalCapital: number;
   currentBalance: number;
   lastUpdated: string;
@@ -30,12 +31,14 @@ export interface BalanceHistory {
 export interface CreateAccountData {
   name: string;
   currency: string;
+  accountType: string;
   originalCapital: number;
   currentBalance: number;
 }
 
 export interface UpdateAccountData {
   name?: string;
+  accountType?: string;
   originalCapital?: number;
   currentBalance?: number;
 }
@@ -44,11 +47,18 @@ export class AccountModel {
   static async findByUserId(userId: number): Promise<Account[]> {
     const accounts = await dbAll(
       `SELECT 
-        id, user_id as userId, name, currency, original_capital as originalCapital,
-        current_balance as currentBalance, last_updated as lastUpdated,
-        created_at as createdAt, updated_at as updatedAt,
-        (current_balance - original_capital) as profitLoss,
-        ((current_balance - original_capital) / original_capital * 100) as profitLossPercent
+        id, user_id as userId, name, currency, account_type as accountType,
+        original_capital as originalCapital, current_balance as currentBalance, 
+        last_updated as lastUpdated, created_at as createdAt, updated_at as updatedAt,
+        CASE 
+          WHEN account_type = 'BANK' THEN 0
+          ELSE (current_balance - original_capital)
+        END as profitLoss,
+        CASE 
+          WHEN account_type = 'BANK' THEN 0
+          WHEN original_capital > 0 THEN ((current_balance - original_capital) / original_capital * 100)
+          ELSE 0
+        END as profitLossPercent
       FROM accounts 
       WHERE user_id = ? 
       ORDER BY created_at DESC`,
@@ -61,11 +71,18 @@ export class AccountModel {
   static async findById(id: number, userId: number): Promise<Account | null> {
     const account = await dbGet(
       `SELECT 
-        id, user_id as userId, name, currency, original_capital as originalCapital,
-        current_balance as currentBalance, last_updated as lastUpdated,
-        created_at as createdAt, updated_at as updatedAt,
-        (current_balance - original_capital) as profitLoss,
-        ((current_balance - original_capital) / original_capital * 100) as profitLossPercent
+        id, user_id as userId, name, currency, account_type as accountType,
+        original_capital as originalCapital, current_balance as currentBalance, 
+        last_updated as lastUpdated, created_at as createdAt, updated_at as updatedAt,
+        CASE 
+          WHEN account_type = 'BANK' THEN 0
+          ELSE (current_balance - original_capital)
+        END as profitLoss,
+        CASE 
+          WHEN account_type = 'BANK' THEN 0
+          WHEN original_capital > 0 THEN ((current_balance - original_capital) / original_capital * 100)
+          ELSE 0
+        END as profitLossPercent
       FROM accounts 
       WHERE id = ? AND user_id = ?`,
       [id, userId]
@@ -76,8 +93,8 @@ export class AccountModel {
   
   static async create(userId: number, accountData: CreateAccountData): Promise<Account> {
     const result = await dbRun(
-      'INSERT INTO accounts (user_id, name, currency, original_capital, current_balance) VALUES (?, ?, ?, ?, ?)',
-      [userId, accountData.name, accountData.currency, accountData.originalCapital, accountData.currentBalance]
+      'INSERT INTO accounts (user_id, name, currency, account_type, original_capital, current_balance) VALUES (?, ?, ?, ?, ?, ?)',
+      [userId, accountData.name, accountData.currency, accountData.accountType, accountData.originalCapital, accountData.currentBalance]
     );
     
     const account = await this.findById(result.lastID, userId);
@@ -100,6 +117,11 @@ export class AccountModel {
     if (accountData.name !== undefined) {
       updateFields.push('name = ?');
       values.push(accountData.name);
+    }
+    
+    if (accountData.accountType !== undefined) {
+      updateFields.push('account_type = ?');
+      values.push(accountData.accountType);
     }
     
     if (accountData.originalCapital !== undefined) {
