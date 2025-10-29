@@ -74,9 +74,383 @@ interface MainAccount {
     profitLossPercent: number;
 }
 
+interface CashBalance {
+    id: number;
+    mainAccountId: number;
+    currency: string;
+    amount: number;
+    marketValueHKD: number;
+    marketValueUSD: number;
+    lastUpdated: string;
+    createdAt: string;
+    updatedAt: string;
+    accountName: string;
+}
+
 interface OtherPortfolioViewProps {
     accounts: MainAccount[];
 }
+
+// Cash Balances Section Component
+const CashBalancesSection: React.FC<{ accounts: MainAccount[] }> = ({ accounts }) => {
+    const { toast } = useToast();
+    const [cashBalances, setCashBalances] = useState<CashBalance[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [cashDialogOpen, setCashDialogOpen] = useState(false);
+    const [editingCashBalance, setEditingCashBalance] = useState<CashBalance | null>(null);
+    const [cashForm, setCashForm] = useState({
+        accountId: '',
+        currency: 'USD',
+        amount: ''
+    });
+
+    useEffect(() => {
+        loadCashBalances();
+    }, []);
+
+    const loadCashBalances = async () => {
+        try {
+            setLoading(true);
+            const response = await apiClient.getCashBalances();
+            if (response.data) {
+                setCashBalances(response.data);
+            }
+        } catch (error) {
+            console.error('Error loading cash balances:', error);
+            toast({
+                title: "Error",
+                description: "Failed to load cash balances",
+                variant: "destructive",
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleCreateCashBalance = async () => {
+        try {
+            if (!cashForm.accountId || !cashForm.currency || !cashForm.amount) {
+                toast({
+                    title: "Validation Error",
+                    description: "Please fill in all required fields",
+                    variant: "destructive",
+                });
+                return;
+            }
+
+            const response = await apiClient.createCashBalance({
+                accountId: parseInt(cashForm.accountId),
+                currency: cashForm.currency,
+                amount: parseFloat(cashForm.amount)
+            });
+
+            if (response.data) {
+                toast({
+                    title: "Success",
+                    description: "Cash balance added successfully",
+                });
+                await loadCashBalances();
+                setCashDialogOpen(false);
+                resetCashForm();
+            } else {
+                toast({
+                    title: "Error",
+                    description: response.error || 'Failed to add cash balance',
+                    variant: "destructive",
+                });
+            }
+        } catch (error) {
+            console.error('Error creating cash balance:', error);
+            toast({
+                title: "Error",
+                description: 'Failed to add cash balance',
+                variant: "destructive",
+            });
+        }
+    };
+
+    const handleUpdateCashBalance = async () => {
+        if (!editingCashBalance) return;
+
+        try {
+            const response = await apiClient.updateCashBalance(editingCashBalance.id, {
+                currency: cashForm.currency,
+                amount: parseFloat(cashForm.amount)
+            });
+
+            if (response.data) {
+                toast({
+                    title: "Success",
+                    description: "Cash balance updated successfully",
+                });
+                await loadCashBalances();
+                setCashDialogOpen(false);
+                setEditingCashBalance(null);
+                resetCashForm();
+            } else {
+                toast({
+                    title: "Error",
+                    description: response.error || 'Failed to update cash balance',
+                    variant: "destructive",
+                });
+            }
+        } catch (error) {
+            console.error('Error updating cash balance:', error);
+            toast({
+                title: "Error",
+                description: 'Failed to update cash balance',
+                variant: "destructive",
+            });
+        }
+    };
+
+    const handleDeleteCashBalance = async (cashBalanceId: number) => {
+        if (!confirm('Are you sure you want to delete this cash balance?')) {
+            return;
+        }
+
+        try {
+            const response = await apiClient.deleteCashBalance(cashBalanceId);
+            if (response.data) {
+                toast({
+                    title: "Success",
+                    description: "Cash balance deleted successfully",
+                });
+                await loadCashBalances();
+            } else {
+                toast({
+                    title: "Error",
+                    description: response.error || 'Failed to delete cash balance',
+                    variant: "destructive",
+                });
+            }
+        } catch (error) {
+            console.error('Error deleting cash balance:', error);
+            toast({
+                title: "Error",
+                description: 'Failed to delete cash balance',
+                variant: "destructive",
+            });
+        }
+    };
+
+    const openEditCashBalance = (cashBalance: CashBalance) => {
+        setEditingCashBalance(cashBalance);
+        setCashForm({
+            accountId: cashBalance.mainAccountId.toString(),
+            currency: cashBalance.currency,
+            amount: cashBalance.amount.toString()
+        });
+        setCashDialogOpen(true);
+    };
+
+    const resetCashForm = () => {
+        setCashForm({
+            accountId: '',
+            currency: 'USD',
+            amount: ''
+        });
+    };
+
+    const formatCurrency = (value: number, currency: string = 'USD') => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: currency
+        }).format(value);
+    };
+
+    // Calculate totals
+    const totalUSD = cashBalances.reduce((sum, cb) => sum + cb.marketValueUSD, 0);
+    const totalHKD = cashBalances.reduce((sum, cb) => sum + cb.marketValueHKD, 0);
+
+    return (
+        <Card className="w-auto">
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <div className="flex items-center gap-4">
+                            <CardTitle className="flex items-center gap-2">
+                                Cash Balances
+                            </CardTitle>
+                            {cashBalances.length > 0 && (
+                                <div className="text-sm text-muted-foreground">
+                                    Market Value (USD): <span className="font-medium text-foreground">{formatCurrency(totalUSD, 'USD')}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <Button onClick={() => setCashDialogOpen(true)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Cash Balance
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="overflow-x-auto">
+                    <Table className="text-sm w-auto">
+                        <TableHeader>
+                            <TableRow className="text-xs">
+                                <TableHead className="px-3 text-left">Account</TableHead>
+                                <TableHead className="px-3 text-left">Currency</TableHead>
+                                <TableHead className="px-3 text-right">Amount</TableHead>
+                                <TableHead className="px-3 text-right">Market Value (USD)</TableHead>
+                                <TableHead className="px-3 text-right">Market Value (HKD)</TableHead>
+                                <TableHead className="px-3 text-center">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {cashBalances.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                        No cash balances found. Click "Add Cash Balance" to get started.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                <>
+                                    {cashBalances.map((cashBalance) => (
+                                        <TableRow key={cashBalance.id} className="text-xs">
+                                            <TableCell className="font-medium px-3">
+                                                {cashBalance.accountName}
+                                            </TableCell>
+                                            <TableCell className="px-3">
+                                                {cashBalance.currency}
+                                            </TableCell>
+                                            <TableCell className="text-right px-3 whitespace-nowrap">
+                                                {formatCurrency(cashBalance.amount, cashBalance.currency)}
+                                            </TableCell>
+                                            <TableCell className="text-right px-3 whitespace-nowrap">
+                                                {formatCurrency(cashBalance.marketValueUSD, 'USD')}
+                                            </TableCell>
+                                            <TableCell className="text-right px-3 whitespace-nowrap">
+                                                {formatCurrency(cashBalance.marketValueHKD, 'HKD')}
+                                            </TableCell>
+                                            <TableCell className="text-center px-3">
+                                                <div className="flex gap-1 justify-center">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0"
+                                                        onClick={() => openEditCashBalance(cashBalance)}
+                                                        title="Edit Cash Balance"
+                                                    >
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                                                        onClick={() => handleDeleteCashBalance(cashBalance.id)}
+                                                        title="Delete Cash Balance"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {/* Totals Row */}
+                                    <TableRow className="bg-muted/50 font-semibold border-t-2 text-xs">
+                                        <TableCell className="text-left font-bold px-3">
+                                            Total:
+                                        </TableCell>
+                                        <TableCell className="px-3"></TableCell>
+                                        <TableCell className="px-3"></TableCell>
+                                        <TableCell className="text-right font-bold px-3 whitespace-nowrap">
+                                            {formatCurrency(totalUSD, 'USD')}
+                                        </TableCell>
+                                        <TableCell className="text-right font-bold px-3 whitespace-nowrap">
+                                            {formatCurrency(totalHKD, 'HKD')}
+                                        </TableCell>
+                                        <TableCell className="px-3"></TableCell>
+                                    </TableRow>
+                                </>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+
+                {/* Cash Balance Dialog */}
+                <Dialog open={cashDialogOpen} onOpenChange={setCashDialogOpen}>
+                    <DialogContent className="sm:max-w-[400px]">
+                        <DialogHeader>
+                            <DialogTitle>
+                                {editingCashBalance ? 'Edit Cash Balance' : 'Add Cash Balance'}
+                            </DialogTitle>
+                            <DialogDescription>
+                                {editingCashBalance ? 'Update cash balance information' : 'Add a new cash balance for an investment account'}
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="account">Account</Label>
+                                <Select 
+                                    value={cashForm.accountId} 
+                                    onValueChange={(value) => setCashForm({ ...cashForm, accountId: value })}
+                                    disabled={!!editingCashBalance}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select account" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {accounts.map((account) => (
+                                            <SelectItem key={account.id} value={account.id.toString()}>
+                                                {account.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="currency">Currency</Label>
+                                <Select 
+                                    value={cashForm.currency} 
+                                    onValueChange={(value) => setCashForm({ ...cashForm, currency: value })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select currency" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="USD">USD</SelectItem>
+                                        <SelectItem value="HKD">HKD</SelectItem>
+                                        <SelectItem value="EUR">EUR</SelectItem>
+                                        <SelectItem value="GBP">GBP</SelectItem>
+                                        <SelectItem value="JPY">JPY</SelectItem>
+                                        <SelectItem value="CNY">CNY</SelectItem>
+                                        <SelectItem value="SGD">SGD</SelectItem>
+                                        <SelectItem value="CAD">CAD</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="amount">Amount</Label>
+                                <Input
+                                    id="amount"
+                                    type="number"
+                                    step="0.01"
+                                    value={cashForm.amount}
+                                    onChange={(e) => setCashForm({ ...cashForm, amount: e.target.value })}
+                                    placeholder="10000.00"
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => {
+                                setCashDialogOpen(false);
+                                setEditingCashBalance(null);
+                                resetCashForm();
+                            }}>
+                                Cancel
+                            </Button>
+                            <Button onClick={editingCashBalance ? handleUpdateCashBalance : handleCreateCashBalance}>
+                                {editingCashBalance ? 'Update' : 'Add'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </CardContent>
+        </Card>
+    );
+};
 
 const OtherPortfolioView: React.FC<OtherPortfolioViewProps> = ({ accounts = [] }) => {
     const { toast } = useToast();
@@ -894,7 +1268,10 @@ const OtherPortfolioView: React.FC<OtherPortfolioViewProps> = ({ accounts = [] }
                 </div>
             </Card>
 
-
+            {/* Cash Balances Section */}
+            <div className="flex justify-start">
+                <CashBalancesSection accounts={accounts} />
+            </div>
 
             {/* Position Dialog */}
             <Dialog open={positionDialogOpen} onOpenChange={setPositionDialogOpen}>

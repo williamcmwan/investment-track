@@ -292,4 +292,97 @@ router.get('/market-data/:symbol', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/manual-investments/cash-balances
+ * Get all manual cash balances for the user's accounts
+ */
+router.get('/cash-balances', async (req, res) => {
+  try {
+    const userId = req.query.userId as string || 'default';
+    const cashBalances = OtherPortfolioService.getCashBalances(userId);
+    return res.json(cashBalances);
+  } catch (error) {
+    console.error('Error getting cash balances:', error);
+    return res.status(500).json({ error: 'Failed to get cash balances' });
+  }
+});
+
+/**
+ * POST /api/manual-investments/cash-balances
+ * Add or update a cash balance
+ */
+router.post('/cash-balances', async (req, res) => {
+  try {
+    const {
+      accountId,
+      currency,
+      amount
+    } = req.body;
+    
+    if (!accountId || !currency || amount === undefined) {
+      return res.status(400).json({ 
+        error: 'Account ID, currency, and amount are required' 
+      });
+    }
+
+    const cashBalanceData = {
+      mainAccountId: parseInt(accountId),
+      currency: currency.toUpperCase(),
+      amount: parseFloat(amount)
+    };
+    
+    const cashBalance = OtherPortfolioService.addOrUpdateCashBalance(cashBalanceData);
+    return res.status(201).json(cashBalance);
+  } catch (error) {
+    console.error('Error adding/updating cash balance:', error);
+    return res.status(500).json({ error: 'Failed to add/update cash balance' });
+  }
+});
+
+/**
+ * PUT /api/manual-investments/cash-balances/:id
+ * Update a cash balance
+ */
+router.put('/cash-balances/:id', async (req, res) => {
+  try {
+    const cashBalanceId = parseInt(req.params.id);
+    const updates = req.body;
+    
+    // Convert numeric fields
+    if (updates.amount !== undefined) updates.amount = parseFloat(updates.amount);
+    if (updates.currency) updates.currency = updates.currency.toUpperCase();
+    
+    const success = OtherPortfolioService.updateCashBalance(cashBalanceId, updates);
+    
+    if (success) {
+      return res.json({ success: true });
+    } else {
+      return res.status(404).json({ error: 'Cash balance not found' });
+    }
+  } catch (error) {
+    console.error('Error updating cash balance:', error);
+    return res.status(500).json({ error: 'Failed to update cash balance' });
+  }
+});
+
+/**
+ * DELETE /api/manual-investments/cash-balances/:id
+ * Delete a cash balance
+ */
+router.delete('/cash-balances/:id', async (req, res) => {
+  try {
+    const cashBalanceId = parseInt(req.params.id);
+    const success = OtherPortfolioService.deleteCashBalance(cashBalanceId);
+    
+    if (success) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Cash balance not found' });
+    }
+  } catch (error) {
+    console.error('Error deleting cash balance:', error);
+    res.status(500).json({ error: 'Failed to delete cash balance' });
+  }
+});
+
 export default router;

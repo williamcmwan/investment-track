@@ -476,6 +476,49 @@ class ApiClient {
       timestamp: string;
     }>('/currencies/last-update');
   }
+
+  // Cash Balance endpoints
+  async getCashBalances() {
+    return this.request<Array<{
+      id: number;
+      mainAccountId: number;
+      currency: string;
+      amount: number;
+      marketValueHKD: number;
+      marketValueUSD: number;
+      lastUpdated: string;
+      createdAt: string;
+      updatedAt: string;
+      accountName: string;
+    }>>('/manual-investments/cash-balances');
+  }
+
+  async createCashBalance(cashBalanceData: {
+    accountId: number;
+    currency: string;
+    amount: number;
+  }) {
+    return this.request<any>('/manual-investments/cash-balances', {
+      method: 'POST',
+      body: JSON.stringify(cashBalanceData),
+    });
+  }
+
+  async updateCashBalance(cashBalanceId: number, cashBalanceData: {
+    currency?: string;
+    amount?: number;
+  }) {
+    return this.request<any>(`/manual-investments/cash-balances/${cashBalanceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(cashBalanceData),
+    });
+  }
+
+  async deleteCashBalance(cashBalanceId: number) {
+    return this.request<{ success: boolean }>(`/manual-investments/cash-balances/${cashBalanceId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

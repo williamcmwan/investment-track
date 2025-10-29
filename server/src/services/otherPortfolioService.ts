@@ -668,4 +668,178 @@ export class OtherPortfolioService {
       accountCount: result.account_count || 0
     };
   }
+
+  // Cash Balance Methods
+
+  /**
+   * Get all cash balances for manual accounts
+   */
+  static getCashBalances(userId: string = 'default') {
+    const db = this.getDatabase();
+    
+    const stmt = db.prepare(`
+      SELECT 
+        cb.id,
+        cb.main_account_id,
+        cb.currency,
+        cb.amount,
+        cb.market_value_hkd,
+        cb.market_value_usd,
+        cb.last_updated,
+        cb.created_at,
+        cb.updated_at,
+        a.name as account_name
+      FROM cash_balances cb
+      JOIN accounts a ON cb.main_account_id = a.id
+      WHERE cb.source = 'MANUAL'
+      ORDER BY a.name, cb.currency
+    `);
+    
+    const rows = stmt.all();
+    return rows.map(row => ({
+      id: row.id,
+      mainAccountId: row.main_account_id,
+      currency: row.currency,
+      amount: row.amount,
+      marketValueHKD: row.market_value_hkd,
+      marketValueUSD: row.market_value_usd,
+      lastUpdated: row.last_updated,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      accountName: row.account_name
+    }));
+  }
+
+  /**
+   * Add or update a cash balance
+   */
+  static addOrUpdateCashBalance(data: {
+    mainAccountId: number;
+    currency: string;
+    amount: number;
+  }) {
+    const db = this.getDatabase();
+    
+    // Calculate market values using exchange rates
+    const { marketValueHKD, marketValueUSD } = this.calculateMarketValues(data.amount, data.currency);
+    
+    const stmt = db.prepare(`
+      INSERT INTO cash_balances (
+        main_account_id, currency, amount, market_value_hkd, market_value_usd, source, last_updated, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'MANUAL', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(main_account_id, currency, source) DO UPDATE SET
+        amount = excluded.amount,
+        market_value_hkd = excluded.market_value_hkd,
+        market_value_usd = excluded.market_value_usd,
+        last_updated = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+    
+    const result = stmt.run(
+      data.mainAccountId,
+      data.currency,
+      data.amount,
+      marketValueHKD,
+      marketValueUSD
+    );
+    
+    // Return the created/updated cash balance
+    const selectStmt = db.prepare(`
+      SELECT 
+        cb.*,
+        a.name as account_name
+      FROM cash_balances cb
+      JOIN accounts a ON cb.main_account_id = a.id
+      WHERE cb.main_account_id = ? AND cb.currency = ? AND cb.source = 'MANUAL'
+    `);
+    
+    const row = selectStmt.get(data.mainAccountId, data.currency);
+    return {
+      id: row.id,
+      mainAccountId: row.main_account_id,
+      currency: row.currency,
+      amount: row.amount,
+      marketValueHKD: row.market_value_hkd,
+      marketValueUSD: row.market_value_usd,
+      lastUpdated: row.last_updated,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      accountName: row.account_name
+    };
+  }
+
+  /**
+   * Update a cash balance
+   */
+  static updateCashBalance(id: number, updates: any): boolean {
+    const db = this.getDatabase();
+    
+    // If amount or currency is being updated, recalculate market values
+    if (updates.amount !== undefined || updates.currency !== undefined) {
+      const currentStmt = db.prepare('SELECT currency, amount FROM cash_balances WHERE id = ?');
+      const current = currentStmt.get(id) as any;
+      
+      if (!current) return false;
+      
+      const newCurrency = updates.currency || current.currency;
+      const newAmount = updates.amount !== undefined ? updates.amount : current.amount;
+      
+      const { marketValueHKD, marketValueUSD } = this.calculateMarketValues(newAmount, newCurrency);
+      updates.market_value_hkd = marketValueHKD;
+      updates.market_value_usd = marketValueUSD;
+    }
+    
+    const fields = Object.keys(updates).map(key => `${this.camelToSnake(key)} = ?`).join(', ');
+    const values = Object.values(updates);
+    
+    const stmt = db.prepare(`
+      UPDATE cash_balances 
+      SET ${fields}, updated_at = CURRENT_TIMESTAMP, last_updated = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    
+    const result = stmt.run(...values, id);
+    return result.changes > 0;
+  }
+
+  /**
+   * Delete a cash balance
+   */
+  static deleteCashBalance(id: number): boolean {
+    const db = this.getDatabase();
+    const stmt = db.prepare('DELETE FROM cash_balances WHERE id = ?');
+    const result = stmt.run(id);
+    return result.changes > 0;
+  }
+
+  /**
+   * Calculate market values in HKD and USD
+   */
+  private static calculateMarketValues(amount: number, currency: string): { marketValueHKD: number; marketValueUSD: number } {
+    // Simple exchange rate mapping - in production, use real exchange rates
+    const exchangeRates: Record<string, { toHKD: number; toUSD: number }> = {
+      'HKD': { toHKD: 1, toUSD: 0.128 },
+      'USD': { toHKD: 7.8, toUSD: 1 },
+      'EUR': { toHKD: 8.5, toUSD: 1.09 },
+      'GBP': { toHKD: 10.0, toUSD: 1.28 },
+      'JPY': { toHKD: 0.05, toUSD: 0.0067 },
+      'CNY': { toHKD: 1.1, toUSD: 0.14 },
+      'SGD': { toHKD: 5.8, toUSD: 0.74 },
+      'CAD': { toHKD: 5.7, toUSD: 0.73 }
+    };
+    
+    const rates = exchangeRates[currency] || { toHKD: 1, toUSD: 0.128 }; // Default to HKD rates
+    
+    return {
+      marketValueHKD: amount * rates.toHKD,
+      marketValueUSD: amount * rates.toUSD
+    };
+  }
+
+  /**
+   * Convert camelCase to snake_case
+   */
+  private static camelToSnake(str: string): string {
+    return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+  }
 }
