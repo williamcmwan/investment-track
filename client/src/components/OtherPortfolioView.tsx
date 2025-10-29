@@ -18,7 +18,9 @@ import {
     TrendingUp,
     TrendingDown,
     Search,
-    AlertCircle
+    AlertCircle,
+    Activity,
+    DollarSign
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
@@ -264,28 +266,25 @@ const CashBalancesSection: React.FC<{ accounts: MainAccount[] }> = ({ accounts }
     const totalHKD = cashBalances.reduce((sum, cb) => sum + cb.marketValueHKD, 0);
 
     return (
-        <Card className="w-auto">
-            <CardHeader>
-                <div className="flex justify-between items-center">
-                    <div>
-                        <div className="flex items-center gap-4">
-                            <CardTitle className="flex items-center gap-2">
-                                Cash Balances
-                            </CardTitle>
-                            {cashBalances.length > 0 && (
-                                <div className="text-sm text-muted-foreground">
-                                    Market Value (USD): <span className="font-medium text-foreground">{formatCurrency(totalUSD, 'USD')}</span>
-                                </div>
-                            )}
+        <>
+            <div className="flex items-center justify-between mb-4 px-4 sm:px-0">
+                <div className="flex items-center gap-4">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-primary" />
+                        Cash Balances
+                    </h3>
+                    {cashBalances.length > 0 && (
+                        <div className="text-sm text-muted-foreground">
+                            Market Value (USD): <span className="font-medium text-foreground">{formatCurrency(totalUSD, 'USD')}</span>
                         </div>
-                    </div>
-                    <Button onClick={() => setCashDialogOpen(true)}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Cash Balance
-                    </Button>
+                    )}
                 </div>
-            </CardHeader>
-            <CardContent>
+                <Button onClick={() => setCashDialogOpen(true)} size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Cash Balance
+                </Button>
+            </div>
+            {cashBalances.length > 0 ? (
                 <div className="overflow-x-auto">
                     <Table className="text-sm w-auto">
                         <TableHeader>
@@ -368,8 +367,17 @@ const CashBalancesSection: React.FC<{ accounts: MainAccount[] }> = ({ accounts }
                         </TableBody>
                     </Table>
                 </div>
+            ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center bg-background/30 rounded-lg">
+                    <DollarSign className="h-10 w-10 text-muted-foreground mb-3" />
+                    <h3 className="text-base font-medium text-foreground mb-1">No Cash Balances</h3>
+                    <p className="text-sm text-muted-foreground">
+                        Click "Add Cash Balance" to get started
+                    </p>
+                </div>
+            )}
 
-                {/* Cash Balance Dialog */}
+            {/* Cash Balance Dialog */}
                 <Dialog open={cashDialogOpen} onOpenChange={setCashDialogOpen}>
                     <DialogContent className="sm:max-w-[400px]">
                         <DialogHeader>
@@ -447,8 +455,7 @@ const CashBalancesSection: React.FC<{ accounts: MainAccount[] }> = ({ accounts }
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
-            </CardContent>
-        </Card>
+        </>
     );
 };
 
@@ -928,27 +935,47 @@ const OtherPortfolioView: React.FC<OtherPortfolioViewProps> = ({ accounts = [] }
                 </Alert>
             )}
 
-            {/* Action buttons at the top */}
-            <div className="flex gap-2 justify-start">
-                <div className="flex flex-col items-start gap-1">
-                    <Button variant="outline" onClick={handleRefreshMarketData} disabled={loading}>
-                        <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                        Refresh Market Data
-                    </Button>
-                    {allLastUpdateTimes && allLastUpdateTimes.manualInvestments && (
-                        <p className="text-xs text-muted-foreground">
-                            Last updated: {new Date(allLastUpdateTimes.manualInvestments).toLocaleString()}
-                        </p>
-                    )}
-                </div>
-                <Button onClick={() => setPositionDialogOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Position
-                </Button>
-            </div>
-
-            <Card>
-                <div className="w-full overflow-x-auto">
+            {/* Other Portfolio Overview */}
+            <Card className="bg-gradient-card border-border shadow-card">
+                <CardHeader>
+                    <div className="flex flex-col gap-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <CardTitle className="flex items-center gap-2">
+                                <Activity className="h-5 w-5 text-primary" />
+                                Other Portfolio
+                            </CardTitle>
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" onClick={handleRefreshMarketData} disabled={loading} size="sm">
+                                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                                    {loading ? 'Refreshing...' : 'Refresh Market Data'}
+                                </Button>
+                                <Button onClick={() => setPositionDialogOpen(true)} size="sm">
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Add Position
+                                </Button>
+                            </div>
+                        </div>
+                        <CardDescription>
+                            Manual investment positions and cash balances{allLastUpdateTimes && allLastUpdateTimes.manualInvestments && ` (Last updated: ${new Date(allLastUpdateTimes.manualInvestments).toLocaleString()})`}
+                        </CardDescription>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-6 px-4 sm:px-6">
+                    {/* Portfolio Positions */}
+                    <div className="border-t pt-6 -mx-4 sm:mx-0">
+                        <div className="flex items-center justify-between mb-4 px-4 sm:px-0">
+                            <div className="flex items-center gap-4">
+                                <h3 className="text-lg font-semibold flex items-center gap-2">
+                                    <Activity className="h-5 w-5 text-primary" />
+                                    Positions
+                                </h3>
+                            </div>
+                            <p className="text-xs text-muted-foreground sm:hidden">
+                                Scroll →
+                            </p>
+                        </div>
+                        {positions.length > 0 ? (
+                            <div className="w-full overflow-x-auto">
                     <Table className="w-full text-sm">
                         <TableHeader>
                             <TableRow className="text-xs">
@@ -1265,13 +1292,24 @@ const OtherPortfolioView: React.FC<OtherPortfolioViewProps> = ({ accounts = [] }
                             })()}
                         </TableBody>
                     </Table>
-                </div>
-            </Card>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-8 text-center bg-background/30 rounded-lg">
+                                <Activity className="h-10 w-10 text-muted-foreground mb-3" />
+                                <h3 className="text-base font-medium text-foreground mb-1">No Positions</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Click "Add Position" to get started
+                                </p>
+                            </div>
+                        )}
+                    </div>
 
-            {/* Cash Balances Section */}
-            <div className="flex justify-start">
-                <CashBalancesSection accounts={accounts} />
-            </div>
+                    {/* Cash Balances Section */}
+                    <div className="border-t pt-6 -mx-4 sm:mx-0">
+                        <CashBalancesSection accounts={accounts} />
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* Position Dialog */}
             <Dialog open={positionDialogOpen} onOpenChange={setPositionDialogOpen}>
