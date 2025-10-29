@@ -61,7 +61,7 @@ export class IBService {
   private static keepAliveInterval: NodeJS.Timeout | null = null;
   private static lastActivityTime = 0;
   private static readonly IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes idle timeout
-  
+
   // Track failed bond market data requests to avoid repeated timeouts
   private static failedBondSymbols: Set<string> = new Set();
 
@@ -287,10 +287,10 @@ export class IBService {
   private static async savePortfolioToDB(mainAccountId: number, positions: PortfolioPosition[]): Promise<void> {
     try {
       const { dbRun } = await import('../database/connection.js');
-      
+
       console.log(`💾 Starting batch save of ${positions.length} IB portfolio positions to DB...`);
       const startTime = Date.now();
-      
+
       // Replace existing IB records for this account
       await dbRun('DELETE FROM portfolios WHERE source = ? AND main_account_id = ?', ['IB', mainAccountId]);
 
@@ -315,7 +315,7 @@ export class IBService {
 
       for (const p of positions) {
         valueClauses.push(`(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
-        
+
         allParams.push(
           mainAccountId,
           p.symbol || '',
@@ -348,7 +348,7 @@ export class IBService {
       const endTime = Date.now();
       const duration = endTime - startTime;
       console.log(`💾 Batch saved ${positions.length} IB portfolio rows to DB for account ${mainAccountId} in ${duration}ms`);
-      
+
     } catch (e) {
       console.error('❌ Failed to save IB portfolio to DB:', e);
     }
@@ -733,7 +733,7 @@ export class IBService {
             if (tag === 'Currency') {
               this.accountSummaryData.set('Currency', currency);
             }
-            
+
             // Log all account summary data to see what's available
             console.log(`Account summary data: ${tag} = ${value} (${currency})`);
           }
@@ -889,10 +889,12 @@ export class IBService {
               return;
             }
 
-            const dayChange = (lastPrice - closePrice) * position.position;
+            // Bond day change calculation: (lastPrice - closePrice) * qty * 10
+            // Bonds are quoted as percentage of par value, so multiply by 10 for proper dollar amount
+            const dayChange = (lastPrice - closePrice) * position.position * 10;
             const dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
 
-            console.log(`Calculated bond day change for ${position.symbol}: lastPrice=${lastPrice}, closePrice=${closePrice}, dayChange=${dayChange}, dayChangePercent=${dayChangePercent.toFixed(2)}%`);
+            console.log(`Calculated bond day change for ${position.symbol}: lastPrice=${lastPrice}, closePrice=${closePrice}, dayChange=${dayChange}, dayChangePercent=${dayChangePercent.toFixed(2)}% (bond formula: qty * 10)`);
 
             resolve({
               closePrice,
@@ -1079,21 +1081,21 @@ export class IBService {
   static async forceRefreshPortfolio(userSettings?: { host: string; port: number; client_id: number }): Promise<PortfolioPosition[]> {
     console.log('📊 Force refreshing portfolio...');
     const refreshStartTime = Date.now();
-    
+
     // Clear failed bonds cache on manual refresh to retry them
     if (this.failedBondSymbols.size > 0) {
       console.log(`📊 Clearing ${this.failedBondSymbols.size} failed bond symbols for retry`);
       this.failedBondSymbols.clear();
     }
-    
+
     const freshData = await this.fetchPortfolioFresh(userSettings);
     this.setCachedPortfolio(freshData);
     LastUpdateService.updateIBPortfolioTime();
-    
+
     const refreshEndTime = Date.now();
     const totalDuration = refreshEndTime - refreshStartTime;
     console.log(`📊 Portfolio refresh completed in ${totalDuration}ms (${freshData.length} positions)`);
-    
+
     return freshData;
   }
 
@@ -1218,10 +1220,10 @@ export class IBService {
           if (!isResolved) {
             // Stop the initial wait timer now that account data download ended
             clearTimeout(timeout);
-            
+
             console.log(`📊 Starting enrichment of ${this.portfolioPositions.length} positions...`);
             const enrichmentStartTime = Date.now();
-            
+
             // Fetch contract details and market data for each position
             const enrichedPositions = await Promise.all(
               this.portfolioPositions.map(async (position) => {
@@ -1346,7 +1348,7 @@ export class IBService {
 
             // Update in-memory cache
             this.setCachedPortfolio(enrichedPositions);
-            
+
             console.log(`💰 Captured ${this.cashBalances.length} cash positions:`, this.cashBalances);
             this.setCachedCash(this.cashBalances);
 
@@ -1435,14 +1437,14 @@ export class IBService {
     // No database or cache data available, fetch fresh data
     console.log('❌ No cached cash balance available, fetching fresh data');
     const freshData = await this.fetchCashBalancesUsingAccountSummary(userSettings);
-    
+
     // Calculate USD values and save to database
     const enrichedData = await this.enrichCashBalancesWithUSD(freshData);
-    
+
     if (mainAccountId) {
       await this.saveCashBalancesToDB(mainAccountId, enrichedData);
     }
-    
+
     this.setCachedCash(enrichedData);
     return enrichedData;
   }
@@ -1450,30 +1452,30 @@ export class IBService {
   // Force refresh cash balances
   static async forceRefreshCashBalances(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<CashBalance[]> {
     console.log('💰 Force refreshing cash balances...');
-    
+
     const freshData = await this.fetchCashBalancesUsingAccountSummary(userSettings);
-    
+
     // Calculate USD values and save to database
     const enrichedData = await this.enrichCashBalancesWithUSD(freshData);
-    
+
     const mainAccountId = userSettings.target_account_id ?? null;
     if (mainAccountId) {
       await this.saveCashBalancesToDB(mainAccountId, enrichedData);
     }
-    
+
     this.setCachedCash(enrichedData);
     LastUpdateService.updateIBPortfolioTime();
-    
+
     return enrichedData;
   }
 
   // Enrich cash balances with USD values using exchange rates
   private static async enrichCashBalancesWithUSD(cashBalances: CashBalance[]): Promise<CashBalance[]> {
     const enrichedBalances: CashBalance[] = [];
-    
+
     for (const cash of cashBalances) {
       let marketValueUSD = cash.marketValueHKD;
-      
+
       if (cash.currency !== 'USD') {
         try {
           // Get exchange rate to USD
@@ -1485,13 +1487,13 @@ export class IBService {
           marketValueUSD = cash.marketValueHKD; // Fallback to original value
         }
       }
-      
+
       enrichedBalances.push({
         ...cash,
         marketValueUSD
       });
     }
-    
+
     return enrichedBalances;
   }
 
@@ -1504,9 +1506,9 @@ export class IBService {
   private static async saveCashBalancesToDB(mainAccountId: number, cashBalances: CashBalance[]): Promise<void> {
     try {
       const { dbRun } = await import('../database/connection.js');
-      
+
       console.log(`💾 Saving ${cashBalances.length} cash balances to DB for account ${mainAccountId}...`);
-      
+
       // Delete existing cash balances for this account
       await dbRun('DELETE FROM cash_balances WHERE main_account_id = ? AND source = ?', [mainAccountId, 'IB']);
 
@@ -1542,7 +1544,7 @@ export class IBService {
   private static async loadCashBalancesFromDB(mainAccountId?: number | null): Promise<CashBalance[]> {
     try {
       const { dbAll } = await import('../database/connection.js');
-      
+
       let rows: any[];
       if (mainAccountId != null) {
         rows = await dbAll(
@@ -1576,7 +1578,7 @@ export class IBService {
   // Method using account summary to get cash balances by currency (based on working example)
   private static async fetchCashBalancesUsingAccountSummary(userSettings?: { host: string; port: number; client_id: number }): Promise<CashBalance[]> {
     console.log('💰 Fetching cash balances using TotalCashValue by currency...');
-    
+
     // Wait if another request is in progress
     while (this.isRequestInProgress) {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -1647,7 +1649,7 @@ export class IBService {
             // Use only CashBalance to avoid duplication, and skip BASE (which is the total)
             if (tag === 'CashBalance' && currency !== 'BASE') {
               const amount = parseFloat(value);
-              
+
               if (amount !== 0) { // Only store non-zero balances
                 balances[currency] = amount;
                 console.log(`💰 Cash balance: ${currency} = ${amount}`);
@@ -1661,13 +1663,13 @@ export class IBService {
         const summaryEndHandler = (_reqId: number) => {
           if (_reqId === reqId && !isResolved) {
             console.log(`💰 Found ${Object.keys(balances).length} cash balances`);
-            
+
             // Convert to CashBalance array, handling BASE currency conversion
             const cashBalances: CashBalance[] = [];
             for (const [currency, amount] of Object.entries(balances)) {
               // Convert BASE to real currency, or use currency as-is
               const actualCurrency = currency === 'BASE' ? realCurrency : currency;
-              
+
               cashBalances.push({
                 currency: actualCurrency,
                 amount: amount,
@@ -1700,7 +1702,7 @@ export class IBService {
   // Internal method to fetch cash balances using account updates (better for multi-currency)
   private static async fetchCashBalancesFresh(userSettings?: { host: string; port: number; client_id: number }): Promise<CashBalance[]> {
     console.log('💰 Fetching cash balances using account updates...');
-    
+
     // Wait if another request is in progress
     while (this.isRequestInProgress || this.isPortfolioRequestInProgress) {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -1771,7 +1773,7 @@ export class IBService {
               position: position,
               marketValue: marketValue
             });
-            
+
             cashBalances.push({
               currency: contract.symbol || contract.currency || 'USD',
               amount: position,
@@ -1792,7 +1794,7 @@ export class IBService {
             const amount = parseFloat(value);
             if (amount !== 0) {
               console.log(`💰 Found cash via account value: ${key} = ${amount} ${currency}`);
-              
+
               // Check if we already have this currency from portfolio
               const existingIndex = cashBalances.findIndex(cb => cb.currency === currency);
               if (existingIndex === -1) {
