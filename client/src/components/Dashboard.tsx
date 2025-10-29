@@ -36,6 +36,7 @@ interface Account {
   userId: number;
   name: string;
   currency: string;
+  accountType: string;
   originalCapital: number;
   currentBalance: number;
   lastUpdated: string;
@@ -156,8 +157,27 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       setIsLoadingPerformance(true);
       const response = await apiClient.getPerformanceChartData(); // Get all data
       if (response.data) {
+        // Calculate Daily P&L (current day Investment P&L - previous day Investment P&L)
+        const sortedForDailyCalc = [...response.data].sort((a: any, b: any) => {
+          const da = new Date(a.date).getTime();
+          const db = new Date(b.date).getTime();
+          return da - db; // Ascending order for calculation
+        });
+        
+        const dataWithDailyPL = sortedForDailyCalc.map((entry: any, index: number) => {
+          if (index === 0) {
+            // First entry has no previous day, so Daily P&L is 0
+            return { ...entry, dailyPL: 0 };
+          } else {
+            // Daily P&L = current Investment P&L - previous Investment P&L
+            const previousEntry = sortedForDailyCalc[index - 1];
+            const dailyPL = entry.investmentPL - previousEntry.investmentPL;
+            return { ...entry, dailyPL };
+          }
+        });
+        
         // Sort in descending order (newest first) for table display
-        const sortedDesc = [...response.data].sort((a: any, b: any) => {
+        const sortedDesc = [...dataWithDailyPL].sort((a: any, b: any) => {
           const da = new Date(a.date).getTime();
           const db = new Date(b.date).getTime();
           return db - da; // Descending order
@@ -165,7 +185,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         setAllPerformanceData(sortedDesc);
         
         // For chart, we still want chronological order (oldest to newest)
-        const sortedAsc = [...response.data].sort((a: any, b: any) => {
+        const sortedAsc = [...dataWithDailyPL].sort((a: any, b: any) => {
           const da = new Date(a.date).getTime();
           const db = new Date(b.date).getTime();
           return da - db; // Ascending order for chart
@@ -174,11 +194,18 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       }
     } catch (error) {
       console.error('Error loading performance history:', error);
-      // Fallback to generating on-the-fly if no stored data
-      generatePerformanceHistoryOnTheFly();
+      // No fallback - use only server data to avoid overriding correct values
     } finally {
       setIsLoadingPerformance(false);
     }
+  };
+
+  // Update today's performance data with current summary data
+  // DISABLED: This function is disabled to prevent overriding correct performance data
+  const updateTodaysPerformanceData = () => {
+    // Function disabled to prevent data override on refresh
+    console.log('updateTodaysPerformanceData called but disabled to preserve server data');
+    return;
   };
 
   // Load performance history when component mounts or when user changes
@@ -187,6 +214,9 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       loadPerformanceHistory();
     }
   }, [user]);
+
+  // Note: updateTodaysPerformanceData() is now only called manually when needed
+  // to avoid overriding correct performance data on refresh
 
   // Reset page when performance data changes
   useEffect(() => {
@@ -269,6 +299,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         // Reload accounts and update performance data
         await loadAccounts();
         await handlePostAccountUpdate();
+        // Update today's performance data only when accounts are actually updated
+        updateTodaysPerformanceData();
         
         // Clear the form and close dialog
         setQuickUpdateAmounts({});
@@ -398,23 +430,27 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       };
     }
 
-    const totalCapital = accounts.reduce((sum, acc) => 
+    // Filter to only include investment accounts for P&L calculations
+    // Handle accounts that might not have accountType set (default to INVESTMENT for backward compatibility)
+    const investmentAccounts = accounts.filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT');
+    
+    const totalCapital = investmentAccounts.reduce((sum, acc) => 
       sum + convertToBaseCurrency(acc.originalCapital, acc.currency), 0
     );
     
-    const currentBalance = accounts.reduce((sum, acc) => 
+    const currentBalance = investmentAccounts.reduce((sum, acc) => 
       sum + convertToBaseCurrency(acc.currentBalance, acc.currency), 0
     );
     
-    // Get the Total P&L from Investment Accounts page (this is the main total)
-    const totalProfitLoss = accounts.reduce((sum, acc) => 
+    // Get Total P&L from Investment Accounts (matches Investment Accounts page)
+    const totalProfitLoss = investmentAccounts.reduce((sum, acc) => 
       sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0
     );
     
     // Get Currency P&L from Currency Exchange page
     const currencyProfitLoss = calculateCurrencyPL();
     
-    // Investment P&L = Total P&L - Currency P&L
+    // Investment P&L = Total P&L - Currency P&L (pure investment performance)
     const investmentProfitLoss = totalProfitLoss - currencyProfitLoss;
     const totalProfitLossPercent = totalCapital > 0 ? (totalProfitLoss / totalCapital) * 100 : 0;
 
@@ -457,81 +493,10 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     return `${percent > 0 ? "+" : ""}${percent.toFixed(2)}%`;
   };
 
+  // Removed generatePerformanceHistoryOnTheFly function to prevent data override on refresh
+
   const renderOverview = () => {
     const summaryData = calculateSummaryData();
-
-    const generatePerformanceHistoryOnTheFly = () => {
-      // Create a Map to store aggregated data by date
-      const dateMap = new Map<string, {
-        date: string;
-        totalPL: number;
-        investmentPL: number;
-        currencyPL: number;
-        dailyPL: number;
-      }>();
-      
-      // Process all accounts and aggregate data by date
-      accounts.forEach(account => {
-        (account.history || []).forEach(entry => {
-          if (entry.date) {
-            // Extract date part from timestamp (handle both 'YYYY-MM-DD' and 'YYYY-MM-DD HH:MM:SS' formats)
-            let dateStr = entry.date;
-            if (dateStr.includes(' ')) {
-              // Handle 'YYYY-MM-DD HH:MM:SS' format
-              dateStr = dateStr.split(' ')[0];
-            } else if (dateStr.includes('T')) {
-              // Handle 'YYYY-MM-DDTHH:MM:SS' format
-              dateStr = dateStr.split('T')[0];
-            }
-            // If already in 'YYYY-MM-DD' format, keep as is
-            
-            // Get or create entry for this date
-            let dateEntry = dateMap.get(dateStr);
-            if (!dateEntry) {
-              dateEntry = {
-                date: dateStr,
-                totalPL: 0,
-                investmentPL: 0,
-                currencyPL: 0,
-                dailyPL: 0
-              };
-              dateMap.set(dateStr, dateEntry);
-            }
-            
-            // Add this account's contribution to the date
-            // Calculate P&L based on the balance at this date vs original capital
-            const currentBalance = convertToBaseCurrency(entry.balance, account.currency);
-            const originalCapital = convertToBaseCurrency(account.originalCapital, account.currency);
-            const accountPL = currentBalance - originalCapital;
-            
-            dateEntry.totalPL += accountPL;
-            dateEntry.investmentPL += accountPL;
-          }
-        });
-      });
-      
-      // Convert map to array and calculate actual currency P&L
-      const history = Array.from(dateMap.values()).map(entry => {
-        // Calculate actual currency P&L from currency pairs
-        const currencyPL = calculateCurrencyPL();
-        
-        return {
-          date: entry.date,
-          totalPL: entry.totalPL + currencyPL,
-          investmentPL: entry.investmentPL,
-          currencyPL: currencyPL,
-          dailyPL: 0
-        };
-      });
-      
-      // Sort by date to ensure proper chronological order for chart
-      const sortedAsc = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      setPerformanceHistory(sortedAsc.slice(-30)); // Last 30 days for chart
-      
-      // Sort in descending order for table display
-      const sortedDesc = [...history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setAllPerformanceData(sortedDesc);
-    };
 
     const calculateAndStoreTodaySnapshot = async () => {
       try {
@@ -1056,7 +1021,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
-                      {accounts.map((account) => (
+                      {accounts.filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT').map((account) => (
                         <div key={account.id} className="grid grid-cols-4 items-center gap-4">
                           <Label htmlFor={`account-${account.id}`} className="text-right font-medium">
                             {account.name}
@@ -1077,7 +1042,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                           </div>
                         </div>
                       ))}
-                      {accounts.length === 0 && (
+                      {accounts.filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT').length === 0 && (
                         <div className="text-center py-8 text-muted-foreground">
                           No investment accounts found. Create an account first.
                         </div>
@@ -1095,7 +1060,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                       </Button>
                       <Button
                         onClick={handleQuickUpdate}
-                        disabled={isUpdatingBalances || accounts.length === 0}
+                        disabled={isUpdatingBalances || accounts.filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT').length === 0}
                       >
                         {isUpdatingBalances ? "Updating..." : "Update Balances"}
                       </Button>
@@ -1116,6 +1081,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               onAccountUpdate={async () => {
                 await loadAccounts();
                 await handlePostAccountUpdate();
+                // Update today's performance data only when accounts are actually updated
+                updateTodaysPerformanceData();
               }}
             />
           )}
@@ -1133,6 +1100,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               onAccountUpdate={async () => {
                 await loadAccounts();
                 await handlePostAccountUpdate();
+                // Update today's performance data only when accounts are actually updated
+                updateTodaysPerformanceData();
               }}
             />
           )}

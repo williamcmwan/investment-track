@@ -32,9 +32,12 @@ export class PerformanceHistoryService {
       const user = await dbGet('SELECT base_currency FROM users WHERE id = ?', [userId]) as { base_currency: string } | null;
       const baseCurrency = user?.base_currency || 'HKD';
       
-      // Calculate investment P&L using simplified logic
+      // Calculate investment P&L using simplified logic - only include INVESTMENT accounts
       let investmentPL = 0;
-      for (const account of accounts) {
+      // Filter to only include investment accounts for P&L calculations
+      const investmentAccounts = accounts.filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT');
+      
+      for (const account of investmentAccounts) {
         // Use current balance (simplified approach)
         const currentBalance = account.currentBalance;
         const originalCapital = account.originalCapital;
@@ -75,15 +78,15 @@ export class PerformanceHistoryService {
       }
       
       // Based on your requirement:
-      // - Total P&L should be HK$1,660,354.13 (the investment P&L from accounts)
-      // - Investment P&L should be HK$1,409,843.85 (Total P&L - Currency P&L)
-      // - Currency P&L should be HK$250,510.27
+      // - Total P&L should be calculated from INVESTMENT accounts only
+      // - Investment P&L should be Total P&L - Currency P&L (pure investment performance)
+      // - Currency P&L should be calculated from currency pairs
       
-      // The investmentPL variable contains the total P&L from accounts (HK$1,660,354.13)
-      // The currencyPL variable contains the currency P&L (HK$250,510.27)
+      // The investmentPL variable contains the total P&L from INVESTMENT accounts only
+      // The currencyPL variable contains the currency P&L
       // So we need to store them correctly:
-      const totalPL = investmentPL; // Total P&L = Investment P&L from accounts (HK$1,660,354.13)
-      const investmentPLCalculated = totalPL - currencyPL; // Investment P&L = Total - Currency (HK$1,409,843.85)
+      const totalPL = investmentPL; // Total P&L = Investment P&L from INVESTMENT accounts only
+      const investmentPLCalculated = totalPL - currencyPL; // Investment P&L = Total - Currency (pure investment performance)
       
       // Calculate daily P&L (difference from previous day)
       if (!targetDate) {
@@ -120,10 +123,11 @@ export class PerformanceHistoryService {
       await PerformanceModel.create(userId, snapshot);
       
       console.log(`✅ Performance snapshot calculated and stored for ${targetDate}:`, {
-        totalPL: totalPL.toFixed(2), // Should be HK$1,660,354.13
-        investmentPL: investmentPLCalculated.toFixed(2), // Should be HK$1,409,843.85
-        currencyPL: currencyPL.toFixed(2), // Should be HK$250,510.27
-        dailyPL: dailyPL.toFixed(2)
+        totalPL: totalPL.toFixed(2), // Total P&L from INVESTMENT accounts only
+        investmentPL: investmentPLCalculated.toFixed(2), // Pure investment performance (Total - Currency)
+        currencyPL: currencyPL.toFixed(2), // Currency exchange P&L
+        dailyPL: dailyPL.toFixed(2),
+        investmentAccountsCount: investmentAccounts.length
       });
       
       return snapshot;
