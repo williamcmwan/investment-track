@@ -512,7 +512,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                 <div className="p-2 bg-primary/20 rounded-lg flex-shrink-0">
                   <span className="text-lg">{account.accountType === 'BANK' ? '🏦' : getCurrencyFlag(account.currency)}</span>
                 </div>
-                <div className="flex flex-col min-w-0 flex-1 group">
+                <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
                     <CardTitle className="text-foreground truncate">{account.name}</CardTitle>
                     {account.accountNumber && (
@@ -522,18 +522,9 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                   <CardDescription className="truncate">
                     {account.accountType === 'BANK' ? 'Bank Account' : 'Investment Account'} • {account.currency}
                   </CardDescription>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="border-blue-500 text-blue-500 hover:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-2 sm:hidden w-fit"
-                    onClick={() => openEditDialog(account)}
-                  >
-                    <Edit className="h-3 w-3 mr-1" />
-                    Edit
-                  </Button>
                 </div>
               </div>
-              <div className="flex-shrink-0 hidden sm:block">
+              <div className="flex-shrink-0">
                 <Button 
                   variant="outline" 
                   size="sm" 
@@ -543,16 +534,6 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                   <Edit className="h-3 w-3" />
                 </Button>
               </div>
-              {account.accountType === 'INVESTMENT' && (
-                <Badge variant={account.profitLoss > 0 ? "default" : "destructive"}>
-                  {account.profitLoss > 0 ? (
-                    <ArrowUpRight className="h-3 w-3 mr-1" />
-                  ) : (
-                    <ArrowDownRight className="h-3 w-3 mr-1" />
-                  )}
-                  {formatPercent(account.profitLossPercent)}
-                </Badge>
-              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -565,21 +546,19 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                     {formatCurrency(account.currentBalance, account.currency)}
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground break-words">
-                  <div className="flex flex-col sm:flex-row sm:gap-2">
-                    <span>Last updated:</span>
-                    <span className="font-mono">
-                      {new Date(account.lastUpdated).toLocaleDateString('en-GB', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: '2-digit'
-                      })} {new Date(account.lastUpdated).toLocaleTimeString('en-GB', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: false
-                      })}
-                    </span>
-                  </div>
+                <div className="text-xs text-muted-foreground">
+                  <span>Last updated: </span>
+                  <span className="font-mono">
+                    {new Date(account.lastUpdated).toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: '2-digit'
+                    })} {new Date(account.lastUpdated).toLocaleTimeString('en-GB', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false
+                    })}
+                  </span>
                 </div>
               </div>
             ) : (
@@ -607,9 +586,19 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                 
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">Profit/Loss</p>
-                  <p className={`text-lg font-semibold ${account.profitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
-                    {formatCurrency(account.profitLoss, account.currency)}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className={`text-lg font-semibold ${account.profitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
+                      {formatCurrency(account.profitLoss, account.currency)}
+                    </p>
+                    <Badge variant={account.profitLoss > 0 ? "default" : "destructive"} className="text-xs">
+                      {account.profitLoss > 0 ? (
+                        <ArrowUpRight className="h-3 w-3 mr-1" />
+                      ) : (
+                        <ArrowDownRight className="h-3 w-3 mr-1" />
+                      )}
+                      {formatPercent(account.profitLossPercent)}
+                    </Badge>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     ≈ {formatCurrency(convertToBaseCurrency(account.profitLoss, account.currency), baseCurrency)}
                   </p>

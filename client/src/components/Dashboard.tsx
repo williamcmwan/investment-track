@@ -896,65 +896,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         </CardContent>
       </Card>
 
-      {/* All Investment Accounts */}
-      <Card className="bg-gradient-card border-border shadow-card">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-foreground">Investment Accounts</CardTitle>
-            <CardDescription>All account balances</CardDescription>
-          </div>
-          <Button 
-            variant="outline" 
-            onClick={() => setCurrentView("accounts")}
-            className="border-primary text-primary hover:bg-primary/10"
-          >
-            Manage Accounts
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {accounts
-              .sort((a, b) => {
-                const aTotal = convertToBaseCurrency(a.currentBalance, a.currency);
-                const bTotal = convertToBaseCurrency(b.currentBalance, b.currency);
-                return bTotal - aTotal; // Sort by total amount descending
-              })
-              .map((account) => (
-              <div key={account.id} className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
-                <div className="flex items-center gap-3 mr-auto">
-                  <div className="p-2 bg-primary/20 rounded-lg">
-                    <DollarSign className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground">{account.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {account.currency} • Updated {account.lastUpdated}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium text-foreground">
-                    {formatCurrency(convertToBaseCurrency(account.currentBalance, account.currency))}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatCurrency(account.currentBalance, account.currency)}
-                  </p>
-                  <div className="flex items-center justify-end gap-1">
-                    {account.profitLoss > 0 ? (
-                      <ArrowUpRight className="h-4 w-4 text-profit" />
-                    ) : (
-                      <ArrowDownRight className="h-4 w-4 text-loss" />
-                    )}
-                    <span className={`text-sm ${account.profitLoss > 0 ? 'text-profit' : 'text-loss'}`}>
-                      {formatPercent(account.profitLossPercent)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+
     </div>
     );
   };
