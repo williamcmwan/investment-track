@@ -673,10 +673,59 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     
     const totalAssetsValue = investmentAccountsValue + bankAccountsValue + otherAssetsValue;
 
+    // Generate Portfolio Analytics CSV Log
+    const generatePortfolioAnalyticsCSV = () => {
+      const csvData: Array<{category: string, source: string, itemName: string, valueInBase: number}> = [];
+
+      // Flatten all items from portfolioChartData
+      portfolioChartData.forEach(categoryData => {
+        categoryData.items.forEach(item => {
+          csvData.push({
+            category: categoryData.label,
+            source: item.source,
+            itemName: item.name,
+            valueInBase: item.value
+          });
+        });
+      });
+
+      // Sort by category, then by source
+      csvData.sort((a, b) => {
+        if (a.category !== b.category) {
+          return a.category.localeCompare(b.category);
+        }
+        return a.source.localeCompare(b.source);
+      });
+
+      // Generate CSV content
+      const csvHeader = `Category,Source,Item Name,Value (${baseCurrency})\n`;
+      const csvRows = csvData.map(row =>
+        `"${row.category}","${row.source}","${row.itemName}",${row.valueInBase.toFixed(2)}`
+      ).join('\n');
+
+      const csvContent = csvHeader + csvRows;
+
+      // Create and download CSV file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `portfolio_analytics_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Success",
+        description: "Portfolio analytics CSV file downloaded successfully",
+      });
+    };
+
     // Generate Currency Analytics CSV Log
     const generateCurrencyAnalyticsCSV = () => {
       const csvData: Array<{currency: string, source: string, itemName: string, amount: number}> = [];
-      
+
       // Add bank accounts
       accounts.filter(acc => acc.accountType === 'BANK').forEach(acc => {
         csvData.push({
@@ -777,6 +826,217 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         description: "Currency analytics CSV file downloaded successfully",
       });
     };
+
+    // Helper function to categorize portfolio positions
+    const categorizePosition = (position: any): string => {
+      const symbol = position.symbol?.toUpperCase() || '';
+      const secType = position.secType?.toUpperCase() || '';
+      let country = position.country?.toUpperCase() || '';
+      const category = position.category?.toUpperCase() || '';
+      const industry = position.industry?.toUpperCase() || '';
+      const exchange = position.exchange?.toUpperCase() || position.primaryExchange?.toUpperCase() || '';
+      const currency = position.currency?.toUpperCase() || '';
+
+      // If country is null/empty, use currency as fallback to determine region
+      if (!country && currency) {
+        if (currency === 'USD') {
+          country = 'US';
+        } else if (currency === 'HKD') {
+          country = 'HK';
+        } else if (currency === 'CAD') {
+          country = 'CA';
+        } else if (currency === 'SGD') {
+          country = 'SG';
+        } else if (currency === 'EUR') {
+          country = 'EUROPE';
+        } else if (currency === 'GBP') {
+          country = 'GB';
+        }
+      }
+
+      // Cash category
+      if (secType === 'CASH') {
+        return 'CASH';
+      }
+
+      // Crypto category
+      if (secType === 'CRYPTO' || symbol.includes('BTC') || symbol.includes('ETH') ||
+          symbol.includes('USDT') || symbol.includes('USDC')) {
+        return 'CRYPTO';
+      }
+
+      // Bonds category
+      if (secType === 'BOND' || symbol.includes('TLT') || symbol.includes('IEF') ||
+          symbol.includes('AGG') || symbol.includes('BND')) {
+        return 'BOND_USA';
+      }
+
+      // REIT detection - check category, industry, or symbol patterns
+      const isREIT = category.includes('REIT') ||
+                     category.includes('REITS') ||
+                     industry.includes('REIT') ||
+                     symbol.includes('REIT') ||
+                     symbol.endsWith('.UN');
+
+      // For stocks (STK or ETF), categorize by region
+      if (secType === 'STK' || secType === 'ETF') {
+        // First check if it's a REIT, then categorize by country
+        if (isREIT) {
+          if (country === 'CANADA' || country === 'CA' ||
+              symbol.endsWith('.TO') || symbol.endsWith('.UN') || exchange.includes('TSX')) {
+            return 'REIT_CANADA';
+          } else if (country === 'SINGAPORE' || country === 'SG' ||
+                     symbol.endsWith('.SG') || exchange.includes('SGX')) {
+            return 'REIT_SINGAPORE';
+          } else if (country === 'UK' || country === 'GB' || country === 'UNITED KINGDOM' ||
+                     country === 'FRANCE' || country === 'FR' ||
+                     country === 'GERMANY' || country === 'DE' ||
+                     country === 'ITALY' || country === 'IT' ||
+                     country === 'SPAIN' || country === 'ES' ||
+                     country === 'EUROPE' ||
+                     exchange.includes('LSE') || exchange.includes('EURONEXT')) {
+            return 'REIT_EUROPE';
+          } else if (country === 'USA' || country === 'US' || country === 'UNITED STATES' ||
+                     exchange.includes('NYSE') || exchange.includes('NASDAQ')) {
+            return 'REIT_USA';
+          }
+        } else {
+          // Not a REIT, categorize as stock by country
+          if (country === 'HONG KONG' || country === 'HK' ||
+              exchange.includes('HKEX') || exchange.includes('SEHK')) {
+            return 'STOCK_HK';
+          } else if (country === 'CANADA' || country === 'CA' ||
+                     symbol.endsWith('.TO') || exchange.includes('TSX')) {
+            return 'STOCK_CANADA';
+          } else if (country === 'USA' || country === 'US' || country === 'UNITED STATES' ||
+                     exchange.includes('NYSE') || exchange.includes('NASDAQ') ||
+                     exchange.includes('AMEX')) {
+            return 'STOCK_USA';
+          }
+        }
+      }
+
+      return 'OTHER';
+    };
+
+    // Calculate Portfolio Distribution
+    const portfolioDistribution = new Map<string, { value: number, items: Array<{name: string, category: string, value: number, source: string}> }>();
+
+    // Helper to add to distribution
+    const addToPortfolio = (category: string, value: number, itemName: string, source: string) => {
+      const current = portfolioDistribution.get(category) || { value: 0, items: [] };
+      current.value += value;
+      current.items.push({ name: itemName, category, value, source });
+      portfolioDistribution.set(category, current);
+    };
+
+    // Add IB portfolio positions
+    ibPortfolio.forEach(position => {
+      if (position.marketValue && position.marketValue > 0) {
+        const category = categorizePosition(position);
+        const valueInBase = convertToBaseCurrency(position.marketValue, position.currency);
+        addToPortfolio(category, valueInBase,
+          `${position.symbol} (${position.secType || 'Unknown'})`, 'IB Portfolio');
+      }
+    });
+
+    // Add other portfolio positions
+    otherPortfolio.forEach(position => {
+      if (position.marketPrice && position.quantity) {
+        const category = categorizePosition(position);
+        const marketValue = position.marketPrice * position.quantity;
+        const valueInBase = convertToBaseCurrency(marketValue, position.currency);
+        addToPortfolio(category, valueInBase,
+          `${position.symbol} (${position.secType || 'Unknown'})`, 'Other Portfolio');
+      }
+    });
+
+    // Add IB cash balances
+    ibCashBalances.forEach(cash => {
+      if (cash.amount && cash.amount > 0) {
+        const valueInBase = convertToBaseCurrency(cash.amount, cash.currency);
+        addToPortfolio('CASH', valueInBase, `Cash - ${cash.currency}`, 'IB Cash Balance');
+      }
+    });
+
+    // Add other cash balances
+    otherCashBalances.forEach(cash => {
+      if (cash.amount && cash.amount > 0) {
+        const valueInBase = convertToBaseCurrency(cash.amount, cash.currency);
+        addToPortfolio('CASH', valueInBase, `Cash - ${cash.currency}`, 'Other Cash Balance');
+      }
+    });
+
+    // Add bank account balances
+    accounts.filter(acc => acc.accountType === 'BANK').forEach(acc => {
+      if (acc.currentBalance && acc.currentBalance > 0) {
+        const valueInBase = convertToBaseCurrency(acc.currentBalance, acc.currency);
+        addToPortfolio('CASH', valueInBase, `${acc.name} (Bank Account)`, 'Bank Account');
+      }
+    });
+
+    // Add other assets
+    otherAssets.forEach(asset => {
+      const valueInBase = convertToBaseCurrency(asset.marketValue, asset.currency);
+      if (asset.assetType?.toLowerCase().includes('real estate') ||
+          asset.assetType?.toLowerCase().includes('property')) {
+        addToPortfolio('REAL_ESTATE', valueInBase,
+          `${asset.asset} (${asset.assetType})`, 'Other Assets');
+      } else {
+        addToPortfolio('OTHER', valueInBase,
+          `${asset.asset} (${asset.assetType})`, 'Other Assets');
+      }
+    });
+
+    // Category labels mapping
+    const categoryLabels: Record<string, string> = {
+      'REIT_CANADA': 'REITs - Canada',
+      'REIT_SINGAPORE': 'REITs - Singapore',
+      'REIT_EUROPE': 'REITs - Europe',
+      'REIT_USA': 'REITs - USA',
+      'STOCK_HK': 'Stocks - HK',
+      'STOCK_CANADA': 'Stocks - Canada',
+      'STOCK_USA': 'Stocks - USA',
+      'BOND_USA': 'Bonds - USA',
+      'CRYPTO': 'Crypto',
+      'CASH': 'Cash',
+      'REAL_ESTATE': 'Real Estate',
+      'OTHER': 'Others'
+    };
+
+    // Convert to chart data with colors
+    const portfolioChartData = Array.from(portfolioDistribution.entries())
+      .map(([category, data]) => ({
+        category,
+        label: categoryLabels[category] || category,
+        value: data.value,
+        percentage: 0, // Will be calculated below
+        items: data.items
+      }))
+      .filter(item => item.value > 0)
+      .sort((a, b) => b.value - a.value);
+
+    // Calculate percentages
+    const totalPortfolioValue = portfolioChartData.reduce((sum, item) => sum + item.value, 0);
+    portfolioChartData.forEach(item => {
+      item.percentage = totalPortfolioValue > 0 ? (item.value / totalPortfolioValue) * 100 : 0;
+    });
+
+    // Define colors for portfolio categories
+    const portfolioColors = [
+      "hsl(var(--chart-1))",
+      "hsl(var(--chart-2))",
+      "hsl(var(--chart-3))",
+      "hsl(var(--chart-4))",
+      "hsl(var(--chart-5))",
+      "#8884d8",
+      "#82ca9d",
+      "#ffc658",
+      "#ff7300",
+      "#00ff00",
+      "#ff00ff",
+      "#00ffff"
+    ];
 
     // Calculate Currency Distribution
     const currencyDistribution = new Map<string, number>();
@@ -1404,6 +1664,129 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                     <span className="text-sm text-muted-foreground">Total Portfolio Value:</span>
                     <span className="font-bold text-foreground">
                       {formatCurrency(totalValue, baseCurrency)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Portfolio Analytics */}
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-foreground">Portfolio Analytics</CardTitle>
+            <CardDescription>Investment distribution by asset category</CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={generatePortfolioAnalyticsCSV}
+            className="flex items-center gap-2"
+          >
+            <ArrowDownRight className="h-4 w-4" />
+            Export CSV
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Pie Chart */}
+            <div className="flex items-center justify-center">
+              <ChartContainer config={{}} className="h-[300px] w-full">
+                <PieChart>
+                  <Pie
+                    data={portfolioChartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={120}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ label, percentage }) =>
+                      percentage > 5 ? `${label} ${percentage.toFixed(1)}%` : ''
+                    }
+                    labelLine={false}
+                  >
+                    {portfolioChartData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={portfolioColors[index % portfolioColors.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <ChartTooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                            <p className="font-medium text-foreground">{data.label}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {formatCurrency(data.value, baseCurrency)} ({data.percentage.toFixed(1)}%)
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {data.items.length} position{data.items.length !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                </PieChart>
+              </ChartContainer>
+            </div>
+
+            {/* Legend and Details */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-primary" />
+                <h3 className="font-semibold text-sm text-foreground">Category Breakdown</h3>
+              </div>
+
+              <div className="space-y-1.5">
+                {portfolioChartData.map((item, index) => (
+                  <div key={item.category} className="flex items-center justify-between p-2 bg-background/30 rounded-md">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: portfolioColors[index % portfolioColors.length] }}
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.items.length} position{item.items.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-foreground">
+                        {formatCurrency(item.value, baseCurrency)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.percentage.toFixed(1)}%
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                {portfolioChartData.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No portfolio data available</p>
+                    <p className="text-sm">Add some investments to see category distribution</p>
+                  </div>
+                )}
+              </div>
+
+              {portfolioChartData.length > 0 && (
+                <div className="pt-4 border-t border-border/50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Portfolio Value:</span>
+                    <span className="font-bold text-foreground">
+                      {formatCurrency(totalPortfolioValue, baseCurrency)}
                     </span>
                   </div>
                 </div>
