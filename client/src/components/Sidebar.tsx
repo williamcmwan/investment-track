@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { 
   BarChart3, 
   Wallet, 
-  ArrowLeftRight, 
+  DollarSign, 
   LogOut, 
   TrendingUp,
   Home,
@@ -12,8 +12,8 @@ import {
   ChevronRight,
   Shield,
   ShieldCheck,
-  Plug,
-  PlusCircle
+  PiggyBank,
+  Building
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -45,9 +45,10 @@ const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isColl
   const menuItems = [
     { id: "overview", label: "Overview", icon: Home },
     { id: "accounts", label: "Accounts", icon: Wallet },
-    { id: "currency", label: "Currency", icon: ArrowLeftRight },
-    { id: "integration", label: "IB Portfolio", icon: Plug },
-    { id: "manual-investments", label: "Other Portfolios", icon: PlusCircle },
+    { id: "currency", label: "Currency", icon: DollarSign },
+    { id: "integration", label: "IB Portfolio", icon: PiggyBank },
+    { id: "manual-investments", label: "Other Portfolios", icon: PiggyBank },
+    { id: "other-assets", label: "Other Assets", icon: Building },
   ];
 
   return (

@@ -523,6 +523,45 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // Other Assets endpoints
+  async getOtherAssets() {
+    return this.request<any[]>('/other-assets');
+  }
+
+  async createOtherAsset(assetData: {
+    assetType: string;
+    asset: string;
+    currency: string;
+    originalValue: number;
+    marketValue: number;
+    remarks: string;
+  }) {
+    return this.request<any>('/other-assets', {
+      method: 'POST',
+      body: JSON.stringify(assetData),
+    });
+  }
+
+  async updateOtherAsset(id: number, assetData: {
+    assetType?: string;
+    asset?: string;
+    currency?: string;
+    originalValue?: number;
+    marketValue?: number;
+    remarks?: string;
+  }) {
+    return this.request<any>(`/other-assets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(assetData),
+    });
+  }
+
+  async deleteOtherAsset(id: number) {
+    return this.request<{ message: string }>(`/other-assets/${id}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

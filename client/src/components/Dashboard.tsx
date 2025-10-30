@@ -26,6 +26,7 @@ import AccountsView from "./AccountsView";
 import CurrencyView from "./CurrencyView";
 import IBPortfolioView from "./IBPortfolioView";
 import OtherPortfolioView from "./OtherPortfolioView";
+import OtherAssetsView from "./OtherAssetsView";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
@@ -938,6 +939,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               {currentView === "currency" && "Currency Exchange"}
               {currentView === "integration" && "IB Portfolio"}
               {currentView === "manual-investments" && "Other Portfolios"}
+              {currentView === "other-assets" && "Other Assets"}
             </h1>
             <p className="text-muted-foreground">
               {currentView === "overview" && "Monitor your investment performance"}
@@ -945,6 +947,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               {currentView === "currency" && "Track currency exchange rates"}
               {currentView === "integration" && "Interactive Brokers portfolio and positions"}
               {currentView === "manual-investments" && "Add and manage other investment accounts manually"}
+              {currentView === "other-assets" && "Track real estate, collectibles, and other investments"}
             </p>
               </div>
               {currentView === "overview" && (
@@ -1045,6 +1048,13 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                 // Update today's performance data only when accounts are actually updated
                 updateTodaysPerformanceData();
               }}
+            />
+          )}
+          {currentView === "other-assets" && (
+            <OtherAssetsView 
+              baseCurrency={baseCurrency}
+              exchangeRates={exchangeRates}
+              convertToBaseCurrency={convertToBaseCurrency}
             />
           )}
         </div>
