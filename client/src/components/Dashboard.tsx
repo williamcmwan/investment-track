@@ -19,7 +19,10 @@ import {
   Wallet,
   ArrowLeftRight,
   RefreshCw,
-  Zap
+  Zap,
+  PiggyBank,
+  Landmark,
+  Building
 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
@@ -77,6 +80,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
   const [currencies, setCurrencies] = useState<any[]>([]);
+  const [otherAssets, setOtherAssets] = useState<any[]>([]);
   const [performanceHistory, setPerformanceHistory] = useState<any[]>([]);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
   const [showPerformanceDetails, setShowPerformanceDetails] = useState(true);
@@ -135,6 +139,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     if (user) {
       loadAccounts();
       loadCurrencies();
+      loadOtherAssets();
     }
   }, [user]);
 
@@ -346,6 +351,20 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     }
   };
 
+  // Load other assets data
+  const loadOtherAssets = async () => {
+    try {
+      const response = await apiClient.getOtherAssets();
+      if (response.data) {
+        setOtherAssets(response.data);
+      } else {
+        console.error('Failed to load other assets:', response.error);
+      }
+    } catch (error) {
+      console.error('Error loading other assets:', error);
+    }
+  };
+
   // Calculate currency P&L using the same logic as CurrencyView
   const calculateCurrencyPL = () => {
     const totalPL = currencies.reduce((sum, currency) => {
@@ -537,6 +556,21 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     const investmentProfitLossConverted = summaryData.investmentProfitLoss;
     const currencyProfitLossConverted = summaryData.currencyProfitLoss;
     const chartData = performanceHistory;
+
+    // Calculate Total Assets breakdown
+    const investmentAccountsValue = accounts
+      .filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT')
+      .reduce((sum, acc) => sum + convertToBaseCurrency(acc.currentBalance, acc.currency), 0);
+    
+    const bankAccountsValue = accounts
+      .filter(acc => acc.accountType === 'BANK')
+      .reduce((sum, acc) => sum + convertToBaseCurrency(acc.currentBalance, acc.currency), 0);
+    
+    const otherAssetsValue = otherAssets.reduce((sum, asset) => 
+      sum + convertToBaseCurrency(asset.marketValue, asset.currency), 0
+    );
+    
+    const totalAssetsValue = investmentAccountsValue + bankAccountsValue + otherAssetsValue;
 
     return (
       <div className="space-y-6">
@@ -810,32 +844,6 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
             </CardContent>
           )}
         </Card>
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Capital</CardTitle>
-              <Wallet className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {formatCurrency(totalCapitalConverted)}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-card border-border shadow-card">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Current Balance</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {formatCurrency(currentBalanceConverted)}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
       {/* Profit/Loss Breakdown */}
       <Card className="bg-gradient-card border-border shadow-card">
@@ -844,6 +852,38 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           <CardDescription>Investment vs Currency performance</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Total Capital and Current Balance */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+              <div className="flex items-center gap-3 mr-auto">
+                <Wallet className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium text-foreground">Total Capital</p>
+                  <p className="text-sm text-muted-foreground">Investment capital</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-foreground">
+                  {formatCurrency(totalCapitalConverted)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+              <div className="flex items-center gap-3 mr-auto">
+                <DollarSign className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium text-foreground">Current Balance</p>
+                  <p className="text-sm text-muted-foreground">Current portfolio value</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-foreground">
+                  {formatCurrency(currentBalanceConverted)}
+                </p>
+              </div>
+            </div>
+          </div>
           <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
             <div className="flex items-center gap-3 mr-auto">
               <TrendingUp className="h-5 w-5 text-primary" />
@@ -897,7 +937,74 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         </CardContent>
       </Card>
 
+      {/* Total Assets Breakdown */}
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader>
+          <CardTitle className="text-foreground">Total Assets</CardTitle>
+          <CardDescription>Complete asset portfolio breakdown</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+            <div className="flex items-center gap-3 mr-auto">
+              <PiggyBank className="h-5 w-5 text-primary" />
+              <div>
+                <p className="font-medium text-foreground">Investment Accounts</p>
+                <p className="text-sm text-muted-foreground">Current portfolio value</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="font-bold text-foreground">
+                {formatCurrency(investmentAccountsValue, baseCurrency)}
+              </p>
+            </div>
+          </div>
 
+          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+            <div className="flex items-center gap-3 mr-auto">
+              <Landmark className="h-5 w-5 text-primary" />
+              <div>
+                <p className="font-medium text-foreground">Bank Accounts</p>
+                <p className="text-sm text-muted-foreground">Total bank balance</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="font-bold text-foreground">
+                {formatCurrency(bankAccountsValue, baseCurrency)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+            <div className="flex items-center gap-3 mr-auto">
+              <Building className="h-5 w-5 text-primary" />
+              <div>
+                <p className="font-medium text-foreground">Other Assets</p>
+                <p className="text-sm text-muted-foreground">Real estate, collectibles, etc.</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="font-bold text-foreground">
+                {formatCurrency(otherAssetsValue, baseCurrency)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end p-4 bg-primary/10 rounded-lg border-2 border-primary/20">
+            <div className="flex items-center gap-3 mr-auto">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <div>
+                <p className="font-medium text-foreground text-lg">Total Assets</p>
+                <p className="text-sm text-muted-foreground">Complete portfolio value</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="font-bold text-foreground text-xl">
+                {formatCurrency(totalAssetsValue, baseCurrency)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
     );
   };
