@@ -267,18 +267,16 @@ const CashBalancesSection: React.FC<{ accounts: MainAccount[] }> = ({ accounts }
 
     return (
         <>
-            <div className="flex items-center justify-between mb-4 px-4 sm:px-0">
-                <div className="flex items-center gap-4">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                        <DollarSign className="h-5 w-5 text-primary" />
-                        Cash Balances
-                    </h3>
-                    {cashBalances.length > 0 && (
-                        <div className="text-sm text-muted-foreground">
-                            Market Value (USD): <span className="font-medium text-foreground">{formatCurrency(totalUSD, 'USD')}</span>
-                        </div>
-                    )}
-                </div>
+            <div className="flex items-center gap-4 mb-4 px-4 sm:px-0">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-primary" />
+                    Cash Balances
+                </h3>
+                {cashBalances.length > 0 && (
+                    <div className="text-sm text-muted-foreground">
+                        Market Value (USD): <span className="font-medium text-foreground">{formatCurrency(totalUSD, 'USD')}</span>
+                    </div>
+                )}
                 <Button onClick={() => setCashDialogOpen(true)} size="sm">
                     <Plus className="h-4 w-4 mr-2" />
                     Add Cash Balance
