@@ -771,6 +771,74 @@ export class IBService {
     }
   }
 
+  /**
+   * Map exchange codes to country names, with special handling for specific symbols
+   */
+  private static deriveCountryFromExchange(exchange?: string, symbol?: string): string {
+    // Special case: US Treasury bonds (symbol starts with "US-T")
+    if (symbol && symbol.startsWith('US-T')) {
+      return 'United States';
+    }
+
+    if (!exchange) return '';
+
+    const exchangeCountryMap: Record<string, string> = {
+      // US Exchanges
+      'NYSE': 'United States',
+      'NASDAQ': 'United States',
+      'ARCA': 'United States',
+      'AMEX': 'United States',
+      'BATS': 'United States',
+      'IEX': 'United States',
+      'ISLAND': 'United States',
+      'CBOE': 'United States',
+      'PHLX': 'United States',
+      'PSE': 'United States',
+
+      // European Exchanges
+      'LSE': 'United Kingdom',
+      'LSEETF': 'United Kingdom',
+      'EURONEXT': 'Europe',
+      'FWB': 'Germany',
+      'SWB': 'Germany',
+      'IBIS': 'Germany',
+      'VSE': 'Austria',
+      'AEB': 'Netherlands',
+      'SBF': 'France',
+      'BM': 'Spain',
+      'BVME': 'Italy',
+
+      // Canadian Exchanges
+      'TSE': 'Canada',  // Toronto Stock Exchange (IB uses TSE for Toronto)
+      'TSX': 'Canada',
+      'VENTURE': 'Canada',
+
+      // Asian Exchanges
+      'SEHK': 'Hong Kong',
+      'HKFE': 'Hong Kong',
+      'JPX': 'Japan',  // Japan Exchange Group
+      'TSEJ': 'Japan', // Tokyo Stock Exchange (if specified as TSEJ)
+      'SGX': 'Singapore',
+      'KSE': 'South Korea',
+      'KRSE': 'South Korea',
+      'ASX': 'Australia',
+      'NSE': 'India',
+      'BSE': 'India',
+      'SSE': 'China',
+      'SZSE': 'China',
+
+      // Other
+      'SIX': 'Switzerland',
+      'MOEX': 'Russia',
+      'MEXDER': 'Mexico',
+      'BVL': 'Brazil',
+      'JSE': 'South Africa'
+    };
+
+    const upperExchange = exchange.toUpperCase();
+    return exchangeCountryMap[upperExchange] || '';
+  }
+
   private static async getContractDetails(conId: number): Promise<any> {
     if (!this.ibApi) {
       throw new Error('IB API not initialized');
@@ -786,6 +854,7 @@ export class IBService {
 
       const detailsHandler = (reqId_: number, contractDetails: any) => {
         if (reqId_ === reqId) {
+          console.log('📋 Raw contractDetails received from IB:', JSON.stringify(contractDetails, null, 2));
           contractDetailsData = contractDetails;
         }
       };
@@ -1195,7 +1264,7 @@ export class IBService {
             symbol: contract.symbol,
             secType: contract.secType,
             exchange: contract.exchange,
-            primaryExchange: contract.primaryExchange,
+            primaryExch: contract.primaryExch,
             currency: contract.currency,
             conId: contract.conId
           });
@@ -1211,7 +1280,7 @@ export class IBService {
             unrealizedPNL: unrealizedPNL || 0,
             realizedPNL: realizedPNL || 0,
             exchange: contract.exchange || '',
-            primaryExchange: contract.primaryExchange || '',
+            primaryExchange: contract.primaryExch || '',
             conId: contract.conId || 0
           });
         };
@@ -1237,12 +1306,27 @@ export class IBService {
                     if (position.secType === 'BOND') {
                       console.log(`Using market data approach for bond ${position.symbol}...`);
 
-                      // Set basic bond info
+                      // Get contract details to extract additional info for bonds
+                      const bondDetails = await this.getContractDetails(position.conId);
+
+                      console.log(`Bond ${position.symbol} contract details:`, {
+                        marketName: bondDetails?.marketName,
+                        longName: bondDetails?.longName,
+                        exchange: bondDetails?.contract?.exchange,
+                        primaryExch: bondDetails?.contract?.primaryExch
+                      });
+
+                      // Set basic bond info - derive country from market name or exchange
+                      const country = this.deriveCountryFromExchange(
+                        bondDetails?.contract?.primaryExch || bondDetails?.contract?.exchange || position.primaryExchange || position.exchange,
+                        position.symbol
+                      );
+
                       enrichedPosition = {
                         ...enrichedPosition,
                         industry: 'Fixed Income',
                         category: 'Bond',
-                        country: position.exchange || position.primaryExchange || 'Unknown'
+                        country: country || bondDetails?.marketName || ''
                       };
 
                       // Get bond data using market data ticks
@@ -1259,7 +1343,20 @@ export class IBService {
                       // Handle stocks and crypto with contract details and historical data
                       const details = await this.getContractDetails(position.conId);
                       if (details) {
-                        console.log(`Got contract details for ${position.symbol} (${position.secType})`);
+                        console.log(`Got contract details for ${position.symbol} (${position.secType}):`, {
+                          marketName: details.marketName,
+                          longName: details.longName,
+                          exchange: details.contract?.exchange,
+                          primaryExch: details.contract?.primaryExch,
+                          industry: details.industry,
+                          category: details.category
+                        });
+
+                        // Derive country from exchange
+                        const country = this.deriveCountryFromExchange(
+                          details.contract?.primaryExch || details.contract?.exchange || position.primaryExchange || position.exchange,
+                          position.symbol
+                        );
 
                         // Set industry/category for stocks and crypto
                         if (position.secType === 'STK') {
@@ -1267,14 +1364,14 @@ export class IBService {
                             ...enrichedPosition,
                             industry: details.industry || '',
                             category: details.category || '',
-                            country: details.contract?.primaryExchange || position.primaryExchange || ''
+                            country: country || details.marketName || ''
                           };
                         } else if (position.secType === 'CRYPTO') {
                           enrichedPosition = {
                             ...enrichedPosition,
                             industry: 'Cryptocurrency',
                             category: 'Digital Asset',
-                            country: details.contract?.exchange || position.exchange || 'Crypto Exchange'
+                            country: country || details.marketName || ''
                           };
                         }
 
@@ -1307,12 +1404,15 @@ export class IBService {
                         if (position.secType === 'CRYPTO') {
                           console.log(`Contract details failed for crypto ${position.symbol}, cannot get day change data`);
 
+                          // Try to derive country from exchange even without contract details
+                          const country = this.deriveCountryFromExchange(position.primaryExchange || position.exchange, position.symbol);
+
                           // Set basic crypto info without contract details
                           enrichedPosition = {
                             ...enrichedPosition,
                             industry: 'Cryptocurrency',
                             category: 'Digital Asset',
-                            country: position.exchange || 'Crypto Exchange'
+                            country: country || ''
                           };
                         }
                       }
