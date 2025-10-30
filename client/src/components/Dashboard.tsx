@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,8 @@ import {
   Zap,
   PiggyBank,
   Landmark,
-  Building
+  Building,
+  PieChart as PieChartIcon
 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
@@ -81,6 +82,10 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
   const [currencies, setCurrencies] = useState<any[]>([]);
   const [otherAssets, setOtherAssets] = useState<any[]>([]);
+  const [ibPortfolio, setIbPortfolio] = useState<any[]>([]);
+  const [ibCashBalances, setIbCashBalances] = useState<any[]>([]);
+  const [otherPortfolio, setOtherPortfolio] = useState<any[]>([]);
+  const [otherCashBalances, setOtherCashBalances] = useState<any[]>([]);
   const [performanceHistory, setPerformanceHistory] = useState<any[]>([]);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
   const [showPerformanceDetails, setShowPerformanceDetails] = useState(true);
@@ -140,15 +145,20 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       loadAccounts();
       loadCurrencies();
       loadOtherAssets();
+      loadIBPortfolio();
+      loadIBCashBalances();
+      loadOtherPortfolio();
+      loadOtherCashBalances();
     }
   }, [user]);
 
-  // Fetch exchange rates when accounts change and user is authenticated
+  // Fetch exchange rates when any data source changes and user is authenticated
   useEffect(() => {
-    if (accounts.length > 0 && user) {
+    if (user && (accounts.length > 0 || ibPortfolio.length > 0 || ibCashBalances.length > 0 ||
+        otherPortfolio.length > 0 || otherCashBalances.length > 0 || otherAssets.length > 0)) {
       fetchExchangeRates();
     }
-  }, [accounts, baseCurrency, user]);
+  }, [accounts, ibPortfolio, ibCashBalances, otherPortfolio, otherCashBalances, otherAssets, baseCurrency, user]);
 
   // Auto-refresh rates silently when overview page is visited
   useEffect(() => {
@@ -365,6 +375,67 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     }
   };
 
+  // Load IB portfolio data
+  const loadIBPortfolio = async () => {
+    try {
+      const response = await apiClient.forceRefreshIBPortfolio();
+      if (response.data) {
+        setIbPortfolio(response.data);
+      } else {
+        console.error('Failed to load IB portfolio:', response.error);
+      }
+    } catch (error) {
+      console.error('Error loading IB portfolio:', error);
+      // Set empty array if IB is not configured
+      setIbPortfolio([]);
+    }
+  };
+
+  // Load IB cash balances data
+  const loadIBCashBalances = async () => {
+    try {
+      const response = await apiClient.forceRefreshIBCashBalances();
+      if (response.data && response.data.data) {
+        setIbCashBalances(response.data.data);
+      } else {
+        console.error('Failed to load IB cash balances:', response.error);
+      }
+    } catch (error) {
+      console.error('Error loading IB cash balances:', error);
+      setIbCashBalances([]);
+    }
+  };
+
+  // Load other portfolio data
+  const loadOtherPortfolio = async () => {
+    try {
+      const response = await apiClient.getManualPositions();
+      if (response.data) {
+        setOtherPortfolio(response.data);
+      } else {
+        console.error('Failed to load other portfolio:', response.error);
+      }
+    } catch (error) {
+      console.error('Error loading other portfolio:', error);
+      setOtherPortfolio([]);
+    }
+  };
+
+  // Load other portfolio cash balances data
+  const loadOtherCashBalances = async () => {
+    try {
+      const response = await apiClient.getCashBalances();
+      if (response.data) {
+        setOtherCashBalances(response.data);
+      } else {
+        console.error('Failed to load other cash balances:', response.error);
+      }
+    } catch (error) {
+      console.error('Error loading other cash balances:', error);
+      setOtherCashBalances([]);
+    }
+  };
+
   // Calculate currency P&L using the same logic as CurrencyView
   const calculateCurrencyPL = () => {
     const totalPL = currencies.reduce((sum, currency) => {
@@ -397,9 +468,39 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Fetch exchange rates for currency conversion
   const fetchExchangeRates = async () => {
     try {
-      // Get unique currencies from accounts
-      const currencies = [...new Set(accounts.map(acc => acc.currency))];
-      
+      // Get unique currencies from all sources
+      const currenciesSet = new Set<string>();
+
+      // Add currencies from accounts
+      accounts.forEach(acc => currenciesSet.add(acc.currency));
+
+      // Add currencies from IB portfolio
+      ibPortfolio.forEach(pos => {
+        if (pos.currency) currenciesSet.add(pos.currency);
+      });
+
+      // Add currencies from IB cash balances
+      ibCashBalances.forEach(cash => {
+        if (cash.currency) currenciesSet.add(cash.currency);
+      });
+
+      // Add currencies from other portfolio
+      otherPortfolio.forEach(pos => {
+        if (pos.currency) currenciesSet.add(pos.currency);
+      });
+
+      // Add currencies from other cash balances
+      otherCashBalances.forEach(cash => {
+        if (cash.currency) currenciesSet.add(cash.currency);
+      });
+
+      // Add currencies from other assets
+      otherAssets.forEach(asset => {
+        if (asset.currency) currenciesSet.add(asset.currency);
+      });
+
+      const currencies = Array.from(currenciesSet);
+
       // Fetch real exchange rates from API
       const ratePromises = currencies.map(async (currency) => {
         if (currency === baseCurrency) {
@@ -571,6 +672,189 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     );
     
     const totalAssetsValue = investmentAccountsValue + bankAccountsValue + otherAssetsValue;
+
+    // Generate Currency Analytics CSV Log
+    const generateCurrencyAnalyticsCSV = () => {
+      const csvData: Array<{currency: string, source: string, itemName: string, amount: number}> = [];
+      
+      // Add bank accounts
+      accounts.filter(acc => acc.accountType === 'BANK').forEach(acc => {
+        csvData.push({
+          currency: acc.currency,
+          source: 'Bank Account',
+          itemName: acc.name,
+          amount: acc.currentBalance
+        });
+      });
+      
+      // Add IB portfolio positions
+      ibPortfolio.forEach(position => {
+        if (position.marketValue && position.currency) {
+          csvData.push({
+            currency: position.currency,
+            source: 'IB Portfolio',
+            itemName: `${position.symbol} (${position.secType})`,
+            amount: position.marketValue
+          });
+        }
+      });
+      
+      // Add IB cash balances
+      ibCashBalances.forEach(cash => {
+        if (cash.amount && cash.currency) {
+          csvData.push({
+            currency: cash.currency,
+            source: 'IB Cash Balance',
+            itemName: `Cash - ${cash.currency}`,
+            amount: cash.amount
+          });
+        }
+      });
+      
+      // Add other portfolio positions
+      otherPortfolio.forEach(position => {
+        if (position.marketPrice && position.quantity && position.currency) {
+          csvData.push({
+            currency: position.currency,
+            source: 'Other Portfolio',
+            itemName: `${position.symbol} (${position.quantity} shares)`,
+            amount: position.marketPrice * position.quantity
+          });
+        }
+      });
+      
+      // Add other portfolio cash balances
+      otherCashBalances.forEach(cash => {
+        if (cash.amount && cash.currency) {
+          csvData.push({
+            currency: cash.currency,
+            source: 'Other Portfolio Cash',
+            itemName: `Cash - ${cash.currency}`,
+            amount: cash.amount
+          });
+        }
+      });
+      
+      // Add other assets
+      otherAssets.forEach(asset => {
+        csvData.push({
+          currency: asset.currency,
+          source: 'Other Assets',
+          itemName: `${asset.asset} (${asset.assetType})`,
+          amount: asset.marketValue
+        });
+      });
+      
+      // Sort by currency, then by source
+      csvData.sort((a, b) => {
+        if (a.currency !== b.currency) {
+          return a.currency.localeCompare(b.currency);
+        }
+        return a.source.localeCompare(b.source);
+      });
+      
+      // Generate CSV content
+      const csvHeader = 'Currency,Source,Item Name,Amount\n';
+      const csvRows = csvData.map(row => 
+        `${row.currency},"${row.source}","${row.itemName}",${row.amount.toFixed(2)}`
+      ).join('\n');
+      
+      const csvContent = csvHeader + csvRows;
+      
+      // Create and download CSV file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `currency_analytics_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Success",
+        description: "Currency analytics CSV file downloaded successfully",
+      });
+    };
+
+    // Calculate Currency Distribution
+    const currencyDistribution = new Map<string, number>();
+
+    // Add bank accounts
+    accounts.filter(acc => acc.accountType === 'BANK').forEach(acc => {
+      const current = currencyDistribution.get(acc.currency) || 0;
+      currencyDistribution.set(acc.currency, current + acc.currentBalance);
+    });
+    
+    // Add IB portfolio positions
+    ibPortfolio.forEach(position => {
+      if (position.marketValue && position.currency) {
+        const current = currencyDistribution.get(position.currency) || 0;
+        currencyDistribution.set(position.currency, current + position.marketValue);
+      }
+    });
+    
+    // Add IB cash balances
+    ibCashBalances.forEach(cash => {
+      if (cash.amount && cash.currency) {
+        const current = currencyDistribution.get(cash.currency) || 0;
+        currencyDistribution.set(cash.currency, current + cash.amount);
+      }
+    });
+    
+    // Add other portfolio positions
+    otherPortfolio.forEach(position => {
+      if (position.marketPrice && position.quantity && position.currency) {
+        const current = currencyDistribution.get(position.currency) || 0;
+        currencyDistribution.set(position.currency, current + (position.marketPrice * position.quantity));
+      }
+    });
+    
+    // Add other portfolio cash balances
+    otherCashBalances.forEach(cash => {
+      if (cash.amount && cash.currency) {
+        const current = currencyDistribution.get(cash.currency) || 0;
+        currencyDistribution.set(cash.currency, current + cash.amount);
+      }
+    });
+    
+    // Add other assets
+    otherAssets.forEach(asset => {
+      const current = currencyDistribution.get(asset.currency) || 0;
+      currencyDistribution.set(asset.currency, current + asset.marketValue);
+    });
+    
+    // Convert to chart data with colors
+    const currencyChartData = Array.from(currencyDistribution.entries())
+      .map(([currency, value]) => ({
+        currency,
+        value,
+        valueHKD: convertToBaseCurrency(value, currency),
+        percentage: 0 // Will be calculated below
+      }))
+      .filter(item => item.valueHKD > 0)
+      .sort((a, b) => b.valueHKD - a.valueHKD);
+    
+    // Calculate percentages
+    const totalValue = currencyChartData.reduce((sum, item) => sum + item.valueHKD, 0);
+    currencyChartData.forEach(item => {
+      item.percentage = totalValue > 0 ? (item.valueHKD / totalValue) * 100 : 0;
+    });
+    
+    // Define colors for currencies
+    const currencyColors = [
+      "hsl(var(--chart-1))",
+      "hsl(var(--chart-2))", 
+      "hsl(var(--chart-3))",
+      "hsl(var(--chart-4))",
+      "hsl(var(--chart-5))",
+      "#8884d8",
+      "#82ca9d",
+      "#ffc658",
+      "#ff7300",
+      "#00ff00"
+    ];
 
     return (
       <div className="space-y-6">
@@ -1001,6 +1285,129 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               <p className="font-bold text-foreground text-xl">
                 {formatCurrency(totalAssetsValue, baseCurrency)}
               </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Currency Analytics */}
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-foreground">Currency Analytics</CardTitle>
+            <CardDescription>Portfolio distribution by currency</CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={generateCurrencyAnalyticsCSV}
+            className="flex items-center gap-2"
+          >
+            <ArrowDownRight className="h-4 w-4" />
+            Export CSV
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Pie Chart */}
+            <div className="flex items-center justify-center">
+              <ChartContainer config={{}} className="h-[300px] w-full">
+                <PieChart>
+                  <Pie
+                    data={currencyChartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={120}
+                    paddingAngle={2}
+                    dataKey="valueHKD"
+                    label={({ currency, percentage }) =>
+                      percentage > 5 ? `${currency} ${percentage.toFixed(1)}%` : ''
+                    }
+                    labelLine={false}
+                  >
+                    {currencyChartData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={currencyColors[index % currencyColors.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <ChartTooltip 
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+                            <p className="font-medium text-foreground">{data.currency}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {formatCurrency(data.valueHKD, baseCurrency)} ({data.percentage.toFixed(1)}%)
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Original: {formatCurrency(data.value, data.currency)}
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                </PieChart>
+              </ChartContainer>
+            </div>
+
+            {/* Legend and Details */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <PieChartIcon className="h-4 w-4 text-primary" />
+                <h3 className="font-semibold text-sm text-foreground">Currency Breakdown</h3>
+              </div>
+
+              <div className="space-y-1.5">
+                {currencyChartData.map((item, index) => (
+                  <div key={item.currency} className="flex items-center justify-between p-2 bg-background/30 rounded-md">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: currencyColors[index % currencyColors.length] }}
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{item.currency}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatCurrency(item.value, item.currency)} original
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-foreground">
+                        {formatCurrency(item.valueHKD, baseCurrency)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.percentage.toFixed(1)}%
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                
+                {currencyChartData.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <PieChartIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No currency data available</p>
+                    <p className="text-sm">Add some investments to see currency distribution</p>
+                  </div>
+                )}
+              </div>
+              
+              {currencyChartData.length > 0 && (
+                <div className="pt-4 border-t border-border/50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Portfolio Value:</span>
+                    <span className="font-bold text-foreground">
+                      {formatCurrency(totalValue, baseCurrency)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
