@@ -91,6 +91,39 @@ router.post('/ib/balance/refresh', authenticateToken, async (req, res) => {
     }
     
     const result = await IBService.forceRefreshAccountBalance(userSettings);
+    
+    // Update the main account balance and balance history if target account is configured
+    if (userSettings.target_account_id && result) {
+      try {
+        const { AccountModel } = await import('../models/Account.js');
+        
+        // Update the account's current balance
+        await AccountModel.update(userSettings.target_account_id, userId, {
+          currentBalance: result.balance
+        });
+        
+        // Add balance history entry for the manual refresh
+        await AccountModel.addBalanceHistory(
+          userSettings.target_account_id, 
+          result.balance, 
+          'Manual IB balance refresh'
+        );
+        
+        console.log(`💰 Updated account balance: ${result.balance} ${result.currency}`);
+      } catch (accountError) {
+        console.error(`❌ Failed to update account balance:`, accountError);
+      }
+    }
+    
+    // Recalculate today's performance snapshot after balance update
+    try {
+      const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+      await PerformanceHistoryService.calculateTodaySnapshot(userId);
+      console.log(`📈 Updated performance snapshot after balance refresh`);
+    } catch (performanceError) {
+      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+    }
+    
     const timestamp = IBService.getBalanceTimestamp();
     console.log('✅ Balance refresh successful, returning data');
     return res.json({ ...result, timestamp });
@@ -135,6 +168,16 @@ router.post('/ib/portfolio/refresh', authenticateToken, async (req, res) => {
     }
     
     const result = await IBService.forceRefreshPortfolio(userSettings);
+    
+    // Recalculate today's performance snapshot after portfolio update
+    try {
+      const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+      await PerformanceHistoryService.calculateTodaySnapshot(userId);
+      console.log(`📈 Updated performance snapshot after portfolio refresh`);
+    } catch (performanceError) {
+      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+    }
+    
     console.log('✅ Portfolio refresh successful, returning data');
     return res.json(result);
   } catch (error) {
@@ -177,6 +220,39 @@ router.post('/ib/refresh-all', authenticateToken, async (req, res) => {
     }
     
     const result = await IBService.forceRefreshAll(userSettings);
+    
+    // Update the main account balance and balance history if target account is configured
+    if (userSettings.target_account_id && result.balance) {
+      try {
+        const { AccountModel } = await import('../models/Account.js');
+        
+        // Update the account's current balance
+        await AccountModel.update(userSettings.target_account_id, userId, {
+          currentBalance: result.balance.balance
+        });
+        
+        // Add balance history entry for the manual refresh
+        await AccountModel.addBalanceHistory(
+          userSettings.target_account_id, 
+          result.balance.balance, 
+          'Manual IB full refresh'
+        );
+        
+        console.log(`💰 Updated account balance: ${result.balance.balance} ${result.balance.currency}`);
+      } catch (accountError) {
+        console.error(`❌ Failed to update account balance:`, accountError);
+      }
+    }
+    
+    // Recalculate today's performance snapshot after full refresh
+    try {
+      const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+      await PerformanceHistoryService.calculateTodaySnapshot(userId);
+      console.log(`📈 Updated performance snapshot after full refresh`);
+    } catch (performanceError) {
+      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+    }
+    
     return res.json(result);
   } catch (error) {
     console.error('Error refreshing all IB data:', error);
@@ -266,6 +342,16 @@ router.post('/ib/cash/refresh', authenticateToken, async (req, res) => {
     }
     
     const result = await IBService.forceRefreshCashBalances(userSettings);
+    
+    // Recalculate today's performance snapshot after cash balances update
+    try {
+      const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+      await PerformanceHistoryService.calculateTodaySnapshot(userId);
+      console.log(`📈 Updated performance snapshot after cash balances refresh`);
+    } catch (performanceError) {
+      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+    }
+    
     const timestamp = IBService.getCashTimestamp();
     console.log('✅ Cash balances refresh successful, returning data');
     return res.json({ data: result, timestamp });

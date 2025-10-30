@@ -188,9 +188,17 @@ export class SchedulerService {
       console.log('📈 Step 1/3: Refreshing currency exchange rates...');
       try {
         // Get all users to refresh their currency pairs
-        const users = await dbAll('SELECT id FROM users') as Array<{id: number}>;
+        const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
         for (const user of users) {
           await ExchangeRateService.updateAllCurrencyPairs(user.id);
+          
+          // Recalculate today's performance snapshot after currency update
+          try {
+            await PerformanceHistoryService.calculateTodaySnapshot(user.id);
+            console.log(`📈 Updated performance snapshot after currency refresh for user: ${user.name}`);
+          } catch (performanceError) {
+            console.error(`❌ Failed to update performance snapshot after currency refresh for user ${user.name}:`, performanceError);
+          }
         }
         LastUpdateService.updateCurrencyTime();
         console.log('✅ Currency exchange rates refreshed successfully');
@@ -215,8 +223,39 @@ export class SchedulerService {
               console.log(`🔄 Refreshing IB data for user: ${user.name} (${user.email})`);
               
               // Refresh both balance and portfolio for this user
-              await IBService.forceRefreshAccountBalance(userIBSettings);
+              const accountBalance = await IBService.forceRefreshAccountBalance(userIBSettings);
               await IBService.forceRefreshPortfolio(userIBSettings);
+              
+              // Update the main account balance and balance history
+              if (userIBSettings.target_account_id && accountBalance) {
+                try {
+                  const { AccountModel } = await import('../models/Account.js');
+                  
+                  // Update the account's current balance
+                  await AccountModel.update(userIBSettings.target_account_id, user.id, {
+                    currentBalance: accountBalance.balance
+                  });
+                  
+                  // Add balance history entry for the scheduled update
+                  await AccountModel.addBalanceHistory(
+                    userIBSettings.target_account_id, 
+                    accountBalance.balance, 
+                    'Scheduled IB data refresh'
+                  );
+                  
+                  console.log(`💰 Updated account balance: ${accountBalance.balance} ${accountBalance.currency}`);
+                } catch (accountError) {
+                  console.error(`❌ Failed to update account balance for user ${user.name}:`, accountError);
+                }
+              }
+              
+              // Recalculate today's performance snapshot after IB data update
+              try {
+                await PerformanceHistoryService.calculateTodaySnapshot(user.id);
+                console.log(`📈 Updated performance snapshot for user: ${user.name}`);
+              } catch (performanceError) {
+                console.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
+              }
               
               ibRefreshCount++;
               console.log(`✅ IB data refreshed for user: ${user.name}`);
@@ -244,6 +283,18 @@ export class SchedulerService {
       console.log('💼 Step 3/3: Refreshing manual investment market data...');
       try {
         await OtherPortfolioService.updateAllMarketData('default');
+        
+        // Recalculate today's performance snapshot after manual investment update
+        const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+        for (const user of users) {
+          try {
+            await PerformanceHistoryService.calculateTodaySnapshot(user.id);
+            console.log(`📈 Updated performance snapshot after manual investment refresh for user: ${user.name}`);
+          } catch (performanceError) {
+            console.error(`❌ Failed to update performance snapshot after manual investment refresh for user ${user.name}:`, performanceError);
+          }
+        }
+        
         LastUpdateService.updateManualInvestmentsTime();
         console.log('✅ Manual investment market data refreshed successfully');
       } catch (error) {

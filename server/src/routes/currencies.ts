@@ -84,6 +84,15 @@ router.post('/update-rates-enhanced', async (req: AuthenticatedRequest, res) => 
     const userId = req.user?.id || 0;
     await ExchangeRateService.updateAllCurrencyPairs(userId);
     
+    // Recalculate today's performance snapshot after currency update
+    try {
+      const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+      await PerformanceHistoryService.calculateTodaySnapshot(userId);
+      console.log(`📈 Updated performance snapshot after enhanced currency refresh`);
+    } catch (performanceError) {
+      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+    }
+    
     // Return updated pairs for the authenticated user
     const pairs = await CurrencyPairModel.findByUserId(userId);
     return res.json({ 
@@ -171,6 +180,16 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     };
     
     const pair = await CurrencyPairModel.create(req.user?.id || 0, pairData as CreateCurrencyPairData);
+    
+    // Recalculate today's performance snapshot after currency pair creation
+    try {
+      const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+      await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+      console.log(`📈 Updated performance snapshot after currency pair creation`);
+    } catch (performanceError) {
+      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+    }
+    
     return res.status(201).json(pair);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -197,6 +216,15 @@ router.put('/:id', async (req: AuthenticatedRequest, res) => {
       return res.status(404).json({ error: 'Currency pair not found' });
     }
     
+    // Recalculate today's performance snapshot after currency pair update
+    try {
+      const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+      await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+      console.log(`📈 Updated performance snapshot after currency pair update`);
+    } catch (performanceError) {
+      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+    }
+    
     return res.json(pair);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -221,6 +249,15 @@ router.delete('/:id', async (req: AuthenticatedRequest, res) => {
       return res.status(404).json({ error: 'Currency pair not found' });
     }
     
+    // Recalculate today's performance snapshot after currency pair deletion
+    try {
+      const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+      await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+      console.log(`📈 Updated performance snapshot after currency pair deletion`);
+    } catch (performanceError) {
+      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+    }
+    
     return res.json({ message: 'Currency pair deleted successfully' });
   } catch (error) {
     console.error('Delete currency pair error:', error);
@@ -231,10 +268,20 @@ router.delete('/:id', async (req: AuthenticatedRequest, res) => {
 // Update all currency pairs with latest exchange rates
 router.post('/update-rates', async (req: AuthenticatedRequest, res) => {
   try {
-    await ExchangeRateService.updateAllCurrencyPairs(req.user?.id || 0);
+    const userId = req.user?.id || 0;
+    await ExchangeRateService.updateAllCurrencyPairs(userId);
+    
+    // Recalculate today's performance snapshot after currency update
+    try {
+      const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+      await PerformanceHistoryService.calculateTodaySnapshot(userId);
+      console.log(`📈 Updated performance snapshot after currency refresh`);
+    } catch (performanceError) {
+      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+    }
     
     // Return updated pairs
-    const pairs = await CurrencyPairModel.findByUserId(req.user?.id || 0);
+    const pairs = await CurrencyPairModel.findByUserId(userId);
     return res.json({ 
       message: 'Exchange rates updated successfully',
       pairs 

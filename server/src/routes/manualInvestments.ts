@@ -82,6 +82,25 @@ router.post('/positions', async (req, res) => {
     // Try to get market data immediately
     await OtherPortfolioService.updatePositionMarketData(position.id);
     
+    // Recalculate today's performance snapshot after position creation
+    try {
+      // Get all users and update their performance snapshots
+      const { dbAll } = await import('../database/connection.js');
+      const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+      
+      for (const user of users) {
+        try {
+          const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+          await PerformanceHistoryService.calculateTodaySnapshot(user.id);
+          console.log(`📈 Updated performance snapshot after manual position creation for user: ${user.name}`);
+        } catch (performanceError) {
+          console.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to update performance snapshots:', error);
+    }
+    
     return res.status(201).json(position);
   } catch (error) {
     console.error('Error adding manual position:', error);
@@ -112,6 +131,25 @@ router.put('/positions/:id', async (req, res) => {
         await OtherPortfolioService.updatePositionMarketData(positionId);
       }
       
+      // Recalculate today's performance snapshot after position update
+      try {
+        // Get all users and update their performance snapshots
+        const { dbAll } = await import('../database/connection.js');
+        const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+        
+        for (const user of users) {
+          try {
+            const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+            await PerformanceHistoryService.calculateTodaySnapshot(user.id);
+            console.log(`📈 Updated performance snapshot after manual position update for user: ${user.name}`);
+          } catch (performanceError) {
+            console.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to update performance snapshots:', error);
+      }
+      
       return res.json({ success: true });
     } else {
       return res.status(404).json({ error: 'Position not found' });
@@ -132,6 +170,25 @@ router.delete('/positions/:id', async (req, res) => {
     const success = OtherPortfolioService.deleteManualPosition(positionId);
     
     if (success) {
+      // Recalculate today's performance snapshot after position deletion
+      try {
+        // Get all users and update their performance snapshots
+        const { dbAll } = await import('../database/connection.js');
+        const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+        
+        for (const user of users) {
+          try {
+            const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+            await PerformanceHistoryService.calculateTodaySnapshot(user.id);
+            console.log(`📈 Updated performance snapshot after manual position deletion for user: ${user.name}`);
+          } catch (performanceError) {
+            console.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to update performance snapshots:', error);
+      }
+      
       res.json({ success: true });
     } else {
       res.status(404).json({ error: 'Position not found' });
@@ -150,6 +207,25 @@ router.post('/positions/refresh-market-data', async (req, res) => {
   try {
     const userId = req.body.userId || 'default';
     const result = await OtherPortfolioService.updateAllMarketData(userId);
+    
+    // Recalculate today's performance snapshot after manual investment update
+    try {
+      // Get all users and update their performance snapshots
+      const { dbAll } = await import('../database/connection.js');
+      const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+      
+      for (const user of users) {
+        try {
+          const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
+          await PerformanceHistoryService.calculateTodaySnapshot(user.id);
+          console.log(`📈 Updated performance snapshot after manual investment refresh for user: ${user.name}`);
+        } catch (performanceError) {
+          console.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to update performance snapshots:', error);
+    }
     
     // Include last refresh time in response
     const lastRefreshTime = OtherPortfolioService.getLastRefreshTime();

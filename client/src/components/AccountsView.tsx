@@ -549,22 +549,22 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
           <CardContent>
             {account.accountType === 'BANK' ? (
               // Compact layout for bank accounts
-              <div>
-                <span className="font-semibold text-foreground">
-                  Current Balance: {formatCurrency(account.currentBalance, account.currency)} 
-                  <span className="text-xs text-muted-foreground ml-2 font-normal">
-                    Last updated: {new Date(account.lastUpdated).toLocaleDateString('en-GB', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric'
-                    })} {new Date(account.lastUpdated).toLocaleTimeString('en-GB', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                      hour12: false
-                    })}
-                  </span>
-                </span>
+              <div className="space-y-2">
+                <div className="font-semibold text-foreground">
+                  Current Balance: {formatCurrency(account.currentBalance, account.currency)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Last updated: {new Date(account.lastUpdated).toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                  })} {new Date(account.lastUpdated).toLocaleTimeString('en-GB', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                  })}
+                </div>
               </div>
             ) : (
               // Full layout for investment accounts
@@ -752,7 +752,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
     <div className="space-y-6">
       {/* Tabs for Investment and Bank Accounts */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="flex items-center justify-between">
+        <div className="space-y-4">
           <TabsList className="grid w-fit grid-cols-2">
             <TabsTrigger value="investment" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
@@ -764,13 +764,14 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
             </TabsTrigger>
           </TabsList>
           
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-gradient-primary hover:opacity-90 transition-smooth">
-                <PlusCircle className="h-4 w-4 mr-2" />
-                Add {activeTab === "investment" ? "Investment" : "Bank"} Account
-              </Button>
-            </DialogTrigger>
+          <div className="flex justify-start">
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-gradient-primary hover:opacity-90 transition-smooth">
+                  <PlusCircle className="h-4 w-4 mr-2" />
+                  Add {activeTab === "investment" ? "Investment" : "Bank"} Account
+                </Button>
+              </DialogTrigger>
         <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-foreground">Add Account</DialogTitle>
@@ -855,6 +856,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+          </div>
         </div>
 
         <TabsContent value="investment" className="space-y-6">
