@@ -492,7 +492,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
 
   // Render accounts list
   const renderAccountsList = (accountsList: Account[]) => (
-    <div className="grid gap-6">
+    <div className="grid gap-6 w-full max-w-full">
       {accountsList
         .sort((a, b) => {
           // Sort bank accounts by name, investment accounts by balance
@@ -505,34 +505,43 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
           return balanceB - balanceA;
         })
         .map((account) => (
-        <Card key={account.id} className="bg-gradient-card border-border shadow-card">
+        <Card key={account.id} className="bg-gradient-card border-border shadow-card w-full overflow-hidden">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/20 rounded-lg">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div className="p-2 bg-primary/20 rounded-lg flex-shrink-0">
                   <span className="text-lg">{account.accountType === 'BANK' ? '🏦' : getCurrencyFlag(account.currency)}</span>
                 </div>
-                <div className="flex items-center gap-3 group">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-foreground">{account.name}</CardTitle>
-                      {account.accountNumber && (
-                        <span className="text-foreground">({account.accountNumber})</span>
-                      )}
-                    </div>
-                    <CardDescription>
-                      {account.accountType === 'BANK' ? 'Bank Account' : 'Investment Account'} • {account.currency}
-                    </CardDescription>
+                <div className="flex flex-col min-w-0 flex-1 group">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
+                    <CardTitle className="text-foreground truncate">{account.name}</CardTitle>
+                    {account.accountNumber && (
+                      <span className="text-foreground text-sm truncate">({account.accountNumber})</span>
+                    )}
                   </div>
+                  <CardDescription className="truncate">
+                    {account.accountType === 'BANK' ? 'Bank Account' : 'Investment Account'} • {account.currency}
+                  </CardDescription>
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    className="border-blue-500 text-blue-500 hover:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                    className="border-blue-500 text-blue-500 hover:bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-2 sm:hidden w-fit"
                     onClick={() => openEditDialog(account)}
                   >
-                    <Edit className="h-3 w-3" />
+                    <Edit className="h-3 w-3 mr-1" />
+                    Edit
                   </Button>
                 </div>
+              </div>
+              <div className="flex-shrink-0 hidden sm:block">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
+                  onClick={() => openEditDialog(account)}
+                >
+                  <Edit className="h-3 w-3" />
+                </Button>
               </div>
               {account.accountType === 'INVESTMENT' && (
                 <Badge variant={account.profitLoss > 0 ? "default" : "destructive"}>
@@ -548,22 +557,29 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
           </CardHeader>
           <CardContent>
             {account.accountType === 'BANK' ? (
-              // Compact layout for bank accounts
-              <div className="space-y-2">
-                <div className="font-semibold text-foreground">
-                  Current Balance: {formatCurrency(account.currentBalance, account.currency)}
+              // Compact layout for bank accounts - mobile responsive
+              <div className="space-y-2 w-full overflow-hidden">
+                <div className="space-y-1">
+                  <div className="text-sm text-muted-foreground">Current Balance</div>
+                  <div className="font-semibold text-foreground text-lg break-words">
+                    {formatCurrency(account.currentBalance, account.currency)}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Last updated: {new Date(account.lastUpdated).toLocaleDateString('en-GB', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric'
-                  })} {new Date(account.lastUpdated).toLocaleTimeString('en-GB', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false
-                  })}
+                <div className="text-xs text-muted-foreground break-words">
+                  <div className="flex flex-col sm:flex-row sm:gap-2">
+                    <span>Last updated:</span>
+                    <span className="font-mono">
+                      {new Date(account.lastUpdated).toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: '2-digit'
+                      })} {new Date(account.lastUpdated).toLocaleTimeString('en-GB', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                      })}
+                    </span>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -749,7 +765,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-full overflow-hidden">
       {/* Tabs for Investment and Bank Accounts */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="space-y-4">
