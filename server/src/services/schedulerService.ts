@@ -14,7 +14,7 @@ export class SchedulerService {
   /**
    * Initialize the scheduler service
    */
-  static initialize() {
+  static async initialize() {
     if (this.isRunning) {
       console.log('Scheduler service is already running');
       return;
@@ -23,7 +23,7 @@ export class SchedulerService {
     console.log('🚀 Initializing scheduler service...');
     
     // Initialize last update service
-    LastUpdateService.initialize();
+    await LastUpdateService.initialize();
     
     // Schedule daily performance calculation at 11:59 PM Dublin time
     // Dublin time is GMT+0 (standard time) or GMT+1 (daylight saving time)
@@ -203,7 +203,7 @@ export class SchedulerService {
             console.error(`❌ Failed to update performance snapshot after currency refresh for user ${user.name}:`, performanceError);
           }
         }
-        LastUpdateService.updateCurrencyTime();
+        await LastUpdateService.updateCurrencyTime();
         console.log('✅ Currency exchange rates refreshed successfully');
       } catch (error) {
         console.error('❌ Failed to refresh currency exchange rates:', error);
@@ -273,7 +273,7 @@ export class SchedulerService {
         }
         
         if (ibRefreshCount > 0) {
-          LastUpdateService.updateIBPortfolioTime();
+          // Note: IB portfolio update times are now tracked per-account in IBService.forceRefreshPortfolio()
           console.log(`✅ IB portfolio data refreshed for ${ibRefreshCount} users, ${ibSkippedCount} skipped`);
         } else {
           console.log(`⚠️ No users have IB settings configured - IB refresh skipped for all ${ibSkippedCount} users`);
@@ -298,7 +298,7 @@ export class SchedulerService {
           }
         }
         
-        LastUpdateService.updateManualInvestmentsTime();
+        // Note: Manual investment update times are now tracked per-account in OtherPortfolioService
         console.log('✅ Manual investment market data refreshed successfully');
       } catch (error) {
         console.error('❌ Failed to refresh manual investment market data:', error);

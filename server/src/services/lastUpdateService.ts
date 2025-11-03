@@ -1,155 +1,232 @@
-import * as fs from 'fs';
-import * as path from 'path';
-
-interface LastUpdateTimes {
-  currency: number | null;
-  ibPortfolio: number | null;
-  manualInvestments: number | null;
-}
-
 export class LastUpdateService {
-  private static readonly CACHE_DIR = path.join(process.cwd(), 'cache');
-  private static readonly LAST_UPDATE_FILE = path.join(LastUpdateService.CACHE_DIR, 'last_updates.json');
-  
-  private static lastUpdateTimes: LastUpdateTimes = {
-    currency: null,
-    ibPortfolio: null,
-    manualInvestments: null
-  };
-
   /**
-   * Initialize the service and load existing update times
+   * Initialize the service - migrate existing file data to database if needed
    */
-  static initialize(): void {
-    this.ensureCacheDir();
-    this.loadFromFile();
+  static async initialize(): Promise<void> {
+    await this.migrateFromFileToDatabase();
   }
 
   /**
-   * Ensure cache directory exists
+   * Migrate existing file data to database (one-time migration)
    */
-  private static ensureCacheDir(): void {
-    if (!fs.existsSync(this.CACHE_DIR)) {
-      fs.mkdirSync(this.CACHE_DIR, { recursive: true });
-    }
-  }
-
-  /**
-   * Load last update times from file
-   */
-  private static loadFromFile(): void {
+  private static async migrateFromFileToDatabase(): Promise<void> {
     try {
-      if (fs.existsSync(this.LAST_UPDATE_FILE)) {
-        const data = fs.readFileSync(this.LAST_UPDATE_FILE, 'utf8');
-        this.lastUpdateTimes = JSON.parse(data);
-        console.log('📅 Loaded last update times from file');
+      const fs = await import('fs');
+      const path = await import('path');
+      const { dbRun, dbGet } = await import('../database/connection.js');
+      
+      const CACHE_DIR = path.join(process.cwd(), 'cache');
+      const LAST_UPDATE_FILE = path.join(CACHE_DIR, 'last_updates.json');
+      
+      // Check if file exists and database doesn't have the data yet
+      if (fs.existsSync(LAST_UPDATE_FILE)) {
+        const data = fs.readFileSync(LAST_UPDATE_FILE, 'utf8');
+        const fileData = JSON.parse(data);
+        
+        // Check if we already migrated
+        const existingCurrency = await dbGet(
+          'SELECT id FROM last_updates WHERE main_account_id IS NULL AND update_type = ?',
+          ['EXCHANGE_RATES']
+        );
+        
+        if (!existingCurrency && fileData.currency) {
+          await dbRun(`
+            INSERT INTO last_updates (main_account_id, update_type, last_updated, created_at, updated_at)
+            VALUES (NULL, 'EXCHANGE_RATES', datetime(?, 'unixepoch', 'subsec'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `, [fileData.currency / 1000]);
+          console.log('📅 Migrated currency update time to database');
+        }
+        
+        // Note: IB and manual investment times are now account-specific, so we don't migrate them
+        console.log('📅 Migration from file to database completed');
       }
     } catch (error) {
-      console.error('❌ Failed to load last update times:', error);
-      // Reset to defaults if file is corrupted
-      this.lastUpdateTimes = {
-        currency: null,
-        ibPortfolio: null,
-        manualInvestments: null
-      };
+      console.error('❌ Failed to migrate from file to database:', error);
     }
   }
 
   /**
-   * Save last update times to file
+   * Update currency last refresh time (global, not account-specific)
    */
-  private static saveToFile(): void {
+  static async updateCurrencyTime(): Promise<void> {
     try {
-      this.ensureCacheDir();
-      fs.writeFileSync(this.LAST_UPDATE_FILE, JSON.stringify(this.lastUpdateTimes, null, 2));
+      const { dbRun } = await import('../database/connection.js');
+      await dbRun(`
+        INSERT OR REPLACE INTO last_updates (main_account_id, update_type, last_updated, updated_at)
+        VALUES (NULL, 'EXCHANGE_RATES', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `);
+      console.log('📅 Updated currency last refresh time in database');
     } catch (error) {
-      console.error('❌ Failed to save last update times:', error);
+      console.error('❌ Failed to update currency time:', error);
     }
   }
 
   /**
-   * Update currency last refresh time
+   * Update IB portfolio last refresh time for specific account
    */
-  static updateCurrencyTime(): void {
-    this.lastUpdateTimes.currency = Date.now();
-    this.saveToFile();
-    console.log('📅 Updated currency last refresh time');
+  static async updateIBPortfolioTime(mainAccountId?: number): Promise<void> {
+    if (!mainAccountId) {
+      console.warn('⚠️ No account ID provided for IB portfolio update - skipping');
+      return;
+    }
+    
+    try {
+      const { dbRun } = await import('../database/connection.js');
+      await dbRun(`
+        INSERT OR REPLACE INTO last_updates (main_account_id, update_type, last_updated, updated_at)
+        VALUES (?, 'IB_PORTFOLIO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `, [mainAccountId]);
+      console.log(`📅 Updated IB portfolio last refresh time for account ${mainAccountId}`);
+    } catch (error) {
+      console.error('❌ Failed to update IB portfolio time:', error);
+    }
   }
 
   /**
-   * Update IB portfolio last refresh time
+   * Update manual investments last refresh time for specific account
    */
-  static updateIBPortfolioTime(): void {
-    this.lastUpdateTimes.ibPortfolio = Date.now();
-    this.saveToFile();
-    console.log('📅 Updated IB portfolio last refresh time');
+  static async updateManualInvestmentsTime(mainAccountId?: number): Promise<void> {
+    if (!mainAccountId) {
+      console.warn('⚠️ No account ID provided for manual investments update - skipping');
+      return;
+    }
+    
+    try {
+      const { dbRun } = await import('../database/connection.js');
+      await dbRun(`
+        INSERT OR REPLACE INTO last_updates (main_account_id, update_type, last_updated, updated_at)
+        VALUES (?, 'MANUAL_PORTFOLIO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `, [mainAccountId]);
+      console.log(`📅 Updated manual investments last refresh time for account ${mainAccountId}`);
+    } catch (error) {
+      console.error('❌ Failed to update manual investments time:', error);
+    }
   }
 
   /**
-   * Update manual investments last refresh time
+   * Get all last update times (for backward compatibility - now requires account ID for account-specific data)
    */
-  static updateManualInvestmentsTime(): void {
-    this.lastUpdateTimes.manualInvestments = Date.now();
-    this.saveToFile();
-    console.log('📅 Updated manual investments last refresh time');
-  }
-
-  /**
-   * Get all last update times
-   */
-  static getAllLastUpdateTimes(): {
+  static async getAllLastUpdateTimes(mainAccountId?: number): Promise<{
     currency: string | null;
     ibPortfolio: string | null;
     manualInvestments: string | null;
     currencyTimestamp: number | null;
     ibPortfolioTimestamp: number | null;
     manualInvestmentsTimestamp: number | null;
-  } {
-    return {
-      currency: this.lastUpdateTimes.currency ? new Date(this.lastUpdateTimes.currency).toISOString() : null,
-      ibPortfolio: this.lastUpdateTimes.ibPortfolio ? new Date(this.lastUpdateTimes.ibPortfolio).toISOString() : null,
-      manualInvestments: this.lastUpdateTimes.manualInvestments ? new Date(this.lastUpdateTimes.manualInvestments).toISOString() : null,
-      currencyTimestamp: this.lastUpdateTimes.currency,
-      ibPortfolioTimestamp: this.lastUpdateTimes.ibPortfolio,
-      manualInvestmentsTimestamp: this.lastUpdateTimes.manualInvestments
-    };
+  }> {
+    try {
+      const [currency, ibPortfolio, manualInvestments] = await Promise.all([
+        this.getCurrencyLastUpdate(),
+        mainAccountId ? this.getIBPortfolioLastUpdate(mainAccountId) : null,
+        mainAccountId ? this.getManualInvestmentsLastUpdate(mainAccountId) : null
+      ]);
+
+      return {
+        currency,
+        ibPortfolio,
+        manualInvestments,
+        currencyTimestamp: currency ? new Date(currency).getTime() : null,
+        ibPortfolioTimestamp: ibPortfolio ? new Date(ibPortfolio).getTime() : null,
+        manualInvestmentsTimestamp: manualInvestments ? new Date(manualInvestments).getTime() : null
+      };
+    } catch (error) {
+      console.error('❌ Failed to get all last update times:', error);
+      return {
+        currency: null,
+        ibPortfolio: null,
+        manualInvestments: null,
+        currencyTimestamp: null,
+        ibPortfolioTimestamp: null,
+        manualInvestmentsTimestamp: null
+      };
+    }
   }
 
   /**
-   * Get currency last update time
+   * Get currency last update time (global)
    */
-  static getCurrencyLastUpdate(): string | null {
-    return this.lastUpdateTimes.currency ? new Date(this.lastUpdateTimes.currency).toISOString() : null;
+  static async getCurrencyLastUpdate(): Promise<string | null> {
+    try {
+      const { dbGet } = await import('../database/connection.js');
+      const row = await dbGet(
+        'SELECT last_updated FROM last_updates WHERE main_account_id IS NULL AND update_type = ?',
+        ['EXCHANGE_RATES']
+      );
+      return row ? new Date(row.last_updated).toISOString() : null;
+    } catch (error) {
+      console.error('❌ Failed to get currency last update:', error);
+      return null;
+    }
   }
 
   /**
-   * Get IB portfolio last update time
+   * Get IB portfolio last update time for specific account
    */
-  static getIBPortfolioLastUpdate(): string | null {
-    return this.lastUpdateTimes.ibPortfolio ? new Date(this.lastUpdateTimes.ibPortfolio).toISOString() : null;
+  static async getIBPortfolioLastUpdate(mainAccountId: number): Promise<string | null> {
+    try {
+      const { dbGet } = await import('../database/connection.js');
+      const row = await dbGet(
+        'SELECT last_updated FROM last_updates WHERE main_account_id = ? AND update_type = ?',
+        [mainAccountId, 'IB_PORTFOLIO']
+      );
+      return row ? new Date(row.last_updated).toISOString() : null;
+    } catch (error) {
+      console.error('❌ Failed to get IB portfolio last update:', error);
+      return null;
+    }
   }
 
   /**
-   * Get manual investments last update time
+   * Get manual investments last update time for specific account
    */
-  static getManualInvestmentsLastUpdate(): string | null {
-    return this.lastUpdateTimes.manualInvestments ? new Date(this.lastUpdateTimes.manualInvestments).toISOString() : null;
+  static async getManualInvestmentsLastUpdate(mainAccountId: number): Promise<string | null> {
+    try {
+      const { dbGet } = await import('../database/connection.js');
+      const row = await dbGet(
+        'SELECT last_updated FROM last_updates WHERE main_account_id = ? AND update_type = ?',
+        [mainAccountId, 'MANUAL_PORTFOLIO']
+      );
+      return row ? new Date(row.last_updated).toISOString() : null;
+    } catch (error) {
+      console.error('❌ Failed to get manual investments last update:', error);
+      return null;
+    }
   }
 
   /**
    * Get time since last update in minutes
    */
-  static getTimeSinceLastUpdate(type: 'currency' | 'ibPortfolio' | 'manualInvestments'): number | null {
-    const timestamp = this.lastUpdateTimes[type];
-    if (!timestamp) return null;
-    return Math.floor((Date.now() - timestamp) / 1000 / 60);
+  static async getTimeSinceLastUpdate(type: 'currency' | 'ibPortfolio' | 'manualInvestments', mainAccountId?: number): Promise<number | null> {
+    try {
+      let lastUpdate: string | null = null;
+      
+      switch (type) {
+        case 'currency':
+          lastUpdate = await this.getCurrencyLastUpdate();
+          break;
+        case 'ibPortfolio':
+          if (!mainAccountId) return null;
+          lastUpdate = await this.getIBPortfolioLastUpdate(mainAccountId);
+          break;
+        case 'manualInvestments':
+          if (!mainAccountId) return null;
+          lastUpdate = await this.getManualInvestmentsLastUpdate(mainAccountId);
+          break;
+      }
+      
+      if (!lastUpdate) return null;
+      return Math.floor((Date.now() - new Date(lastUpdate).getTime()) / 1000 / 60);
+    } catch (error) {
+      console.error('❌ Failed to get time since last update:', error);
+      return null;
+    }
   }
 
   /**
    * Check if data needs refresh (older than 30 minutes)
    */
-  static needsRefresh(type: 'currency' | 'ibPortfolio' | 'manualInvestments'): boolean {
-    const timeSinceUpdate = this.getTimeSinceLastUpdate(type);
+  static async needsRefresh(type: 'currency' | 'ibPortfolio' | 'manualInvestments', mainAccountId?: number): Promise<boolean> {
+    const timeSinceUpdate = await this.getTimeSinceLastUpdate(type, mainAccountId);
     return timeSinceUpdate === null || timeSinceUpdate >= 30;
   }
 }

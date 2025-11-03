@@ -56,7 +56,7 @@ router.post('/ib/settings', authenticateToken, async (req, res) => {
   }
 });
 
-// Get IB account balance (cached)
+// Get IB account balance (from database)
 router.post('/ib/balance', authenticateToken, async (req, res) => {
   try {
     const userId = (req as any).user.id;
@@ -69,7 +69,7 @@ router.post('/ib/balance', authenticateToken, async (req, res) => {
     }
     
     const result = await IBService.getAccountBalance(userSettings);
-    const timestamp = IBService.getBalanceTimestamp();
+    const timestamp = userSettings.target_account_id ? await IBService.getBalanceTimestamp(userSettings.target_account_id) : null;
     return res.json({ ...result, timestamp });
   } catch (error) {
     console.error('Error getting IB balance:', error);
@@ -124,7 +124,7 @@ router.post('/ib/balance/refresh', authenticateToken, async (req, res) => {
       console.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
-    const timestamp = IBService.getBalanceTimestamp();
+    const timestamp = userSettings.target_account_id ? await IBService.getBalanceTimestamp(userSettings.target_account_id) : null;
     console.log('✅ Balance refresh successful, returning data');
     return res.json({ ...result, timestamp });
   } catch (error) {
@@ -134,7 +134,7 @@ router.post('/ib/balance/refresh', authenticateToken, async (req, res) => {
   }
 });
 
-// Get IB portfolio positions (cached)
+// Get IB portfolio positions (from database)
 router.post('/ib/portfolio', authenticateToken, async (req, res) => {
   try {
     const userId = (req as any).user.id;
@@ -261,20 +261,29 @@ router.post('/ib/refresh-all', authenticateToken, async (req, res) => {
 });
 
 // Get cache status (for debugging)
-router.get('/ib/cache-status', authenticateToken, async (req, res) => {
+router.get('/ib/data-status', authenticateToken, async (req, res) => {
   try {
-    const status = IBService.getCacheStatus();
+    const userId = (req as any).user.id;
+    
+    // Get user's IB settings to get target_account_id
+    const userSettings = await IBConnectionService.getUserIBSettings(userId);
+    
+    if (!userSettings || !userSettings.target_account_id) {
+      return res.status(400).json({ error: 'IB connection not configured or target account not set' });
+    }
+    
+    const status = await IBService.getDataStats(userSettings.target_account_id);
     return res.json(status);
   } catch (error) {
-    console.error('Error getting cache status:', error);
-    return res.status(500).json({ error: 'Failed to get cache status' });
+    console.error('Error getting data status:', error);
+    return res.status(500).json({ error: 'Failed to get data status' });
   }
 });
 
-// Test cache loading endpoint
-router.get('/ib/test-cache', authenticateToken, async (req, res) => {
+// Test database data loading endpoint
+router.get('/ib/test-data', authenticateToken, async (req, res) => {
   try {
-    console.log('🧪 Testing cache loading...');
+    console.log('🧪 Testing database data loading...');
     const userId = (req as any).user.id;
 
     // Get user's IB settings
@@ -288,11 +297,11 @@ router.get('/ib/test-cache', authenticateToken, async (req, res) => {
     return res.json({
       balance,
       portfolio,
-      cacheStatus: IBService.getCacheStatus()
+      dataStatus: userSettings.target_account_id ? await IBService.getDataStats(userSettings.target_account_id) : null
     });
   } catch (error) {
-    console.error('Error testing cache:', error);
-    return res.status(500).json({ error: 'Failed to test cache' });
+    console.error('Error testing database data:', error);
+    return res.status(500).json({ error: 'Failed to test database data' });
   }
 });
 
@@ -307,7 +316,7 @@ router.post('/ib/cleanup', authenticateToken, async (req, res) => {
   }
 });
 
-// Get IB cash balances (cached)
+// Get IB cash balances (from database)
 router.post('/ib/cash', authenticateToken, async (req, res) => {
   try {
     const userId = (req as any).user.id;
@@ -320,7 +329,7 @@ router.post('/ib/cash', authenticateToken, async (req, res) => {
     }
     
     const result = await IBService.getCashBalances(userSettings);
-    const timestamp = IBService.getCashTimestamp();
+    const timestamp = userSettings.target_account_id ? await IBService.getCashTimestamp(userSettings.target_account_id) : null;
     return res.json({ data: result, timestamp });
   } catch (error) {
     console.error('Error getting IB cash balances:', error);
@@ -352,7 +361,7 @@ router.post('/ib/cash/refresh', authenticateToken, async (req, res) => {
       console.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
-    const timestamp = IBService.getCashTimestamp();
+    const timestamp = userSettings.target_account_id ? await IBService.getCashTimestamp(userSettings.target_account_id) : null;
     console.log('✅ Cash balances refresh successful, returning data');
     return res.json({ data: result, timestamp });
   } catch (error) {

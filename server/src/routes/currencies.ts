@@ -38,7 +38,7 @@ router.get('/last-update', async (req, res) => {
 router.get('/all-last-updates', async (req, res) => {
   try {
     const { LastUpdateService } = await import('../services/lastUpdateService.js');
-    const allUpdates = LastUpdateService.getAllLastUpdateTimes();
+    const allUpdates = await LastUpdateService.getAllLastUpdateTimes();
     return res.json({
       ...allUpdates,
       timestamp: new Date().toISOString()

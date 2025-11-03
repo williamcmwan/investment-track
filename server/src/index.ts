@@ -120,20 +120,32 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-// Start server
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Investment Tracker running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
-  console.log(`🌐 Frontend: http://localhost:${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+// Initialize services and start server
+async function startServer() {
+  try {
+    // Initialize services
+    await SchedulerService.initialize();
+    await IBService.initialize();
+    // Ensure unified portfolios table is initialized at startup
+    await OtherPortfolioService.initializeDatabase();
 
-  // Initialize services
-  SchedulerService.initialize();
-  IBService.initialize();
-  // Ensure unified portfolios table is initialized at startup
-  OtherPortfolioService.initializeDatabase().catch(console.error);
-});
+    // Start server
+    const server = app.listen(PORT, () => {
+      console.log(`🚀 Investment Tracker running on port ${PORT}`);
+      console.log(`📊 Health check: http://localhost:${PORT}/health`);
+      console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
+      console.log(`🌐 Frontend: http://localhost:${PORT}`);
+      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+
+    return server;
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+const server = await startServer();
 
 // Graceful shutdown handling
 const gracefulShutdown = async (signal: string) => {

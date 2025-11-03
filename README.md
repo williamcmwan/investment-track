@@ -439,12 +439,12 @@ The Accounts page is now organized into separate tabs for different account type
 ### Interactive Brokers Integration
 - `GET /api/integration/ib/settings` - Get user's IB connection settings
 - `POST /api/integration/ib/settings` - Save user's IB connection settings
-- `POST /api/integration/ib/balance` - Get account balance from IB (cached)
-- `POST /api/integration/ib/balance/refresh` - Force refresh account balance
-- `POST /api/integration/ib/portfolio` - Get portfolio positions (cached)
-- `POST /api/integration/ib/portfolio/refresh` - Force refresh portfolio data
-- `POST /api/integration/ib/cash` - Get cash balances by currency (cached)
-- `POST /api/integration/ib/cash/refresh` - Force refresh cash balances
+- `POST /api/integration/ib/balance` - Get account balance from database
+- `POST /api/integration/ib/balance/refresh` - Force refresh account balance from IB and update database
+- `POST /api/integration/ib/portfolio` - Get portfolio positions from database
+- `POST /api/integration/ib/portfolio/refresh` - Force refresh portfolio data from IB and update database
+- `POST /api/integration/ib/cash` - Get cash balances by currency from database
+- `POST /api/integration/ib/cash/refresh` - Force refresh cash balances from IB and update database
 - `POST /api/integration/ib/account-data` - Get combined account data
 - `POST /api/integration/ib/refresh-all` - Force refresh all IB data
 

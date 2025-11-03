@@ -1,7 +1,4 @@
 import { IBApi, EventName, ErrorCode } from '@stoqey/ib';
-import * as fs from 'fs';
-import * as path from 'path';
-import { LastUpdateService } from './lastUpdateService.js';
 
 interface AccountSummary {
   balance: number;
@@ -38,12 +35,6 @@ interface CashBalance {
   marketValueUSD?: number;
 }
 
-interface CachedData<T> {
-  data: T;
-  timestamp: number;
-  isRefreshing?: boolean;
-}
-
 export class IBService {
   private static ibApi: IBApi | null = null;
   private static isConnected = false;
@@ -65,21 +56,7 @@ export class IBService {
   // Track failed bond market data requests to avoid repeated timeouts
   private static failedBondSymbols: Set<string> = new Set();
 
-  // Cache storage (in-memory for fast access)
-  private static balanceCache: CachedData<AccountSummary> | null = null;
-  private static portfolioCache: CachedData<PortfolioPosition[]> | null = null;
-  private static cashCache: CachedData<CashBalance[]> | null = null;
-
-  // Cache auto-refresh times (in milliseconds)
-  private static readonly AUTO_REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes - auto refresh if no manual refresh
-  private static readonly BALANCE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes - for balance freshness check
-  private static readonly PORTFOLIO_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes - for portfolio freshness check
-
-  // Cache file paths
-  private static readonly CACHE_DIR = path.join(process.cwd(), 'cache');
-  private static readonly BALANCE_CACHE_FILE = path.join(IBService.CACHE_DIR, 'balance.json');
-  private static readonly PORTFOLIO_CACHE_FILE = path.join(IBService.CACHE_DIR, 'portfolio.json');
-  private static readonly CASH_CACHE_FILE = path.join(IBService.CACHE_DIR, 'cash.json');
+  // No cache - all data comes from database
 
   // Get user-specific connection settings
   static getUserConnectionSettings(userSettings?: { host: string; port: number; client_id: number }): { host: string; port: number; clientId: number } {
@@ -112,175 +89,35 @@ export class IBService {
     console.log('✅ IB Service shutdown complete');
   }
 
-  // Cache management methods
-  private static ensureCacheDir(): void {
-    if (!fs.existsSync(this.CACHE_DIR)) {
-      fs.mkdirSync(this.CACHE_DIR, { recursive: true });
-    }
-  }
+  // Database operations - no cache, always fresh from DB
 
-  private static loadCacheFromFile<T>(filePath: string): CachedData<T> | null {
+  // Update last refresh time in database
+  private static async updateLastRefreshTime(mainAccountId: number, updateType: string): Promise<void> {
     try {
-      console.log(`🔍 Checking cache file: ${filePath}`);
-      if (fs.existsSync(filePath)) {
-        console.log(`✅ Cache file exists, loading...`);
-        const data = fs.readFileSync(filePath, 'utf8');
-        const parsed = JSON.parse(data) as CachedData<T>;
-        console.log(`📄 Loaded cache with timestamp: ${parsed.timestamp}, age: ${Date.now() - parsed.timestamp}ms`);
-        return parsed;
-      } else {
-        console.log(`❌ Cache file does not exist: ${filePath}`);
-      }
+      const { dbRun } = await import('../database/connection.js');
+      await dbRun(`
+        INSERT OR REPLACE INTO last_updates (main_account_id, update_type, last_updated, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `, [mainAccountId, updateType]);
+      console.log(`📅 Updated last refresh time for ${updateType} (account ${mainAccountId})`);
     } catch (error) {
-      console.error(`Failed to load cache from ${filePath}:`, error);
+      console.error('❌ Failed to update last refresh time:', error);
     }
-    return null;
   }
 
-  private static saveCacheToFile<T>(filePath: string, cache: CachedData<T>): void {
+  // Get last refresh time from database
+  private static async getLastRefreshTime(mainAccountId: number, updateType: string): Promise<Date | null> {
     try {
-      console.log(`💾 Saving cache to file: ${filePath}`);
-      this.ensureCacheDir();
-      fs.writeFileSync(filePath, JSON.stringify(cache, null, 2));
-      console.log(`✅ Cache saved successfully to ${filePath}`);
+      const { dbGet } = await import('../database/connection.js');
+      const row = await dbGet(`
+        SELECT last_updated FROM last_updates 
+        WHERE main_account_id = ? AND update_type = ?
+      `, [mainAccountId, updateType]);
+      return row ? new Date(row.last_updated) : null;
     } catch (error) {
-      console.error(`❌ Failed to save cache to ${filePath}:`, error);
+      console.error('❌ Failed to get last refresh time:', error);
+      return null;
     }
-  }
-
-  private static isCacheValid<T>(cache: CachedData<T> | null, duration: number): boolean {
-    return cache !== null && (Date.now() - cache.timestamp) < duration;
-  }
-
-  private static shouldAutoRefresh<T>(cache: CachedData<T> | null): boolean {
-    if (!cache) return true; // No cache, should refresh
-    const cacheAge = Date.now() - cache.timestamp;
-    return cacheAge > this.AUTO_REFRESH_INTERVAL && !cache.isRefreshing;
-  }
-
-  private static async refreshBalanceBackground(userSettings: { host: string; port: number; client_id: number }): Promise<void> {
-    try {
-      console.log('🔄 Starting background balance refresh...');
-      if (this.balanceCache) {
-        this.balanceCache.isRefreshing = true;
-      }
-
-      const freshBalance = await this.fetchAccountBalanceFresh(userSettings);
-      this.setCachedBalance(freshBalance);
-      LastUpdateService.updateIBPortfolioTime();
-      console.log('✅ Background balance refresh completed');
-    } catch (error) {
-      console.error('❌ Background balance refresh failed:', error);
-    } finally {
-      if (this.balanceCache) {
-        this.balanceCache.isRefreshing = false;
-      }
-    }
-  }
-
-  private static async refreshPortfolioBackground(userSettings: { host: string; port: number; client_id: number }): Promise<void> {
-    try {
-      console.log('🔄 Starting background portfolio refresh...');
-      if (this.portfolioCache) {
-        this.portfolioCache.isRefreshing = true;
-      }
-
-      const freshPortfolio = await this.fetchPortfolioFresh(userSettings);
-      this.setCachedPortfolio(freshPortfolio);
-      LastUpdateService.updateIBPortfolioTime();
-      console.log('✅ Background portfolio refresh completed');
-    } catch (error) {
-      console.error('❌ Background portfolio refresh failed:', error);
-    } finally {
-      if (this.portfolioCache) {
-        this.portfolioCache.isRefreshing = false;
-      }
-    }
-  }
-
-  private static getCachedBalance(): AccountSummary | null {
-    console.log('getCachedBalance called');
-
-    // Load from file if not in memory
-    if (!this.balanceCache) {
-      console.log('Memory cache empty, trying to load from file:', this.BALANCE_CACHE_FILE);
-      this.balanceCache = this.loadCacheFromFile<AccountSummary>(this.BALANCE_CACHE_FILE);
-    }
-
-    // Always return cached data if available (never remove cache)
-    if (this.balanceCache) {
-      const cacheAge = Date.now() - this.balanceCache.timestamp;
-      console.log(`Returning cached balance (age: ${Math.round(cacheAge / 1000 / 60)} minutes)`);
-      return this.balanceCache.data;
-    }
-
-    console.log('No cached balance found');
-    return null;
-  }
-
-  private static setCachedBalance(data: AccountSummary): void {
-    this.balanceCache = {
-      data,
-      timestamp: Date.now(),
-      isRefreshing: false
-    };
-    // Save to file for persistence
-    this.saveCacheToFile(this.BALANCE_CACHE_FILE, this.balanceCache);
-    console.log('Account balance cached in memory and file');
-  }
-
-  private static getCachedPortfolio(): PortfolioPosition[] | null {
-    console.log('getCachedPortfolio called');
-
-    // Always return cached data if available (never remove cache)
-    if (this.portfolioCache) {
-      const cacheAge = Date.now() - this.portfolioCache.timestamp;
-      console.log(`Returning cached portfolio (age: ${Math.round(cacheAge / 1000 / 60)} minutes)`);
-      return this.portfolioCache.data;
-    }
-
-    console.log('No cached portfolio found in memory');
-    return null;
-  }
-
-  private static setCachedPortfolio(data: PortfolioPosition[]): void {
-    this.portfolioCache = {
-      data,
-      timestamp: Date.now(),
-      isRefreshing: false
-    };
-    console.log('Portfolio cached in memory');
-  }
-
-  private static getCachedCash(): CashBalance[] | null {
-    console.log('getCachedCash called');
-
-    // Load from file if not in memory
-    if (!this.cashCache) {
-      console.log('Memory cache empty, trying to load from file:', this.CASH_CACHE_FILE);
-      this.cashCache = this.loadCacheFromFile<CashBalance[]>(this.CASH_CACHE_FILE);
-    }
-
-    // Always return cached data if available
-    if (this.cashCache) {
-      const cacheAge = Date.now() - this.cashCache.timestamp;
-      console.log(`Returning cached cash balances (age: ${Math.round(cacheAge / 1000 / 60)} minutes)`);
-      return this.cashCache.data;
-    }
-
-    console.log('No cached cash balances found');
-    return null;
-  }
-
-  private static setCachedCash(data: CashBalance[]): void {
-    this.cashCache = {
-      data,
-      timestamp: Date.now(),
-      isRefreshing: false
-    };
-    // Save to file for persistence
-    this.saveCacheToFile(this.CASH_CACHE_FILE, this.cashCache);
-    console.log('Cash balances cached in memory and file');
   }
 
   // Persist IB portfolio to DB (source = 'IB') for a given main account
@@ -625,37 +462,72 @@ export class IBService {
     }
   }
 
-  // Public method with caching (requires user settings)
-  static async getAccountBalance(userSettings: { host: string; port: number; client_id: number }): Promise<AccountSummary> {
+  // Get account balance from database (accounts.current_balance)
+  static async getAccountBalance(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<AccountSummary> {
     console.log('🏦 getAccountBalance called');
 
-    // Return cached data if available (always return cache, never remove it)
-    const cached = this.getCachedBalance();
-    if (cached) {
-      console.log('✅ Using cached balance data');
-      // Start background refresh if cache is older than 30 minutes
-      if (this.shouldAutoRefresh(this.balanceCache)) {
-        console.log('Starting background refresh for account balance (30+ minutes old)');
-        this.refreshBalanceBackground(userSettings).catch(console.error);
-      }
-      return cached;
+    const mainAccountId = userSettings.target_account_id;
+    if (!mainAccountId) {
+      throw new Error('target_account_id is required to get account balance');
     }
 
-    // No cache available, fetch fresh data and save to cache
-    console.log('❌ No cached balance available, fetching fresh data');
-    const freshData = await this.fetchAccountBalanceFresh(userSettings);
-    this.setCachedBalance(freshData);
-    return freshData;
+    try {
+      const { dbGet } = await import('../database/connection.js');
+      const account = await dbGet(`
+        SELECT current_balance, currency 
+        FROM accounts 
+        WHERE id = ?
+      `, [mainAccountId]);
+
+      if (!account) {
+        throw new Error(`Account not found: ${mainAccountId}`);
+      }
+
+      console.log(`📊 Retrieved account balance from database: ${account.current_balance} ${account.currency || 'USD'}`);
+
+      return {
+        balance: account.current_balance || 0,
+        currency: account.currency || 'USD',
+        netLiquidation: account.current_balance || 0
+      };
+    } catch (error) {
+      console.error('❌ Failed to get account balance from database:', error);
+      throw error;
+    }
   }
 
 
 
-  // Force refresh method (for manual refresh button)
-  static async forceRefreshAccountBalance(userSettings?: { host: string; port: number; client_id: number }): Promise<AccountSummary> {
-    console.log('Force refreshing account balance');
+  // Force refresh account balance from IB and update database
+  static async forceRefreshAccountBalance(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<AccountSummary> {
+    console.log('🔄 Force refreshing account balance from IB...');
+    
+    const mainAccountId = userSettings.target_account_id;
+    if (!mainAccountId) {
+      throw new Error('target_account_id is required to refresh account balance');
+    }
+
+    // Fetch fresh data from IB
     const freshData = await this.fetchAccountBalanceFresh(userSettings);
-    this.setCachedBalance(freshData);
-    LastUpdateService.updateIBPortfolioTime();
+    
+    // Update database
+    try {
+      const { dbRun } = await import('../database/connection.js');
+      await dbRun(`
+        UPDATE accounts 
+        SET current_balance = ?, currency = ?, last_updated = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `, [freshData.balance, freshData.currency, mainAccountId]);
+
+      // Update last refresh time
+      await this.updateLastRefreshTime(mainAccountId, 'IB_BALANCE');
+      
+      console.log(`💾 Updated account balance in database: ${freshData.balance} ${freshData.currency}`);
+    } catch (error) {
+      console.error('❌ Failed to update account balance in database:', error);
+      throw error;
+    }
+
     return freshData;
   }
 
@@ -1108,48 +980,32 @@ export class IBService {
     });
   }
 
-  // Public method with caching (requires user settings)
+  // Get portfolio from database (portfolios table)
   static async getPortfolio(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<PortfolioPosition[]> {
     console.log('📈 getPortfolio called');
 
-    // Return cached data if available
-    const cached = this.getCachedPortfolio();
-    if (cached) {
-      console.log('✅ Using cached portfolio data (memory)');
-      if (this.shouldAutoRefresh(this.portfolioCache)) {
-        console.log('Starting background refresh for portfolio (30+ minutes old)');
-        this.refreshPortfolioBackground(userSettings as any).catch(console.error);
-      }
-      return cached;
+    const mainAccountId = userSettings.target_account_id;
+    if (!mainAccountId) {
+      throw new Error('target_account_id is required to get portfolio');
     }
 
-    // Attempt to load from DB first (primary persistence)
-    const mainAccountId = (userSettings as any)?.target_account_id ?? null;
+    // Always load from database
     const dbData = await this.loadPortfolioFromDB(mainAccountId);
-    if (dbData.length > 0) {
-      this.setCachedPortfolio(dbData);
-      console.log('✅ Using portfolio data from DB');
-      // Background refresh if DB data is stale
-      if (this.shouldAutoRefresh(this.portfolioCache)) {
-        console.log('Starting background refresh for portfolio (DB data considered stale by policy)');
-        this.refreshPortfolioBackground(userSettings as any).catch(console.error);
-      }
-      return dbData;
-    }
-
-    // No DB data, fetch fresh from IB, persist to DB, and cache in memory
-    console.log('❌ No DB portfolio available, fetching fresh data from IB');
-    const freshData = await this.fetchPortfolioFresh(userSettings as any);
-    this.setCachedPortfolio(freshData);
-    return freshData;
+    console.log(`📊 Retrieved ${dbData.length} portfolio positions from database`);
+    return dbData;
   }
 
 
 
-  // Force refresh method (for manual refresh button)
-  static async forceRefreshPortfolio(userSettings?: { host: string; port: number; client_id: number }): Promise<PortfolioPosition[]> {
-    console.log('📊 Force refreshing portfolio...');
+  // Force refresh portfolio from IB and update database
+  static async forceRefreshPortfolio(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<PortfolioPosition[]> {
+    console.log('📊 Force refreshing portfolio from IB...');
     const refreshStartTime = Date.now();
+
+    const mainAccountId = userSettings.target_account_id;
+    if (!mainAccountId) {
+      throw new Error('target_account_id is required to refresh portfolio');
+    }
 
     // Clear failed bonds cache on manual refresh to retry them
     if (this.failedBondSymbols.size > 0) {
@@ -1157,9 +1013,11 @@ export class IBService {
       this.failedBondSymbols.clear();
     }
 
+    // Fetch fresh data from IB (this will automatically save to database)
     const freshData = await this.fetchPortfolioFresh(userSettings);
-    this.setCachedPortfolio(freshData);
-    LastUpdateService.updateIBPortfolioTime();
+    
+    // Update last refresh time
+    await this.updateLastRefreshTime(mainAccountId, 'IB_PORTFOLIO');
 
     const refreshEndTime = Date.now();
     const totalDuration = refreshEndTime - refreshStartTime;
@@ -1429,11 +1287,13 @@ export class IBService {
               console.error('❌ Error persisting IB portfolio to DB:', e);
             }
 
-            // Update in-memory cache
-            this.setCachedPortfolio(enrichedPositions);
-
             console.log(`💰 Captured ${this.cashBalances.length} cash positions:`, this.cashBalances);
-            this.setCachedCash(this.cashBalances);
+            
+            // Save cash balances to database
+            if (typeof (mainAccountId) === 'number') {
+              const enrichedCashBalances = await this.enrichCashBalancesWithUSD(this.cashBalances);
+              await this.saveCashBalancesToDB(mainAccountId, enrichedCashBalances);
+            }
 
             cleanup();
             resolve(enrichedPositions);
@@ -1452,7 +1312,7 @@ export class IBService {
     }
   }
 
-  // Combined method for frontend (returns cached data immediately, refreshes in background)
+  // Combined method for frontend (returns data from database)
   static async getAccountData(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
     const [balance, portfolio] = await Promise.all([
       this.getAccountBalance(userSettings),
@@ -1462,9 +1322,9 @@ export class IBService {
     return { balance, portfolio };
   }
 
-  // Force refresh both balance and portfolio
-  static async forceRefreshAll(userSettings: { host: string; port: number; client_id: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
-    console.log('Force refreshing all account data');
+  // Force refresh both balance and portfolio from IB and update database
+  static async forceRefreshAll(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
+    console.log('🔄 Force refreshing all account data from IB...');
 
     const [balance, portfolio] = await Promise.all([
       this.forceRefreshAccountBalance(userSettings),
@@ -1474,81 +1334,75 @@ export class IBService {
     return { balance, portfolio };
   }
 
-  // Get cache status for debugging
-  static getCacheStatus(): { balance: string; portfolio: string; cash: string } {
-    const balanceAge = this.balanceCache ? Date.now() - this.balanceCache.timestamp : null;
-    const portfolioAge = this.portfolioCache ? Date.now() - this.portfolioCache.timestamp : null;
-    const cashAge = this.cashCache ? Date.now() - this.cashCache.timestamp : null;
+  // Get last refresh status from database
+  static async getRefreshStatus(mainAccountId: number): Promise<{ balance: string; portfolio: string; cash: string }> {
+    const [balanceTime, portfolioTime, cashTime] = await Promise.all([
+      this.getLastRefreshTime(mainAccountId, 'IB_BALANCE'),
+      this.getLastRefreshTime(mainAccountId, 'IB_PORTFOLIO'),
+      this.getLastRefreshTime(mainAccountId, 'IB_CASH')
+    ]);
+
+    const formatTime = (time: Date | null): string => {
+      if (!time) return 'Never refreshed';
+      const ageMs = Date.now() - time.getTime();
+      const ageMinutes = Math.round(ageMs / 1000 / 60);
+      return `${ageMinutes} minutes ago`;
+    };
 
     return {
-      balance: balanceAge ? `${Math.round(balanceAge / 1000)}s old` : 'No cache',
-      portfolio: portfolioAge ? `${Math.round(portfolioAge / 1000)}s old` : 'No cache',
-      cash: cashAge ? `${Math.round(cashAge / 1000)}s old` : 'No cache'
+      balance: formatTime(balanceTime),
+      portfolio: formatTime(portfolioTime),
+      cash: formatTime(cashTime)
     };
   }
 
-  // Get balance timestamp
-  static getBalanceTimestamp(): number | null {
-    return this.balanceCache ? this.balanceCache.timestamp : null;
+  // Get balance timestamp from database
+  static async getBalanceTimestamp(mainAccountId: number): Promise<number | null> {
+    const time = await this.getLastRefreshTime(mainAccountId, 'IB_BALANCE');
+    return time ? time.getTime() : null;
   }
 
-  // Get portfolio timestamp
-  static getPortfolioTimestamp(): number | null {
-    return this.portfolioCache ? this.portfolioCache.timestamp : null;
+  // Get portfolio timestamp from database
+  static async getPortfolioTimestamp(mainAccountId: number): Promise<number | null> {
+    const time = await this.getLastRefreshTime(mainAccountId, 'IB_PORTFOLIO');
+    return time ? time.getTime() : null;
   }
 
-  // Get cash balances (from database first, then cache)
+  // Get cash balances from database (cash_balances table)
   static async getCashBalances(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<CashBalance[]> {
     console.log('💰 getCashBalances called');
 
-    // Try to load from database first
-    const mainAccountId = userSettings.target_account_id ?? null;
+    const mainAccountId = userSettings.target_account_id;
+    if (!mainAccountId) {
+      throw new Error('target_account_id is required to get cash balances');
+    }
+
+    // Always load from database
     const dbData = await this.loadCashBalancesFromDB(mainAccountId);
-    if (dbData.length > 0) {
-      console.log('✅ Using cash balances from database');
-      this.setCachedCash(dbData);
-      return dbData;
-    }
-
-    // Return cached data if available
-    const cached = this.getCachedCash();
-    if (cached) {
-      console.log('✅ Using cached cash balance data');
-      return cached;
-    }
-
-    // No database or cache data available, fetch fresh data
-    console.log('❌ No cached cash balance available, fetching fresh data');
-    const freshData = await this.fetchCashBalancesUsingAccountSummary(userSettings);
-
-    // Calculate USD values and save to database
-    const enrichedData = await this.enrichCashBalancesWithUSD(freshData);
-
-    if (mainAccountId) {
-      await this.saveCashBalancesToDB(mainAccountId, enrichedData);
-    }
-
-    this.setCachedCash(enrichedData);
-    return enrichedData;
+    console.log(`💰 Retrieved ${dbData.length} cash balances from database`);
+    return dbData;
   }
 
-  // Force refresh cash balances
+  // Force refresh cash balances from IB and update database
   static async forceRefreshCashBalances(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<CashBalance[]> {
-    console.log('💰 Force refreshing cash balances...');
+    console.log('💰 Force refreshing cash balances from IB...');
 
+    const mainAccountId = userSettings.target_account_id;
+    if (!mainAccountId) {
+      throw new Error('target_account_id is required to refresh cash balances');
+    }
+
+    // Fetch fresh data from IB
     const freshData = await this.fetchCashBalancesUsingAccountSummary(userSettings);
 
     // Calculate USD values and save to database
     const enrichedData = await this.enrichCashBalancesWithUSD(freshData);
+    await this.saveCashBalancesToDB(mainAccountId, enrichedData);
 
-    const mainAccountId = userSettings.target_account_id ?? null;
-    if (mainAccountId) {
-      await this.saveCashBalancesToDB(mainAccountId, enrichedData);
-    }
+    // Update last refresh time
+    await this.updateLastRefreshTime(mainAccountId, 'IB_CASH');
 
-    this.setCachedCash(enrichedData);
-    LastUpdateService.updateIBPortfolioTime();
-
+    console.log(`💰 Refreshed ${enrichedData.length} cash balances from IB`);
     return enrichedData;
   }
 
@@ -1580,9 +1434,10 @@ export class IBService {
     return enrichedBalances;
   }
 
-  // Get cash timestamp
-  static getCashTimestamp(): number | null {
-    return this.cashCache ? this.cashCache.timestamp : null;
+  // Get cash timestamp from database
+  static async getCashTimestamp(mainAccountId: number): Promise<number | null> {
+    const time = await this.getLastRefreshTime(mainAccountId, 'IB_CASH');
+    return time ? time.getTime() : null;
   }
 
   // Save cash balances to database
@@ -1915,32 +1770,45 @@ export class IBService {
     }
   }
 
-  // Get cache statistics for reporting
-  static getCacheStats(): {
-    balance: { hasCache: boolean; timestamp: number | null; ageMinutes: number | null; isRefreshing: boolean };
-    portfolio: { hasCache: boolean; timestamp: number | null; ageMinutes: number | null; isRefreshing: boolean };
-    cash: { hasCache: boolean; timestamp: number | null; ageMinutes: number | null; isRefreshing: boolean };
-  } {
+  // Get database statistics for reporting
+  static async getDataStats(mainAccountId: number): Promise<{
+    balance: { hasData: boolean; timestamp: number | null; ageMinutes: number | null };
+    portfolio: { hasData: boolean; timestamp: number | null; ageMinutes: number | null; count: number };
+    cash: { hasData: boolean; timestamp: number | null; ageMinutes: number | null; count: number };
+  }> {
     const now = Date.now();
+
+    const [balanceTime, portfolioTime, cashTime] = await Promise.all([
+      this.getLastRefreshTime(mainAccountId, 'IB_BALANCE'),
+      this.getLastRefreshTime(mainAccountId, 'IB_PORTFOLIO'),
+      this.getLastRefreshTime(mainAccountId, 'IB_CASH')
+    ]);
+
+    // Get data counts
+    const { dbGet, dbAll } = await import('../database/connection.js');
+    const [accountData, portfolioData, cashData] = await Promise.all([
+      dbGet('SELECT current_balance FROM accounts WHERE id = ?', [mainAccountId]),
+      dbAll('SELECT COUNT(*) as count FROM portfolios WHERE main_account_id = ? AND source = ?', [mainAccountId, 'IB']),
+      dbAll('SELECT COUNT(*) as count FROM cash_balances WHERE main_account_id = ? AND source = ?', [mainAccountId, 'IB'])
+    ]);
 
     return {
       balance: {
-        hasCache: !!this.balanceCache,
-        timestamp: this.balanceCache?.timestamp || null,
-        ageMinutes: this.balanceCache ? Math.round((now - this.balanceCache.timestamp) / 1000 / 60) : null,
-        isRefreshing: this.balanceCache?.isRefreshing || false
+        hasData: !!accountData,
+        timestamp: balanceTime ? balanceTime.getTime() : null,
+        ageMinutes: balanceTime ? Math.round((now - balanceTime.getTime()) / 1000 / 60) : null
       },
       portfolio: {
-        hasCache: !!this.portfolioCache,
-        timestamp: this.portfolioCache?.timestamp || null,
-        ageMinutes: this.portfolioCache ? Math.round((now - this.portfolioCache.timestamp) / 1000 / 60) : null,
-        isRefreshing: this.portfolioCache?.isRefreshing || false
+        hasData: portfolioData.length > 0 && portfolioData[0].count > 0,
+        timestamp: portfolioTime ? portfolioTime.getTime() : null,
+        ageMinutes: portfolioTime ? Math.round((now - portfolioTime.getTime()) / 1000 / 60) : null,
+        count: portfolioData.length > 0 ? portfolioData[0].count : 0
       },
       cash: {
-        hasCache: !!this.cashCache,
-        timestamp: this.cashCache?.timestamp || null,
-        ageMinutes: this.cashCache ? Math.round((now - this.cashCache.timestamp) / 1000 / 60) : null,
-        isRefreshing: this.cashCache?.isRefreshing || false
+        hasData: cashData.length > 0 && cashData[0].count > 0,
+        timestamp: cashTime ? cashTime.getTime() : null,
+        ageMinutes: cashTime ? Math.round((now - cashTime.getTime()) / 1000 / 60) : null,
+        count: cashData.length > 0 ? cashData[0].count : 0
       }
     };
   }

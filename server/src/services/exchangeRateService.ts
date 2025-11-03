@@ -277,7 +277,7 @@ export class ExchangeRateService {
       }
 
       console.log(`Updated ${pairs.length} currency pairs with Yahoo Finance data`);
-      LastUpdateService.updateCurrencyTime();
+      await LastUpdateService.updateCurrencyTime();
     } catch (error) {
       console.error('Error updating currency pairs:', error);
       throw error;

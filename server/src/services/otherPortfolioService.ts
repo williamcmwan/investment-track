@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import * as path from 'path';
 import * as fs from 'fs';
-import { YahooFinanceService, MarketData } from './yahooFinanceService';
+import { YahooFinanceService, MarketData } from './yahooFinanceService.js';
 import { LastUpdateService } from './lastUpdateService.js';
 
 
@@ -516,7 +516,8 @@ export class OtherPortfolioService {
     
     // Update last refresh time
     this.lastRefreshTime = Date.now();
-    LastUpdateService.updateManualInvestmentsTime();
+    // Note: Manual investment update times are now tracked per-account
+    // This will need to be updated when we have proper account context
     
     console.log(`✅ Updated market data: ${updated} successful, ${failed} failed in ${duration}ms`);
     return { updated, failed };

@@ -1,5 +1,5 @@
 import express from 'express';
-import { OtherPortfolioService } from '../services/otherPortfolioService';
+import { OtherPortfolioService } from '../services/otherPortfolioService.js';
 
 const router = express.Router();
 
@@ -270,7 +270,7 @@ router.get('/refresh-status', async (req, res) => {
 router.get('/all-last-updates', async (req, res) => {
   try {
     const { LastUpdateService } = await import('../services/lastUpdateService.js');
-    const allUpdates = LastUpdateService.getAllLastUpdateTimes();
+    const allUpdates = await LastUpdateService.getAllLastUpdateTimes();
     
     res.json({
       ...allUpdates,
