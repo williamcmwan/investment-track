@@ -17,7 +17,8 @@ import {
   ArrowDownRight,
   ArrowLeftRight,
   Trash2,
-  Loader2
+  Loader2,
+  RefreshCw
 } from "lucide-react";
 
 interface CurrencyPair {
@@ -40,6 +41,7 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingCurrency, setEditingCurrency] = useState<CurrencyPair | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshingRates, setIsRefreshingRates] = useState(false);
   const [popularPairs, setPopularPairs] = useState<string[]>([]);
   const [lastUpdateTime, setLastUpdateTime] = useState<string | null>(null);
   const { toast } = useToast();
@@ -67,7 +69,7 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
   const loadCurrencies = async () => {
     try {
       setIsLoading(true);
-      const response = await apiClient.getCurrencyPairs(true);
+      const response = await apiClient.getCurrencyPairs(false);
       if (response.data) {
         setCurrencies(response.data);
       } else {
@@ -137,7 +139,6 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
         });
         handleDialogClose();
         loadCurrencies(); // Reload the list
-        loadLastUpdateTime(); // Reload last update time
       } else {
         toast({
           title: "Error",
@@ -331,6 +332,37 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
     }
   };
 
+  const handleRefreshMarketData = async () => {
+    try {
+      setIsRefreshingRates(true);
+      const response = await apiClient.updateEnhancedExchangeRates();
+      if (response.data) {
+        toast({
+          title: "Success",
+          description: "Market data refreshed successfully",
+        });
+        // Reload currencies and last update time after refresh
+        await loadCurrencies();
+        await loadLastUpdateTime();
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to refresh market data",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error refreshing market data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh market data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshingRates(false);
+    }
+  };
+
   if (isLoading && currencies.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -344,13 +376,14 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
     <div className="flex flex-col items-start gap-1">
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogTrigger asChild>
-          <Button className="bg-gradient-primary hover:opacity-90 transition-smooth">
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Add Currency Pair
-          </Button>
-        </DialogTrigger>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-gradient-primary hover:opacity-90 transition-smooth">
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Add Currency Pair
+            </Button>
+          </DialogTrigger>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
           <DialogTitle className="text-foreground">Add Currency Exchange</DialogTitle>
@@ -413,9 +446,28 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+        <Button 
+          variant="outline" 
+          onClick={handleRefreshMarketData}
+          disabled={isRefreshingRates}
+          className="border-primary text-primary hover:bg-primary/10"
+        >
+          {isRefreshingRates ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          Refresh Market Data
+        </Button>
+      </div>
       {lastUpdateTime && (
         <p className="text-xs text-muted-foreground">
           Last updated: {new Date(lastUpdateTime).toLocaleString()}
+        </p>
+      )}
+      {!lastUpdateTime && (
+        <p className="text-xs text-muted-foreground">
+          Last updated: Never
         </p>
       )}
     </div>

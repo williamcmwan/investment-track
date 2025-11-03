@@ -91,7 +91,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await apiClient.getCurrencyPairs(true);
+      const response = await apiClient.getCurrencyPairs(false);
       if (response.data) {
         setCurrencyPairs(response.data);
       } else {

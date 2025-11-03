@@ -18,7 +18,6 @@ import {
   ArrowDownRight,
   Wallet,
   ArrowLeftRight,
-  RefreshCw,
   Zap,
   PiggyBank,
   Landmark,
@@ -76,7 +75,6 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     return savedView || "overview";
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [isRefreshingRates, setIsRefreshingRates] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
@@ -160,12 +158,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     }
   }, [accounts, ibPortfolio, ibCashBalances, otherPortfolio, otherCashBalances, otherAssets, baseCurrency, user]);
 
-  // Auto-refresh rates silently when overview page is visited
-  useEffect(() => {
-    if (currentView === "overview") {
-      handleEnhancedRefreshRates();
-    }
-  }, [currentView]);
+  // Removed auto-refresh functionality - users can manually refresh from Currency Exchange page
 
   // Load performance history function
   const loadPerformanceHistory = async () => {
@@ -350,7 +343,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Load currencies data
   const loadCurrencies = async () => {
     try {
-      const response = await apiClient.getCurrencyPairs(true);
+      const response = await apiClient.getCurrencyPairs(false);
       if (response.data) {
         setCurrencies(response.data);
       } else {
@@ -585,23 +578,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     };
   };
 
-  // Function to refresh with enhanced accuracy (multiple sources) - silent
-  const handleEnhancedRefreshRates = async () => {
-    try {
-      setIsRefreshingRates(true);
-      const response = await apiClient.updateEnhancedExchangeRates();
-      if (response.data) {
-        // Silent update - no toast notification
-        console.log('Enhanced exchange rates updated silently');
-      } else {
-        console.error('Failed to update enhanced exchange rates:', response.error);
-      }
-    } catch (error) {
-      console.error('Error updating enhanced rates:', error);
-    } finally {
-      setIsRefreshingRates(false);
-    }
-  };
+  // Removed handleEnhancedRefreshRates function - refresh functionality moved to Currency Exchange page
 
   const formatCurrency = (amount: number, currency = baseCurrency) => {
     return new Intl.NumberFormat("en-HK", {
