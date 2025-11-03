@@ -854,7 +854,7 @@ export class IBService {
 
       const detailsHandler = (reqId_: number, contractDetails: any) => {
         if (reqId_ === reqId) {
-          console.log('📋 Raw contractDetails received from IB:', JSON.stringify(contractDetails, null, 2));
+          console.log('📋 Contract details received from IB for symbol:', contractDetails?.contract?.symbol || 'unknown');
           contractDetailsData = contractDetails;
         }
       };
@@ -1236,21 +1236,11 @@ export class IBService {
           accountName?: string
         ) => {
           // Log all contracts to debug cash positions
-          console.log('Portfolio contract received:', {
-            symbol: contract.symbol,
-            secType: contract.secType,
-            currency: contract.currency,
-            position: position,
-            marketValue: marketValue
-          });
+          console.log('📊 Portfolio contract received:', contract.symbol, contract.secType);
 
           // Handle cash positions separately
           if (contract.secType === 'CASH') {
-            console.log('💰 Found cash position:', {
-              currency: contract.symbol || contract.currency || 'USD',
-              amount: position,
-              marketValueHKD: marketValue
-            });
+            console.log('💰 Found cash position:', contract.symbol || contract.currency || 'USD', 'amount:', position);
             this.cashBalances.push({
               currency: contract.symbol || contract.currency || 'USD',
               amount: position,
@@ -1260,14 +1250,7 @@ export class IBService {
           }
 
           // Log contract details to see what's available
-          console.log('Portfolio contract:', {
-            symbol: contract.symbol,
-            secType: contract.secType,
-            exchange: contract.exchange,
-            primaryExch: contract.primaryExch,
-            currency: contract.currency,
-            conId: contract.conId
-          });
+          console.log('📊 Processing contract:', contract.symbol, contract.secType);
 
           this.portfolioPositions.push({
             symbol: contract.symbol || '',
@@ -1867,12 +1850,7 @@ export class IBService {
         ) => {
           // Only capture cash positions
           if (contract.secType === 'CASH') {
-            console.log('💰 Found cash position via portfolio:', {
-              symbol: contract.symbol,
-              currency: contract.currency,
-              position: position,
-              marketValue: marketValue
-            });
+            console.log('💰 Found cash position:', contract.symbol, contract.currency);
 
             cashBalances.push({
               currency: contract.symbol || contract.currency || 'USD',

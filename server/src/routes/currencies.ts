@@ -79,10 +79,10 @@ router.get('/public-rate/:pair', async (req, res) => {
 router.use(authenticateToken);
 
 // Update all currency pairs with enhanced exchange rates (multiple sources)
-router.post('/update-rates-enhanced', async (req: AuthenticatedRequest, res) => {
+router.post('/update-rates-enhanced', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user?.id || 0;
-    await ExchangeRateService.updateAllCurrencyPairs(userId);
+    await ExchangeRateService.updateAllCurrencyPairs(userId, true); // Force refresh for manual updates
     
     // Recalculate today's performance snapshot after currency update
     try {
@@ -120,7 +120,7 @@ const updateCurrencyPairSchema = z.object({
 });
 
 // Get all currency pairs for user
-router.get('/', async (req: AuthenticatedRequest, res) => {
+router.get('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user?.id || 0;
     const refresh = (req.query.refresh === '1' || req.query.refresh === 'true');
@@ -128,7 +128,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     // If refresh requested, update all pairs first (multi-source enhanced accuracy)
     if (refresh) {
       try {
-        await ExchangeRateService.updateAllCurrencyPairs(userId);
+        await ExchangeRateService.updateAllCurrencyPairs(userId, true); // Force refresh when explicitly requested
       } catch (e) {
         console.warn('Currency refresh failed, returning cached pairs instead');
       }
@@ -143,7 +143,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
 });
 
 // Get specific currency pair
-router.get('/:id', async (req: AuthenticatedRequest, res) => {
+router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const pairId = parseInt(req.params.id || '0');
     if (isNaN(pairId)) {
@@ -163,7 +163,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
 });
 
 // Create new currency pair
-router.post('/', async (req: AuthenticatedRequest, res) => {
+router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const validatedData = createCurrencyPairSchema.parse(req.body);
     
@@ -202,7 +202,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
 });
 
 // Update currency pair
-router.put('/:id', async (req: AuthenticatedRequest, res) => {
+router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const pairId = parseInt(req.params.id || '0');
     if (isNaN(pairId)) {
@@ -237,7 +237,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res) => {
 });
 
 // Delete currency pair
-router.delete('/:id', async (req: AuthenticatedRequest, res) => {
+router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const pairId = parseInt(req.params.id || '0');
     if (isNaN(pairId)) {
@@ -266,10 +266,10 @@ router.delete('/:id', async (req: AuthenticatedRequest, res) => {
 });
 
 // Update all currency pairs with latest exchange rates
-router.post('/update-rates', async (req: AuthenticatedRequest, res) => {
+router.post('/update-rates', authenticateToken, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user?.id || 0;
-    await ExchangeRateService.updateAllCurrencyPairs(userId);
+    await ExchangeRateService.updateAllCurrencyPairs(userId, true); // Force refresh for manual updates
     
     // Recalculate today's performance snapshot after currency update
     try {

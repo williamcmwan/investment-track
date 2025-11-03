@@ -341,8 +341,14 @@ const CurrencyView = ({ baseCurrency }: CurrencyViewProps) => {
           title: "Success",
           description: "Market data refreshed successfully",
         });
-        // Reload currencies and last update time after refresh
-        await loadCurrencies();
+        // Use the updated pairs returned from the API instead of reloading
+        if (response.data.pairs) {
+          setCurrencies(response.data.pairs);
+        } else {
+          console.warn('No pairs in response, falling back to reload');
+          await loadCurrencies();
+        }
+        // Reload last update time to show the new timestamp
         await loadLastUpdateTime();
       } else {
         toast({

@@ -64,8 +64,10 @@ app.use(cors(corsOptions));
 // });
 // app.use(limiter);
 
-// Logging
-app.use(morgan('combined'));
+// Logging - only in development
+if (process.env.NODE_ENV !== 'production') {
+  app.use(morgan('dev'));
+}
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));

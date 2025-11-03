@@ -22,7 +22,8 @@ import {
   PiggyBank,
   Landmark,
   Building,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  RefreshCw
 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
@@ -371,7 +372,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Load IB portfolio data
   const loadIBPortfolio = async () => {
     try {
-      const response = await apiClient.forceRefreshIBPortfolio();
+      const response = await apiClient.getIBPortfolio();
       if (response.data) {
         setIbPortfolio(response.data);
       } else {
@@ -387,7 +388,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Load IB cash balances data
   const loadIBCashBalances = async () => {
     try {
-      const response = await apiClient.forceRefreshIBCashBalances();
+      const response = await apiClient.getIBCashBalances();
       if (response.data && response.data.data) {
         setIbCashBalances(response.data.data);
       } else {
@@ -592,6 +593,81 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   };
 
   // Removed generatePerformanceHistoryOnTheFly function to prevent data override on refresh
+
+  // Comprehensive refresh function that updates all data sources
+  const handleComprehensiveRefresh = async () => {
+    try {
+      setIsLoadingPerformance(true);
+      
+      toast({
+        title: "Refreshing Data",
+        description: "Updating all portfolio data sources...",
+      });
+
+      // 1. Refresh Currency Exchange rates and pairs
+      try {
+        await apiClient.updateEnhancedExchangeRates();
+        await loadCurrencies();
+      } catch (error) {
+        console.warn('Failed to refresh currency data:', error);
+      }
+
+      // 2. Refresh IB Portfolio data
+      try {
+        await apiClient.forceRefreshIBBalance();
+        await apiClient.forceRefreshIBPortfolio();
+        await apiClient.forceRefreshIBCashBalances();
+        await loadIBPortfolio();
+        await loadIBCashBalances();
+      } catch (error) {
+        console.warn('Failed to refresh IB data:', error);
+      }
+
+      // 3. Refresh Other Portfolio data
+      try {
+        await apiClient.refreshManualMarketData('default');
+        await loadOtherPortfolio();
+        await loadOtherCashBalances();
+      } catch (error) {
+        console.warn('Failed to refresh other portfolio data:', error);
+      }
+
+      // 4. Refresh Other Assets data
+      try {
+        await loadOtherAssets();
+      } catch (error) {
+        console.warn('Failed to refresh other assets data:', error);
+      }
+
+      // 5. Refresh Accounts data (including IB account balance updates)
+      try {
+        await loadAccounts();
+      } catch (error) {
+        console.warn('Failed to refresh accounts data:', error);
+      }
+
+      // 6. Update exchange rates for currency conversion
+      await fetchExchangeRates();
+
+      // 7. Force server to compute today's snapshot and reload performance history
+      await handlePostAccountUpdate();
+
+      toast({
+        title: "Success",
+        description: "All portfolio data has been refreshed successfully",
+      });
+
+    } catch (error) {
+      console.error('Comprehensive refresh error:', error);
+      toast({
+        title: "Refresh Warning",
+        description: "Some data sources may not have updated completely. Please check individual sections if needed.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingPerformance(false);
+    }
+  };
 
   const renderOverview = () => {
     const summaryData = calculateSummaryData();
@@ -1101,6 +1177,20 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
             <CardTitle className="text-sm md:text-base text-foreground">Performance Overview</CardTitle>
             <div className="flex items-center gap-2 ml-auto">
               <CardDescription className="text-xs md:text-sm hidden md:block">Profit & Loss trends over time</CardDescription>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-green-500 text-green-500 hover:bg-green-500/10"
+                onClick={handleComprehensiveRefresh}
+                disabled={isLoadingPerformance}
+              >
+                {isLoadingPerformance ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Refresh
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

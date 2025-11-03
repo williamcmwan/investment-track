@@ -156,7 +156,12 @@ export class ExchangeRateService {
 
       // Check cache first
       const cached = await this.getCachedRate(fromCurrency, toCurrency);
-      if (cached && this.isCacheValid(cached.timestamp) && !this.shouldForceUpdate(cached.timestamp)) {
+      
+      // If no cached rate exists, or cache is invalid, or should force update, fetch fresh rate
+      if (!cached || !this.isCacheValid(cached.timestamp) || this.shouldForceUpdate(cached.timestamp)) {
+        console.log(`${!cached ? 'No cached rate found' : 'Cache expired'} for ${fromCurrency}/${toCurrency}, fetching fresh rate...`);
+      } else {
+        // Use cached rate if valid
         return cached.rate;
       }
 
@@ -221,7 +226,7 @@ export class ExchangeRateService {
   /**
    * Update all currency pairs with latest rates using Yahoo Finance
    */
-  static async updateAllCurrencyPairs(userId: number): Promise<void> {
+  static async updateAllCurrencyPairs(userId: number, forceRefresh: boolean = false): Promise<void> {
     try {
       console.log(`Updating currency pairs for user ${userId} with Yahoo Finance...`);
       
@@ -249,8 +254,15 @@ export class ExchangeRateService {
           newRate = 1;
         } else {
           try {
-            // Use the getExchangeRate method which handles Yahoo Finance + fallbacks
-            newRate = await this.getExchangeRate(fromCurrency, toCurrency);
+            if (forceRefresh) {
+              // Force refresh: bypass cache and fetch directly from Yahoo Finance
+              newRate = await this.fetchYahooFinanceRate(fromCurrency, toCurrency);
+              // Update the cache with the fresh rate
+              await this.cacheRate(fromCurrency, toCurrency, newRate);
+            } else {
+              // Use the getExchangeRate method which handles caching + fallbacks
+              newRate = await this.getExchangeRate(fromCurrency, toCurrency);
+            }
           } catch (error) {
             console.warn(`Failed to update rate for ${pair.pair}, keeping current rate:`, error);
             newRate = pair.currentRate; // Keep current rate if update fails

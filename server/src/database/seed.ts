@@ -1,44 +1,14 @@
 import { dbRun } from './connection.js';
-import { ExchangeRateService } from '../services/exchangeRateService.js';
 
 async function seed() {
   try {
     console.log('Starting database seeding...');
     
-    // Fetch real exchange rates from external APIs
-    console.log('Fetching real exchange rates...');
-    
-    const currencyPairs = [
-      'USD/HKD',
-      'EUR/HKD', 
-      'GBP/HKD',
-      'CAD/HKD',
-      'SGD/HKD',
-      'JPY/HKD'
-    ];
-    
-    for (const pair of currencyPairs) {
-      try {
-        const [fromCurrency, toCurrency] = pair.split('/');
-        if (!fromCurrency || !toCurrency) {
-          console.warn(`Invalid currency pair format: ${pair}`);
-          continue;
-        }
-        const rate = await ExchangeRateService.getExchangeRate(fromCurrency, toCurrency);
-        
-        await dbRun(
-          'INSERT OR REPLACE INTO exchange_rates (pair, rate) VALUES (?, ?)',
-          [pair, rate]
-        );
-        
-        console.log(`Seeded ${pair}: ${rate}`);
-      } catch (error) {
-        console.warn(`Failed to fetch rate for ${pair}, skipping...`);
-      }
-    }
+    // No longer seeding exchange rates - they will be fetched from Yahoo Finance when needed
+    console.log('Skipping exchange rate seeding - rates will be fetched from Yahoo Finance when needed');
     
     console.log('Database seeding completed successfully!');
-    console.log('Real exchange rates have been seeded.');
+    console.log('Exchange rates will be automatically fetched from Yahoo Finance when first requested.');
     
   } catch (error) {
     console.error('Seeding failed:', error);

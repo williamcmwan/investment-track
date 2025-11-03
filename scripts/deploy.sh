@@ -124,14 +124,23 @@ echo "🗄️ Setting up database..."
 # Run database migrations
 echo "🗄️ Running database migrations..."
 cd server
-npm run db:migrate
+npm run db:migrate > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "❌ Database migration failed!"
+    exit 1
+fi
 echo "✅ Database migrations completed"
 cd ..
 
 # Seed database
 echo "🌱 Seeding database..."
 cd server
-npm run db:seed
+npm run db:seed > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "❌ Database seeding failed!"
+    exit 1
+fi
+echo "✅ Database seeding completed"
 cd ..
 
 echo "✅ Deployment completed successfully!"
@@ -175,28 +184,7 @@ else
 fi
 
 echo ""
-echo "🌐 Application is now ready:"
-echo "   Application: http://localhost:3002"
-echo "   API: http://localhost:3002/api"
-echo "   Health Check: http://localhost:3002/health"
-echo "   Database: SQLite database created"
-echo "   Mode: Production (using built files)"
-echo ""
-echo "📊 Demo credentials:"
-echo "   Email: demo@example.com"
-echo "   Password: demo123"
-echo ""
-echo "📋 Post-deployment checklist:"
-echo "   ✅ Client built and served from server"
-echo "   ✅ Server running with tsx in production mode"
-echo "   ✅ Database migrations applied"
-echo "   ✅ Manual investment auto-refresh enabled"
-echo ""
-echo "⚠️  Remember to:"
-echo "   1. Update JWT_SECRET in server/.env"
-echo "   2. Configure proper CORS_ORIGIN for production"
-echo "   3. Configure proper database backups"
-echo "   4. Configure IB_HOST, IB_PORT, IB_CLIENT_ID in server/.env"
-echo ""
-echo "📊 Check application status: ./scripts/app.sh status"
-echo "📋 View logs: ./scripts/app.sh logs"
+echo "✅ Investment Tracker deployed successfully!"
+echo "🌐 Application: http://localhost:3002"
+echo "📊 Status: ./scripts/app.sh status"
+echo "📋 Logs: ./scripts/app.sh logs"

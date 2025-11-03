@@ -108,7 +108,7 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
         console.log('📊 Trying to load cached balance...');
         const balanceResponse = await apiClient.getIBBalance();
         if (balanceResponse.data) {
-          console.log('✅ Found cached balance:', balanceResponse.data);
+          console.log('✅ Found cached balance:', balanceResponse.data?.balance, balanceResponse.data?.currency);
           setAccountBalance(balanceResponse.data.balance);
           setNetLiquidation(balanceResponse.data.netLiquidation ?? null);
           setTotalCashValue(balanceResponse.data.totalCashValue ?? null);
@@ -127,7 +127,7 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
       try {
         console.log('📈 Trying to load cached portfolio...');
         const portfolioResponse = await apiClient.getIBPortfolio();
-        console.log('Portfolio response:', portfolioResponse);
+        console.log('📈 Portfolio response received with', portfolioResponse.data?.length || 0, 'positions');
 
         if (portfolioResponse.data && portfolioResponse.data.length > 0) {
           console.log('✅ Found cached portfolio with', portfolioResponse.data.length, 'positions');
@@ -163,18 +163,14 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
       try {
         console.log('💰 Trying to load cached cash balances...');
         const cashResponse = await apiClient.getIBCashBalances();
-        console.log('Cash response:', cashResponse);
+        console.log('💰 Cash response received with', cashResponse.data?.data?.length || 0, 'currencies');
 
         if (cashResponse.data && cashResponse.data.data && cashResponse.data.data.length > 0) {
           console.log('✅ Found cached cash balances with', cashResponse.data.data.length, 'currencies');
           setCashBalances(cashResponse.data.data);
         } else {
           console.log('❌ No cached cash balance data or empty array');
-          console.log('Cash response structure:', {
-            hasData: !!cashResponse.data,
-            dataStructure: cashResponse.data ? Object.keys(cashResponse.data) : 'no data',
-            error: cashResponse.error
-          });
+          console.log('💰 Cash response structure: hasData =', !!cashResponse.data, ', error =', cashResponse.error || 'none');
         }
       } catch (error) {
         console.log('❌ Error loading cached cash balances:', error);
@@ -221,8 +217,8 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
         apiClient.forceRefreshIBCashBalances()
       ]);
 
-      console.log('Balance response:', balanceResponse);
-      console.log('Portfolio response:', portfolioResponse);
+      console.log('💰 Balance refresh completed');
+      console.log('📈 Portfolio refresh completed with', portfolioResponse.data?.length || 0, 'positions');
 
       // Check for errors in responses - check error first before checking data
       if (balanceResponse.error) {

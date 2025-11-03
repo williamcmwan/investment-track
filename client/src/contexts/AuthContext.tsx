@@ -104,10 +104,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('loginWithTwoFactor called with:', { userId, token });
       // Verify the 2FA token and get user info + JWT token
       const response = await apiClient.verifyTwoFactorLogin(userId, token);
-      console.log('2FA verification response:', response);
+      console.log('2FA verification response received');
       
       if (response.data && response.data.verified && response.data.user && response.data.token) {
-        console.log('Setting user and token:', { user: response.data.user, token: response.data.token });
+        console.log('Setting user and token for:', response.data.user?.email || 'unknown user');
         // Set user and token from the response
         setUser(response.data.user);
         setToken(response.data.token);
@@ -116,7 +116,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         localStorage.setItem('auth_user', JSON.stringify(response.data.user));
         return { success: true };
       }
-      console.log('2FA verification failed:', response);
+      console.log('2FA verification failed:', response.error || 'unknown error');
       return { 
         success: false, 
         error: response.error || '2FA verification failed' 

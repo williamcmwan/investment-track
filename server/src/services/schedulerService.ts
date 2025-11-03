@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { PerformanceHistoryService } from './performanceHistoryService.js';
-import { dbAll } from '../database/connection.js';
+import { dbAll, dbRun } from '../database/connection.js';
 import { ExchangeRateService } from './exchangeRateService.js';
 import { OtherPortfolioService } from './otherPortfolioService.js';
 import { IBService } from './ibService.js';
@@ -54,11 +54,14 @@ export class SchedulerService {
     console.log('📅 Daily performance snapshots will be calculated at 11:59 PM Dublin time');
     console.log('🔄 Data refresh (Currency -> IB -> Manual) will run every 30 minutes');
     
-    // Calculate today's snapshot immediately if it doesn't exist
+    // Calculate today's snapshot immediately if it doesn't exist (uses cached data only)
     this.calculateTodayIfMissing();
     
-    // Run initial data refresh
-    this.refreshAllData();
+    // Check and refresh missing exchange rates in the background
+    this.refreshMissingExchangeRates();
+    
+    // Don't run initial data refresh on startup - let scheduled job handle it
+    console.log('📅 Initial data refresh skipped - will run on first scheduled interval');
   }
 
   /**
@@ -307,6 +310,69 @@ export class SchedulerService {
       
     } catch (error) {
       console.error('❌ Error in automatic data refresh sequence:', error);
+    }
+  }
+
+  /**
+   * Check and refresh missing exchange rates in the background
+   */
+  private static async refreshMissingExchangeRates() {
+    try {
+      console.log('🔍 Checking for missing exchange rates...');
+      
+      // Get all users and their currency pairs
+      const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+      
+      let refreshCount = 0;
+      for (const user of users) {
+        try {
+          // Get currency pairs for this user
+          const pairs = await dbAll(
+            'SELECT DISTINCT pair FROM currency_pairs WHERE user_id = ?',
+            [user.id]
+          ) as Array<{pair: string}>;
+          
+          for (const pairRow of pairs) {
+            const [fromCurrency, toCurrency] = pairRow.pair.split('/');
+            if (!fromCurrency || !toCurrency || fromCurrency === toCurrency) {
+              continue;
+            }
+            
+            // Check if exchange rate exists in cache
+            const cached = await dbAll(
+              'SELECT rate, updated_at FROM exchange_rates WHERE pair = ?',
+              [pairRow.pair]
+            );
+            
+            if (cached.length === 0) {
+              console.log(`📈 Missing exchange rate for ${pairRow.pair}, fetching from Yahoo Finance...`);
+              try {
+                // Fetch and cache the rate
+                const rate = await ExchangeRateService.fetchYahooFinanceRate(fromCurrency, toCurrency);
+                await dbRun(
+                  'INSERT OR REPLACE INTO exchange_rates (pair, rate, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
+                  [pairRow.pair, rate]
+                );
+                console.log(`✅ Cached ${pairRow.pair}: ${rate}`);
+                refreshCount++;
+              } catch (error) {
+                console.warn(`❌ Failed to fetch ${pairRow.pair}:`, error);
+              }
+            }
+          }
+        } catch (userError) {
+          console.error(`❌ Failed to check exchange rates for user ${user.name}:`, userError);
+        }
+      }
+      
+      if (refreshCount > 0) {
+        console.log(`✅ Refreshed ${refreshCount} missing exchange rates`);
+      } else {
+        console.log('✅ All required exchange rates are already cached');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error checking missing exchange rates:', error);
     }
   }
 
