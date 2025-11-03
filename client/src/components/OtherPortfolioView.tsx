@@ -791,7 +791,7 @@ const OtherPortfolioView: React.FC<OtherPortfolioViewProps> = ({ accounts = [] }
                     aValue = accounts.find(acc => acc.id === a.mainAccountId)?.name || '';
                     bValue = accounts.find(acc => acc.id === b.mainAccountId)?.name || '';
                     break;
-                case 'pnlPercent':
+                case 'pnlPercent': {
                     // Calculate P&L percentage for sorting
                     const aPnlPercent = a.marketValue && a.marketValue > 0 
                         ? ((a.unrealizedPnl || 0) / (a.marketValue - (a.unrealizedPnl || 0))) * 100 
@@ -802,6 +802,7 @@ const OtherPortfolioView: React.FC<OtherPortfolioViewProps> = ({ accounts = [] }
                     aValue = aPnlPercent;
                     bValue = bPnlPercent;
                     break;
+                }
                 case 'quantity':
                     aValue = a.quantity || 0;
                     bValue = b.quantity || 0;

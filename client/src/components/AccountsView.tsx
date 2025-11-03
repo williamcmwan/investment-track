@@ -672,8 +672,7 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                         .map((entry, index) => {
                           const previousEntry = (account.history || [])
-                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                            [index + 1];
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[index + 1];
                           
                           const changePercent = previousEntry 
                             ? ((entry.balance - previousEntry.balance) / previousEntry.balance) * 100

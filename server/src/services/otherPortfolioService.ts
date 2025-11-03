@@ -696,7 +696,7 @@ export class OtherPortfolioService {
     `);
     
     const rows = stmt.all();
-    return rows.map(row => ({
+    return rows.map((row: any) => ({
       id: row.id,
       mainAccountId: row.main_account_id,
       currency: row.currency,
@@ -753,7 +753,7 @@ export class OtherPortfolioService {
       WHERE cb.main_account_id = ? AND cb.currency = ? AND cb.source = 'MANUAL'
     `);
     
-    const row = selectStmt.get(data.mainAccountId, data.currency);
+    const row = selectStmt.get(data.mainAccountId, data.currency) as any;
     return {
       id: row.id,
       mainAccountId: row.main_account_id,

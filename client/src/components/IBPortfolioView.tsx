@@ -199,6 +199,7 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
         throw new Error(response.error || "Failed to get account balance");
       }
     } catch (error) {
+      console.error('Error getting balance:', error);
       throw error;
     } finally {
       setIsConnecting(false);
