@@ -1323,16 +1323,17 @@ export class IBService {
     return { balance, portfolio };
   }
 
-  // Force refresh both balance and portfolio from IB and update database
-  static async forceRefreshAll(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
+  // Force refresh balance, portfolio, and cash balances from IB and update database
+  static async forceRefreshAll(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[]; cashBalances: CashBalance[] }> {
     Logger.info('🔄 Force refreshing all account data from IB...');
 
-    const [balance, portfolio] = await Promise.all([
+    const [balance, portfolio, cashBalances] = await Promise.all([
       this.forceRefreshAccountBalance(userSettings),
-      this.forceRefreshPortfolio(userSettings)
+      this.forceRefreshPortfolio(userSettings),
+      this.forceRefreshCashBalances(userSettings)
     ]);
 
-    return { balance, portfolio };
+    return { balance, portfolio, cashBalances };
   }
 
   // Get last refresh status from database

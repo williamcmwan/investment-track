@@ -224,11 +224,12 @@ export class SchedulerService {
             const userIBSettings = await IBConnectionService.getUserIBSettings(user.id);
             
             if (userIBSettings) {
-              Logger.debug(`🔄 Refreshing IB data for user: ${user.name} (${user.email})`);
+              Logger.debug(`🔄 Refreshing IB data (balance, portfolio, cash) for user: ${user.name} (${user.email})`);
               
-              // Refresh both balance and portfolio for this user
+              // Refresh balance, portfolio, and cash balances for this user
               const accountBalance = await IBService.forceRefreshAccountBalance(userIBSettings);
               await IBService.forceRefreshPortfolio(userIBSettings);
+              await IBService.forceRefreshCashBalances(userIBSettings);
               
               // Update the main account balance and balance history
               if (userIBSettings.target_account_id && accountBalance) {
