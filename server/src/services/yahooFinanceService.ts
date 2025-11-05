@@ -1,4 +1,5 @@
 import YahooFinance from 'yahoo-finance2';
+import { Logger } from '../utils/logger.js';
 
 export interface MarketData {
   symbol: string;
@@ -33,17 +34,17 @@ export class YahooFinanceService {
       // Check cache first
       const cached = this.marketDataCache.get(symbol);
       if (cached && (Date.now() - cached.timestamp) < this.CACHE_DURATION) {
-        console.log(`📊 Using cached Yahoo Finance data for ${symbol}`);
+        Logger.debug(`📊 Using cached Yahoo Finance data for ${symbol}`);
         return cached.data;
       }
 
-      console.log(`📊 Fetching Yahoo Finance data for ${symbol} using yahoo-finance2...`);
+      Logger.debug(`📊 Fetching Yahoo Finance data for ${symbol} using yahoo-finance2...`);
       
       // Use yahoo-finance2 quote method for basic data
       const quote = await this.yf.quote(symbol);
       
       if (!quote) {
-        console.log(`❌ No data found for symbol ${symbol}`);
+        Logger.debug(`❌ No data found for symbol ${symbol}`);
         return null;
       }
 
@@ -51,7 +52,7 @@ export class YahooFinanceService {
       
       // Try to get detailed company information using quoteSummary
       try {
-        console.log(`📊 Fetching detailed company info for ${symbol}...`);
+        Logger.debug(`📊 Fetching detailed company info for ${symbol}...`);
         const quoteSummary = await this.yf.quoteSummary(symbol, {
           modules: ['assetProfile', 'summaryProfile']
         });
@@ -66,9 +67,9 @@ export class YahooFinanceService {
           country = quoteSummary.summaryProfile.country;
         }
         
-        console.log(`📊 Company info for ${symbol}:`, { sector, industry, country });
+        Logger.debug(`📊 Company info for ${symbol}:`, { sector, industry, country });
       } catch (profileError) {
-        console.log(`⚠️ Could not fetch detailed company info for ${symbol}, using basic data only`);
+        Logger.debug(`⚠️ Could not fetch detailed company info for ${symbol}, using basic data only`);
       }
 
       const marketData: MarketData = {
@@ -94,11 +95,11 @@ export class YahooFinanceService {
         timestamp: Date.now()
       });
 
-      console.log(`✅ Got Yahoo Finance data for ${symbol}: ${marketData.marketPrice} (${marketData.sector || 'No sector'}, ${marketData.industry || 'No industry'}, ${marketData.country || 'No country'})`);
+      Logger.debug(`✅ Got Yahoo Finance data for ${symbol}: ${marketData.marketPrice} (${marketData.sector || 'No sector'}, ${marketData.industry || 'No industry'}, ${marketData.country || 'No country'})`);
       return marketData;
 
     } catch (error: any) {
-      console.error(`❌ Error fetching Yahoo Finance data with yahoo-finance2 for ${symbol}:`, error?.message || error);
+      Logger.error(`❌ Error fetching Yahoo Finance data with yahoo-finance2 for ${symbol}:`, error?.message || error);
       return null;
     }
   }
@@ -111,7 +112,7 @@ export class YahooFinanceService {
     
     if (symbols.length === 0) return results;
 
-    console.log(`📊 Fetching Yahoo Finance data for ${symbols.length} symbols using yahoo-finance2...`);
+    Logger.info(`📊 Fetching Yahoo Finance data for ${symbols.length} symbols using yahoo-finance2...`);
 
     // Process symbols individually for better error handling
     for (const symbol of symbols) {
@@ -121,11 +122,11 @@ export class YahooFinanceService {
           results.set(symbol, data);
         }
       } catch (error) {
-        console.error(`❌ Failed to fetch data for ${symbol}:`, error);
+        Logger.error(`❌ Failed to fetch data for ${symbol}:`, error);
       }
     }
 
-    console.log(`✅ Got Yahoo Finance data for ${results.size}/${symbols.length} symbols using yahoo-finance2`);
+    Logger.info(`✅ Got Yahoo Finance data for ${results.size}/${symbols.length} symbols using yahoo-finance2`);
     return results;
   }
 
@@ -134,7 +135,7 @@ export class YahooFinanceService {
    */
   static async searchSymbols(query: string): Promise<Array<{ symbol: string; name: string; type: string; exchange: string }>> {
     try {
-      console.log(`🔍 Searching for symbols matching: ${query}`);
+      Logger.debug(`🔍 Searching for symbols matching: ${query}`);
       
       const searchResults = await this.yf.search(query);
       
@@ -145,11 +146,11 @@ export class YahooFinanceService {
         exchange: quote.exchange || ''
       })) || [];
 
-      console.log(`✅ Found ${results.length} symbols for query: ${query}`);
+      Logger.debug(`✅ Found ${results.length} symbols for query: ${query}`);
       return results.slice(0, 10); // Limit to 10 results
 
     } catch (error) {
-      console.error(`❌ Error searching symbols for ${query}:`, error);
+      Logger.error(`❌ Error searching symbols for ${query}:`, error);
       return [];
     }
   }

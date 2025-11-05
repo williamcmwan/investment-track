@@ -1,6 +1,7 @@
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import { dbRun, dbGet } from '../database/connection.js';
+import { Logger } from '../utils/logger.js';
 
 export interface TwoFactorSetup {
   secret: string;
@@ -90,7 +91,7 @@ export class TwoFactorAuthService {
       [userId]
     );
 
-    console.log('2FA verification debug:', {
+    Logger.debug('2FA verification debug:', {
       userId,
       token,
       user: user ? {
@@ -101,7 +102,7 @@ export class TwoFactorAuthService {
     });
 
     if (!user || !user.two_factor_enabled || !user.two_factor_secret) {
-      console.log('2FA verification failed: user not found or 2FA not enabled');
+      Logger.debug('2FA verification failed: user not found or 2FA not enabled');
       return false;
     }
 
@@ -112,7 +113,7 @@ export class TwoFactorAuthService {
       window: 2
     });
 
-    console.log('2FA verification result:', result);
+    Logger.debug('2FA verification result:', result);
     return result;
   }
 

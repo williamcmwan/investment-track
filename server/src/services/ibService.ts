@@ -1,4 +1,5 @@
 import { IBApi, EventName, ErrorCode } from '@stoqey/ib';
+import { Logger } from '../utils/logger.js';
 
 interface AccountSummary {
   balance: number;
@@ -73,20 +74,20 @@ export class IBService {
   // Initialize connection on server startup (optional - connection will be created on first use)
   static async initialize(): Promise<void> {
     try {
-      console.log('🚀 Initializing IB Service...');
+      Logger.info('🚀 Initializing IB Service...');
       // Don't connect immediately, let it connect on first request
       // This avoids connection issues if IB Gateway isn't running at startup
-      console.log('✅ IB Service initialized (connection will be established on first request)');
+      Logger.info('✅ IB Service initialized (connection will be established on first request)');
     } catch (error) {
-      console.error('❌ Failed to initialize IB Service:', error);
+      Logger.error('❌ Failed to initialize IB Service:', error);
     }
   }
 
   // Graceful shutdown
   static async shutdown(): Promise<void> {
-    console.log('🛑 Shutting down IB Service...');
+    Logger.info('🛑 Shutting down IB Service...');
     await this.disconnect();
-    console.log('✅ IB Service shutdown complete');
+    Logger.info('✅ IB Service shutdown complete');
   }
 
   // Database operations - no cache, always fresh from DB
@@ -99,9 +100,9 @@ export class IBService {
         INSERT OR REPLACE INTO last_updates (main_account_id, update_type, last_updated, updated_at)
         VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [mainAccountId, updateType]);
-      console.log(`📅 Updated last refresh time for ${updateType} (account ${mainAccountId})`);
+      Logger.debug(`📅 Updated last refresh time for ${updateType} (account ${mainAccountId})`);
     } catch (error) {
-      console.error('❌ Failed to update last refresh time:', error);
+      Logger.error('❌ Failed to update last refresh time:', error);
     }
   }
 
@@ -115,7 +116,7 @@ export class IBService {
       `, [mainAccountId, updateType]);
       return row ? new Date(row.last_updated) : null;
     } catch (error) {
-      console.error('❌ Failed to get last refresh time:', error);
+      Logger.error('❌ Failed to get last refresh time:', error);
       return null;
     }
   }
@@ -125,14 +126,14 @@ export class IBService {
     try {
       const { dbRun } = await import('../database/connection.js');
 
-      console.log(`💾 Starting batch save of ${positions.length} IB portfolio positions to DB...`);
+      Logger.info(`💾 Starting batch save of ${positions.length} IB portfolio positions to DB...`);
       const startTime = Date.now();
 
       // Replace existing IB records for this account
       await dbRun('DELETE FROM portfolios WHERE source = ? AND main_account_id = ?', ['IB', mainAccountId]);
 
       if (positions.length === 0) {
-        console.log('💾 No positions to save');
+        Logger.info('💾 No positions to save');
         return;
       }
 
@@ -184,10 +185,10 @@ export class IBService {
 
       const endTime = Date.now();
       const duration = endTime - startTime;
-      console.log(`💾 Batch saved ${positions.length} IB portfolio rows to DB for account ${mainAccountId} in ${duration}ms`);
+      Logger.info(`💾 Batch saved ${positions.length} IB portfolio rows to DB for account ${mainAccountId} in ${duration}ms`);
 
     } catch (e) {
-      console.error('❌ Failed to save IB portfolio to DB:', e);
+      Logger.error('❌ Failed to save IB portfolio to DB:', e);
     }
   }
 
@@ -227,10 +228,10 @@ export class IBService {
         dayChange: row.day_change || undefined,
         dayChangePercent: row.day_change_percent || undefined
       }));
-      console.log(`📥 Loaded ${positions.length} IB portfolio rows from DB${mainAccountId != null ? ' for account ' + mainAccountId : ''}`);
+      Logger.info(`📥 Loaded ${positions.length} IB portfolio rows from DB${mainAccountId != null ? ' for account ' + mainAccountId : ''}`);
       return positions;
     } catch (e) {
-      console.error('❌ Failed to load IB portfolio from DB:', e);
+      Logger.error('❌ Failed to load IB portfolio from DB:', e);
       return [];
     }
   }
@@ -262,14 +263,14 @@ export class IBService {
   private static async connect(userSettings?: { host: string; port: number; client_id: number }): Promise<void> {
     // If already connected, update activity time and return
     if (this.isConnected && this.ibApi) {
-      console.log('✅ Already connected to IB Gateway, reusing persistent connection');
+      Logger.info('✅ Already connected to IB Gateway, reusing persistent connection');
       this.lastActivityTime = Date.now();
       return;
     }
 
     // If already connecting, wait for that connection to complete
     if (this.isConnecting && this.connectionPromise) {
-      console.log('⏳ Connection in progress, waiting...');
+      Logger.info('⏳ Connection in progress, waiting...');
       return this.connectionPromise;
     }
 
@@ -277,7 +278,7 @@ export class IBService {
     const timeSinceLastAttempt = Date.now() - this.lastConnectionAttempt;
     if (timeSinceLastAttempt < this.connectionRetryDelay) {
       const waitTime = this.connectionRetryDelay - timeSinceLastAttempt;
-      console.log(`⏱️  Waiting ${waitTime}ms before reconnection attempt...`);
+      Logger.info(`⏱️  Waiting ${waitTime}ms before reconnection attempt...`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
     }
 
@@ -287,18 +288,18 @@ export class IBService {
     // If there's an existing API instance but not connected, clean it up
     if (this.ibApi && !this.isConnected) {
       try {
-        console.log('🧹 Cleaning up disconnected IB API instance...');
+        Logger.info('🧹 Cleaning up disconnected IB API instance...');
         this.ibApi.removeAllListeners();
         this.ibApi.disconnect();
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (err) {
-        console.error('Error cleaning up:', err);
+        Logger.error('Error cleaning up:', err);
       }
       this.ibApi = null;
     }
 
     const settings = this.getUserConnectionSettings(userSettings);
-    console.log(`🔌 Connecting to IB Gateway at ${settings.host}:${settings.port} with client ID ${settings.clientId}...`);
+    Logger.info(`🔌 Connecting to IB Gateway at ${settings.host}:${settings.port} with client ID ${settings.clientId}...`);
 
     this.connectionPromise = new Promise((resolve, reject) => {
       this.ibApi = new IBApi({
@@ -308,7 +309,7 @@ export class IBService {
       });
 
       const timeout = setTimeout(() => {
-        console.error('❌ Connection timeout - cleaning up...');
+        Logger.error('❌ Connection timeout - cleaning up...');
         this.cleanupConnection();
         this.isConnecting = false;
         this.connectionPromise = null;
@@ -320,7 +321,7 @@ export class IBService {
         this.isConnecting = false;
         this.lastActivityTime = Date.now();
         clearTimeout(timeout);
-        console.log('✅ Successfully connected to IB Gateway - maintaining persistent connection');
+        Logger.info('✅ Successfully connected to IB Gateway - maintaining persistent connection');
 
         // Start keep-alive mechanism
         this.startKeepAlive();
@@ -329,14 +330,14 @@ export class IBService {
       });
 
       this.ibApi!.on(EventName.disconnected, () => {
-        console.log('⚠️  Disconnected from IB Gateway');
+        Logger.info('⚠️  Disconnected from IB Gateway');
         this.isConnected = false;
         this.isConnecting = false;
         this.stopKeepAlive();
       });
 
       this.ibApi!.on(EventName.error, (err: Error, code: ErrorCode, reqId: number) => {
-        console.error(`❌ IB API Error [${code}]:`, err.message);
+        Logger.error(`❌ IB API Error [${code}]:`, err.message);
 
         // Handle "client id already in use" error
         if (err.message.includes('client id is already in use')) {
@@ -358,7 +359,7 @@ export class IBService {
         this.ibApi!.connect();
       } catch (err) {
         clearTimeout(timeout);
-        console.error('❌ Error calling connect():', err);
+        Logger.error('❌ Error calling connect():', err);
         this.cleanupConnection();
         this.isConnecting = false;
         this.connectionPromise = null;
@@ -390,17 +391,17 @@ export class IBService {
       return;
     }
 
-    console.log('🔄 Starting keep-alive mechanism');
+    Logger.info('🔄 Starting keep-alive mechanism');
 
     // Check connection health every 5 minutes
     this.keepAliveInterval = setInterval(() => {
       const idleTime = Date.now() - this.lastActivityTime;
 
       if (idleTime > this.IDLE_TIMEOUT) {
-        console.log(`⏰ Connection idle for ${Math.round(idleTime / 60000)} minutes, disconnecting...`);
+        Logger.info(`⏰ Connection idle for ${Math.round(idleTime / 60000)} minutes, disconnecting...`);
         this.disconnect();
       } else {
-        console.log(`💓 Connection alive, idle for ${Math.round(idleTime / 60000)} minutes`);
+        Logger.debug(`💓 Connection alive, idle for ${Math.round(idleTime / 60000)} minutes`);
       }
     }, 5 * 60 * 1000);
   }
@@ -410,12 +411,12 @@ export class IBService {
     if (this.keepAliveInterval) {
       clearInterval(this.keepAliveInterval);
       this.keepAliveInterval = null;
-      console.log('🛑 Stopped keep-alive mechanism');
+      Logger.info('🛑 Stopped keep-alive mechanism');
     }
   }
 
   static async disconnect(): Promise<void> {
-    console.log('🔌 Disconnecting from IB Gateway...');
+    Logger.info('🔌 Disconnecting from IB Gateway...');
 
     this.stopKeepAlive();
 
@@ -425,7 +426,7 @@ export class IBService {
         try {
           this.ibApi.cancelAccountSummary(this.activeReqId);
         } catch (err) {
-          console.error('Error canceling account summary:', err);
+          Logger.error('Error canceling account summary:', err);
         }
         this.activeReqId = null;
       }
@@ -437,7 +438,7 @@ export class IBService {
           // Wait a bit for clean disconnect
           await new Promise(resolve => setTimeout(resolve, 1000));
         } catch (err) {
-          console.error('Error during disconnect:', err);
+          Logger.error('Error during disconnect:', err);
         }
         this.isConnected = false;
       }
@@ -448,13 +449,13 @@ export class IBService {
     this.isConnecting = false;
     this.connectionPromise = null;
 
-    console.log('✅ Disconnected from IB Gateway');
+    Logger.info('✅ Disconnected from IB Gateway');
   }
 
   // Check if connection is healthy and reconnect if needed
   private static async ensureConnection(userSettings?: { host: string; port: number; client_id: number }): Promise<void> {
     if (!this.isConnected || !this.ibApi) {
-      console.log('⚠️  Connection not healthy, reconnecting...');
+      Logger.info('⚠️  Connection not healthy, reconnecting...');
       await this.connect(userSettings);
     } else {
       // Update activity time
@@ -464,7 +465,7 @@ export class IBService {
 
   // Get account balance from database (accounts.current_balance)
   static async getAccountBalance(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<AccountSummary> {
-    console.log('🏦 getAccountBalance called');
+    Logger.debug('🏦 getAccountBalance called');
 
     const mainAccountId = userSettings.target_account_id;
     if (!mainAccountId) {
@@ -483,7 +484,7 @@ export class IBService {
         throw new Error(`Account not found: ${mainAccountId}`);
       }
 
-      console.log(`📊 Retrieved account balance from database: ${account.current_balance} ${account.currency || 'USD'}`);
+      Logger.info(`📊 Retrieved account balance from database: ${account.current_balance} ${account.currency || 'USD'}`);
 
       return {
         balance: account.current_balance || 0,
@@ -491,7 +492,7 @@ export class IBService {
         netLiquidation: account.current_balance || 0
       };
     } catch (error) {
-      console.error('❌ Failed to get account balance from database:', error);
+      Logger.error('❌ Failed to get account balance from database:', error);
       throw error;
     }
   }
@@ -500,7 +501,7 @@ export class IBService {
 
   // Force refresh account balance from IB and update database
   static async forceRefreshAccountBalance(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<AccountSummary> {
-    console.log('🔄 Force refreshing account balance from IB...');
+    Logger.info('🔄 Force refreshing account balance from IB...');
     
     const mainAccountId = userSettings.target_account_id;
     if (!mainAccountId) {
@@ -522,9 +523,9 @@ export class IBService {
       // Update last refresh time
       await this.updateLastRefreshTime(mainAccountId, 'IB_BALANCE');
       
-      console.log(`💾 Updated account balance in database: ${freshData.balance} ${freshData.currency}`);
+      Logger.info(`💾 Updated account balance in database: ${freshData.balance} ${freshData.currency}`);
     } catch (error) {
-      console.error('❌ Failed to update account balance in database:', error);
+      Logger.error('❌ Failed to update account balance in database:', error);
       throw error;
     }
 
@@ -586,7 +587,7 @@ export class IBService {
           try {
             this.ibApi!.cancelAccountSummary(reqId);
           } catch (err) {
-            console.error('Error canceling account summary:', err);
+            Logger.error('Error canceling account summary:', err);
           }
 
           this.activeReqId = null;
@@ -607,7 +608,7 @@ export class IBService {
             }
 
             // Log all account summary data to see what's available
-            console.log(`Account summary data: ${tag} = ${value} (${currency})`);
+            Logger.debug(`Account summary data: ${tag} = ${value} (${currency})`);
           }
         };
 
@@ -726,7 +727,7 @@ export class IBService {
 
       const detailsHandler = (reqId_: number, contractDetails: any) => {
         if (reqId_ === reqId) {
-          console.log('📋 Contract details received from IB for symbol:', contractDetails?.contract?.symbol || 'unknown');
+          Logger.debug('📋 Contract details received from IB for symbol:', contractDetails?.contract?.symbol || 'unknown');
           contractDetailsData = contractDetails;
         }
       };
@@ -757,22 +758,22 @@ export class IBService {
 
     // Skip bonds that have previously failed to avoid repeated timeouts
     if (this.failedBondSymbols.has(position.symbol)) {
-      console.log(`Skipping bond market data for ${position.symbol} (previously failed)`);
+      Logger.debug(`Skipping bond market data for ${position.symbol} (previously failed)`);
       return null;
     }
 
-    console.log(`Requesting bond market data for ${position.symbol}...`);
+    Logger.debug(`Requesting bond market data for ${position.symbol}...`);
 
     // If we don't have a contract ID, we can't reliably request market data for bonds
     if (!position.conId || position.conId <= 0) {
-      console.log(`No contract ID available for bond ${position.symbol}, cannot request market data`);
+      Logger.debug(`No contract ID available for bond ${position.symbol}, cannot request market data`);
       this.failedBondSymbols.add(position.symbol); // Mark as failed
       return null;
     }
 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        console.log(`Timeout getting bond market data for ${position.symbol}`);
+        Logger.debug(`Timeout getting bond market data for ${position.symbol}`);
         this.failedBondSymbols.add(position.symbol); // Mark as failed to skip in future
         this.ibApi!.removeListener('tickPrice' as any, tickPriceHandler);
         this.ibApi!.removeListener('error' as any, tickPriceErrorHandler);
@@ -788,25 +789,25 @@ export class IBService {
 
       const tickPriceHandler = (reqId_: number, tickType: number, price: number, attrib: any) => {
         if (reqId_ === reqId) {
-          console.log(`Bond tick data for ${position.symbol}: tickType=${tickType}, price=${price}`);
+          Logger.debug(`Bond tick data for ${position.symbol}: tickType=${tickType}, price=${price}`);
 
           if (tickType === 4) { // Last Price (current)
             if (price > 0) {
               lastPrice = price;
-              console.log(`Got last price for ${position.symbol}: ${price}`);
+              Logger.debug(`Got last price for ${position.symbol}: ${price}`);
             } else {
               lastPriceIsZero = true;
-              console.log(`Last price reported as 0 for ${position.symbol}, will skip CHG/CHG% calculation`);
+              Logger.debug(`Last price reported as 0 for ${position.symbol}, will skip CHG/CHG% calculation`);
             }
           } else if (tickType === 9 && price > 0) { // Close Price (previous day)
             closePrice = price;
-            console.log(`Got close price for ${position.symbol}: ${price}`);
+            Logger.debug(`Got close price for ${position.symbol}: ${price}`);
           } else if (tickType === 1 && lastPrice === null && price > 0) { // Bid price as fallback for last price
             lastPrice = price;
-            console.log(`Using bid price as last price for ${position.symbol}: ${price}`);
+            Logger.debug(`Using bid price as last price for ${position.symbol}: ${price}`);
           } else if (tickType === 2 && lastPrice === null && price > 0) { // Ask price as fallback for last price
             lastPrice = price;
-            console.log(`Using ask price as last price for ${position.symbol}: ${price}`);
+            Logger.debug(`Using ask price as last price for ${position.symbol}: ${price}`);
           }
 
           // If we have both prices, decide whether to calculate and return
@@ -818,14 +819,14 @@ export class IBService {
 
             // Do not calculate CHG/CHG% when lastPrice is 0 or non-positive
             if (lastPriceIsZero || lastPrice <= 0) {
-              console.log(`Skipping CHG/CHG% for bond ${position.symbol} because lastPrice=0 or non-positive (lastPrice=${lastPrice})`);
+              Logger.debug(`Skipping CHG/CHG% for bond ${position.symbol} because lastPrice=0 or non-positive (lastPrice=${lastPrice})`);
               resolve(null);
               return;
             }
 
             // Also skip if closePrice is non-positive to avoid invalid % calculations
             if (closePrice <= 0) {
-              console.log(`Skipping CHG/CHG% for bond ${position.symbol}: closePrice=${closePrice} (non-positive)`);
+              Logger.debug(`Skipping CHG/CHG% for bond ${position.symbol}: closePrice=${closePrice} (non-positive)`);
               resolve(null);
               return;
             }
@@ -835,7 +836,7 @@ export class IBService {
             const dayChange = (lastPrice - closePrice) * position.position * 10;
             const dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
 
-            console.log(`Calculated bond day change for ${position.symbol}: lastPrice=${lastPrice}, closePrice=${closePrice}, dayChange=${dayChange}, dayChangePercent=${dayChangePercent.toFixed(2)}% (bond formula: qty * 10)`);
+            Logger.debug(`Calculated bond day change for ${position.symbol}: lastPrice=${lastPrice}, closePrice=${closePrice}, dayChange=${dayChange}, dayChangePercent=${dayChangePercent.toFixed(2)}% (bond formula: qty * 10)`);
 
             resolve({
               closePrice,
@@ -848,7 +849,7 @@ export class IBService {
 
       const tickPriceErrorHandler = (reqId_: number, errorCode: number, errorString: string) => {
         if (reqId_ === reqId) {
-          console.log(`Bond market data error for ${position.symbol}: ${errorCode} - ${errorString}`);
+          Logger.debug(`Bond market data error for ${position.symbol}: ${errorCode} - ${errorString}`);
           this.failedBondSymbols.add(position.symbol); // Mark as failed to skip in future
           clearTimeout(timeout);
           this.ibApi!.removeListener('tickPrice' as any, tickPriceHandler);
@@ -870,7 +871,7 @@ export class IBService {
           currency: position.currency || 'USD'
         };
 
-        console.log(`Using contract ID for bond market data: ${position.conId}`);
+        Logger.debug(`Using contract ID for bond market data: ${position.conId}`);
 
         // Set market data type to 3 (delayed) for free bond data
         this.ibApi!.reqMarketDataType(3);
@@ -884,10 +885,10 @@ export class IBService {
           false // regulatorySnapshot
         );
 
-        console.log(`Requested market data for bond ${position.symbol} (conId: ${position.conId}) with reqId ${reqId}`);
+        Logger.debug(`Requested market data for bond ${position.symbol} (conId: ${position.conId}) with reqId ${reqId}`);
 
       } catch (error) {
-        console.error(`Error requesting bond market data for ${position.symbol}:`, error);
+        Logger.error(`Error requesting bond market data for ${position.symbol}:`, error);
         clearTimeout(timeout);
         this.ibApi!.removeListener('tickPrice' as any, tickPriceHandler);
         this.ibApi!.removeListener('error' as any, tickPriceErrorHandler);
@@ -907,7 +908,7 @@ export class IBService {
 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        console.log(`Timeout getting historical data for ${contract.symbol} (${contract.secType})`);
+        Logger.debug(`Timeout getting historical data for ${contract.symbol} (${contract.secType})`);
         this.ibApi!.removeAllListeners('historicalData' as any);
         resolve(undefined);
       }, 8000); // Increased timeout for crypto/bonds
@@ -927,13 +928,13 @@ export class IBService {
 
               // Return the first close price (oldest, which should be previous day's close)
               const closePrice = closePrices.length > 0 ? closePrices[0] : undefined;
-              console.log(`Final close price for ${contract.symbol} (${contract.secType}): ${closePrice} (from ${closePrices.length} bars)`);
+              Logger.debug(`Final close price for ${contract.symbol} (${contract.secType}): ${closePrice} (from ${closePrices.length} bars)`);
               resolve(closePrice);
             }
           } else if (close > 0) {
             // Collect all close prices
             closePrices.push(close);
-            console.log(`Historical bar for ${contract.symbol} (${contract.secType}): date=${time}, close=${close}`);
+            Logger.debug(`Historical bar for ${contract.symbol} (${contract.secType}): date=${time}, close=${close}`);
           }
         }
       };
@@ -972,7 +973,7 @@ export class IBService {
           false // keepUpToDate
         );
       } catch (error) {
-        console.error(`Error requesting historical data for ${contract.symbol} (${contract.secType}):`, error);
+        Logger.error(`Error requesting historical data for ${contract.symbol} (${contract.secType}):`, error);
         clearTimeout(timeout);
         this.ibApi!.removeListener('historicalData' as any, historicalDataHandler);
         resolve(undefined);
@@ -982,7 +983,7 @@ export class IBService {
 
   // Get portfolio from database (portfolios table)
   static async getPortfolio(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<PortfolioPosition[]> {
-    console.log('📈 getPortfolio called');
+    Logger.debug('📈 getPortfolio called');
 
     const mainAccountId = userSettings.target_account_id;
     if (!mainAccountId) {
@@ -991,7 +992,7 @@ export class IBService {
 
     // Always load from database
     const dbData = await this.loadPortfolioFromDB(mainAccountId);
-    console.log(`📊 Retrieved ${dbData.length} portfolio positions from database`);
+    Logger.info(`📊 Retrieved ${dbData.length} portfolio positions from database`);
     return dbData;
   }
 
@@ -999,7 +1000,7 @@ export class IBService {
 
   // Force refresh portfolio from IB and update database
   static async forceRefreshPortfolio(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<PortfolioPosition[]> {
-    console.log('📊 Force refreshing portfolio from IB...');
+    Logger.info('📊 Force refreshing portfolio from IB...');
     const refreshStartTime = Date.now();
 
     const mainAccountId = userSettings.target_account_id;
@@ -1009,7 +1010,7 @@ export class IBService {
 
     // Clear failed bonds cache on manual refresh to retry them
     if (this.failedBondSymbols.size > 0) {
-      console.log(`📊 Clearing ${this.failedBondSymbols.size} failed bond symbols for retry`);
+      Logger.info(`📊 Clearing ${this.failedBondSymbols.size} failed bond symbols for retry`);
       this.failedBondSymbols.clear();
     }
 
@@ -1021,7 +1022,7 @@ export class IBService {
 
     const refreshEndTime = Date.now();
     const totalDuration = refreshEndTime - refreshStartTime;
-    console.log(`📊 Portfolio refresh completed in ${totalDuration}ms (${freshData.length} positions)`);
+    Logger.info(`📊 Portfolio refresh completed in ${totalDuration}ms (${freshData.length} positions)`);
 
     return freshData;
   }
@@ -1035,7 +1036,7 @@ export class IBService {
 
     // Add a small delay if we just finished an account summary request
     if (this.activeReqId !== null) {
-      console.log('Waiting for account summary to fully complete...');
+      Logger.debug('Waiting for account summary to fully complete...');
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
@@ -1075,9 +1076,9 @@ export class IBService {
           // Unsubscribe from account updates
           try {
             this.ibApi!.reqAccountUpdates(false, '');
-            console.log('Unsubscribed from account updates');
+            Logger.debug('Unsubscribed from account updates');
           } catch (err) {
-            console.error('Error unsubscribing from account updates:', err);
+            Logger.error('Error unsubscribing from account updates:', err);
           }
 
           this.isPortfolioRequestInProgress = false;
@@ -1094,11 +1095,11 @@ export class IBService {
           accountName?: string
         ) => {
           // Log all contracts to debug cash positions
-          console.log('📊 Portfolio contract received:', contract.symbol, contract.secType);
+          Logger.debug('📊 Portfolio contract received:', contract.symbol, contract.secType);
 
           // Handle cash positions separately
           if (contract.secType === 'CASH') {
-            console.log('💰 Found cash position:', contract.symbol || contract.currency || 'USD', 'amount:', position);
+            Logger.debug('💰 Found cash position:', contract.symbol || contract.currency || 'USD', 'amount:', position);
             this.cashBalances.push({
               currency: contract.symbol || contract.currency || 'USD',
               amount: position,
@@ -1108,7 +1109,7 @@ export class IBService {
           }
 
           // Log contract details to see what's available
-          console.log('📊 Processing contract:', contract.symbol, contract.secType);
+          Logger.debug('📊 Processing contract:', contract.symbol, contract.secType);
 
           this.portfolioPositions.push({
             symbol: contract.symbol || '',
@@ -1131,7 +1132,7 @@ export class IBService {
             // Stop the initial wait timer now that account data download ended
             clearTimeout(timeout);
 
-            console.log(`📊 Starting enrichment of ${this.portfolioPositions.length} positions...`);
+            Logger.info(`📊 Starting enrichment of ${this.portfolioPositions.length} positions...`);
             const enrichmentStartTime = Date.now();
 
             // Fetch contract details and market data for each position
@@ -1141,16 +1142,16 @@ export class IBService {
                   let enrichedPosition = { ...position };
 
                   if (position.conId && ['STK', 'CRYPTO', 'BOND'].includes(position.secType)) {
-                    console.log(`Processing ${position.symbol} (${position.secType}) for day change data...`);
+                    Logger.debug(`Processing ${position.symbol} (${position.secType}) for day change data...`);
 
                     // Handle bonds with market data approach directly
                     if (position.secType === 'BOND') {
-                      console.log(`Using market data approach for bond ${position.symbol}...`);
+                      Logger.debug(`Using market data approach for bond ${position.symbol}...`);
 
                       // Get contract details to extract additional info for bonds
                       const bondDetails = await this.getContractDetails(position.conId);
 
-                      console.log(`Bond ${position.symbol} contract details:`, {
+                      Logger.debug(`Bond ${position.symbol} contract details:`, {
                         marketName: bondDetails?.marketName,
                         longName: bondDetails?.longName,
                         exchange: bondDetails?.contract?.exchange,
@@ -1176,15 +1177,15 @@ export class IBService {
                         enrichedPosition.closePrice = bondMarketData.closePrice;
                         enrichedPosition.dayChange = bondMarketData.dayChange;
                         enrichedPosition.dayChangePercent = bondMarketData.dayChangePercent;
-                        console.log(`Got bond market data for ${position.symbol}: closePrice=${bondMarketData.closePrice}, dayChange=${bondMarketData.dayChange}, dayChangePercent=${bondMarketData.dayChangePercent.toFixed(2)}%`);
+                        Logger.debug(`Got bond market data for ${position.symbol}: closePrice=${bondMarketData.closePrice}, dayChange=${bondMarketData.dayChange}, dayChangePercent=${bondMarketData.dayChangePercent.toFixed(2)}%`);
                       } else {
-                        console.log(`Bond market data failed for ${position.symbol}`);
+                        Logger.debug(`Bond market data failed for ${position.symbol}`);
                       }
                     } else {
                       // Handle stocks and crypto with contract details and historical data
                       const details = await this.getContractDetails(position.conId);
                       if (details) {
-                        console.log(`Got contract details for ${position.symbol} (${position.secType}):`, {
+                        Logger.debug(`Got contract details for ${position.symbol} (${position.secType}):`, {
                           marketName: details.marketName,
                           longName: details.longName,
                           exchange: details.contract?.exchange,
@@ -1217,9 +1218,9 @@ export class IBService {
                         }
 
                         // Get historical close price
-                        console.log(`Requesting historical data for ${position.symbol} (${position.secType})...`);
+                        Logger.debug(`Requesting historical data for ${position.symbol} (${position.secType})...`);
                         let closePrice = await this.getHistoricalClose(details.contract);
-                        console.log(`Historical data result for ${position.symbol} (${position.secType}): closePrice=${closePrice}`);
+                        Logger.debug(`Historical data result for ${position.symbol} (${position.secType}): closePrice=${closePrice}`);
 
 
 
@@ -1234,16 +1235,16 @@ export class IBService {
                           enrichedPosition.dayChange = dayChange;
                           enrichedPosition.dayChangePercent = dayChangePercent;
 
-                          console.log(`${position.symbol} (${position.secType}): closePrice=${closePrice}, marketPrice=${position.marketPrice}, dayChange=${dayChange}, dayChangePercent=${dayChangePercent.toFixed(2)}%`);
+                          Logger.debug(`${position.symbol} (${position.secType}): closePrice=${closePrice}, marketPrice=${position.marketPrice}, dayChange=${dayChange}, dayChangePercent=${dayChangePercent.toFixed(2)}%`);
                         } else {
-                          console.log(`${position.symbol} (${position.secType}): Could not get historical close price`);
+                          Logger.debug(`${position.symbol} (${position.secType}): Could not get historical close price`);
                         }
                       } else {
-                        console.log(`Failed to get contract details for ${position.symbol} (${position.secType})`);
+                        Logger.debug(`Failed to get contract details for ${position.symbol} (${position.secType})`);
 
                         // For crypto without contract details, set basic info but no day change data
                         if (position.secType === 'CRYPTO') {
-                          console.log(`Contract details failed for crypto ${position.symbol}, cannot get day change data`);
+                          Logger.debug(`Contract details failed for crypto ${position.symbol}, cannot get day change data`);
 
                           // Try to derive country from exchange even without contract details
                           const country = this.deriveCountryFromExchange(position.primaryExchange || position.exchange, position.symbol);
@@ -1262,7 +1263,7 @@ export class IBService {
 
                   return enrichedPosition;
                 } catch (error) {
-                  console.error(`Failed to get details for ${position.symbol}:`, error);
+                  Logger.error(`Failed to get details for ${position.symbol}:`, error);
                   return position;
                 }
               })
@@ -1270,7 +1271,7 @@ export class IBService {
 
             const enrichmentEndTime = Date.now();
             const enrichmentDuration = enrichmentEndTime - enrichmentStartTime;
-            console.log(`📊 Position enrichment completed in ${enrichmentDuration}ms`);
+            Logger.info(`📊 Position enrichment completed in ${enrichmentDuration}ms`);
 
             // Persist to DB if we have a target account to associate with
             try {
@@ -1279,15 +1280,15 @@ export class IBService {
                 await this.savePortfolioToDB(mainAccountId, enrichedPositions);
                 const dbEndTime = Date.now();
                 const dbDuration = dbEndTime - dbStartTime;
-                console.log(`📊 Database persistence completed in ${dbDuration}ms`);
+                Logger.info(`📊 Database persistence completed in ${dbDuration}ms`);
               } else {
-                console.warn('⚠️ No target_account_id provided; skipping DB persist for IB portfolio');
+                Logger.warn('⚠️ No target_account_id provided; skipping DB persist for IB portfolio');
               }
             } catch (e) {
-              console.error('❌ Error persisting IB portfolio to DB:', e);
+              Logger.error('❌ Error persisting IB portfolio to DB:', e);
             }
 
-            console.log(`💰 Captured ${this.cashBalances.length} cash positions:`, this.cashBalances);
+            Logger.info(`💰 Captured ${this.cashBalances.length} cash positions:`, this.cashBalances);
             
             // Save cash balances to database
             if (typeof (mainAccountId) === 'number') {
@@ -1324,7 +1325,7 @@ export class IBService {
 
   // Force refresh both balance and portfolio from IB and update database
   static async forceRefreshAll(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<{ balance: AccountSummary; portfolio: PortfolioPosition[] }> {
-    console.log('🔄 Force refreshing all account data from IB...');
+    Logger.info('🔄 Force refreshing all account data from IB...');
 
     const [balance, portfolio] = await Promise.all([
       this.forceRefreshAccountBalance(userSettings),
@@ -1370,7 +1371,7 @@ export class IBService {
 
   // Get cash balances from database (cash_balances table)
   static async getCashBalances(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<CashBalance[]> {
-    console.log('💰 getCashBalances called');
+    Logger.debug('💰 getCashBalances called');
 
     const mainAccountId = userSettings.target_account_id;
     if (!mainAccountId) {
@@ -1379,13 +1380,13 @@ export class IBService {
 
     // Always load from database
     const dbData = await this.loadCashBalancesFromDB(mainAccountId);
-    console.log(`💰 Retrieved ${dbData.length} cash balances from database`);
+    Logger.info(`💰 Retrieved ${dbData.length} cash balances from database`);
     return dbData;
   }
 
   // Force refresh cash balances from IB and update database
   static async forceRefreshCashBalances(userSettings: { host: string; port: number; client_id: number; target_account_id?: number }): Promise<CashBalance[]> {
-    console.log('💰 Force refreshing cash balances from IB...');
+    Logger.info('💰 Force refreshing cash balances from IB...');
 
     const mainAccountId = userSettings.target_account_id;
     if (!mainAccountId) {
@@ -1402,7 +1403,7 @@ export class IBService {
     // Update last refresh time
     await this.updateLastRefreshTime(mainAccountId, 'IB_CASH');
 
-    console.log(`💰 Refreshed ${enrichedData.length} cash balances from IB`);
+    Logger.info(`💰 Refreshed ${enrichedData.length} cash balances from IB`);
     return enrichedData;
   }
 
@@ -1420,7 +1421,7 @@ export class IBService {
           const rate = await ExchangeRateService.getExchangeRate(cash.currency, 'USD');
           marketValueUSD = cash.marketValueHKD * rate;
         } catch (error) {
-          console.error(`Failed to get USD rate for ${cash.currency}:`, error);
+          Logger.error(`Failed to get USD rate for ${cash.currency}:`, error);
           marketValueUSD = cash.marketValueHKD; // Fallback to original value
         }
       }
@@ -1445,13 +1446,13 @@ export class IBService {
     try {
       const { dbRun } = await import('../database/connection.js');
 
-      console.log(`💾 Saving ${cashBalances.length} cash balances to DB for account ${mainAccountId}...`);
+      Logger.debug(`💾 Saving ${cashBalances.length} cash balances to DB for account ${mainAccountId}...`);
 
       // Delete existing cash balances for this account
       await dbRun('DELETE FROM cash_balances WHERE main_account_id = ? AND source = ?', [mainAccountId, 'IB']);
 
       if (cashBalances.length === 0) {
-        console.log('💾 No cash balances to save');
+        Logger.debug('💾 No cash balances to save');
         return;
       }
 
@@ -1472,9 +1473,9 @@ export class IBService {
         ]);
       }
 
-      console.log(`💾 Saved ${cashBalances.length} cash balances to DB`);
+      Logger.debug(`💾 Saved ${cashBalances.length} cash balances to DB`);
     } catch (error) {
-      console.error('❌ Failed to save cash balances to DB:', error);
+      Logger.error('❌ Failed to save cash balances to DB:', error);
     }
   }
 
@@ -1503,10 +1504,10 @@ export class IBService {
         marketValueUSD: row.market_value_usd
       }));
 
-      console.log(`📥 Loaded ${cashBalances.length} cash balances from DB${mainAccountId != null ? ' for account ' + mainAccountId : ''}`);
+      Logger.debug(`📥 Loaded ${cashBalances.length} cash balances from DB${mainAccountId != null ? ' for account ' + mainAccountId : ''}`);
       return cashBalances;
     } catch (error) {
-      console.error('❌ Failed to load cash balances from DB:', error);
+      Logger.error('❌ Failed to load cash balances from DB:', error);
       return [];
     }
   }
@@ -1515,7 +1516,7 @@ export class IBService {
 
   // Method using account summary to get cash balances by currency (based on working example)
   private static async fetchCashBalancesUsingAccountSummary(userSettings?: { host: string; port: number; client_id: number }): Promise<CashBalance[]> {
-    console.log('💰 Fetching cash balances using TotalCashValue by currency...');
+    Logger.debug('💰 Fetching cash balances using TotalCashValue by currency...');
 
     // Wait if another request is in progress
     while (this.isRequestInProgress) {
@@ -1570,7 +1571,7 @@ export class IBService {
           try {
             this.ibApi!.cancelAccountSummary(reqId);
           } catch (err) {
-            console.error('Error canceling account summary:', err);
+            Logger.error('Error canceling account summary:', err);
           }
 
           this.isRequestInProgress = false;
@@ -1590,7 +1591,7 @@ export class IBService {
 
               if (amount !== 0) { // Only store non-zero balances
                 balances[currency] = amount;
-                console.log(`💰 Cash balance: ${currency} = ${amount}`);
+                Logger.debug(`💰 Cash balance: ${currency} = ${amount}`);
               }
             } else if (tag === 'RealCurrency') {
               realCurrency = value;
@@ -1600,7 +1601,7 @@ export class IBService {
 
         const summaryEndHandler = (_reqId: number) => {
           if (_reqId === reqId && !isResolved) {
-            console.log(`💰 Found ${Object.keys(balances).length} cash balances`);
+            Logger.debug(`💰 Found ${Object.keys(balances).length} cash balances`);
 
             // Convert to CashBalance array, handling BASE currency conversion
             const cashBalances: CashBalance[] = [];
@@ -1639,7 +1640,7 @@ export class IBService {
 
   // Internal method to fetch cash balances using account updates (better for multi-currency)
   private static async fetchCashBalancesFresh(userSettings?: { host: string; port: number; client_id: number }): Promise<CashBalance[]> {
-    console.log('💰 Fetching cash balances using account updates...');
+    Logger.debug('💰 Fetching cash balances using account updates...');
 
     // Wait if another request is in progress
     while (this.isRequestInProgress || this.isPortfolioRequestInProgress) {
@@ -1684,9 +1685,9 @@ export class IBService {
           // Unsubscribe from account updates
           try {
             this.ibApi!.reqAccountUpdates(false, '');
-            console.log('💰 Unsubscribed from account updates for cash balances');
+            Logger.debug('💰 Unsubscribed from account updates for cash balances');
           } catch (err) {
-            console.error('Error unsubscribing from account updates:', err);
+            Logger.error('Error unsubscribing from account updates:', err);
           }
 
           this.isPortfolioRequestInProgress = false;
@@ -1705,7 +1706,7 @@ export class IBService {
         ) => {
           // Only capture cash positions
           if (contract.secType === 'CASH') {
-            console.log('💰 Found cash position:', contract.symbol, contract.currency);
+            Logger.debug('💰 Found cash position:', contract.symbol, contract.currency);
 
             cashBalances.push({
               currency: contract.symbol || contract.currency || 'USD',
@@ -1726,7 +1727,7 @@ export class IBService {
           if (key === 'CashBalance' || key === 'SettledCash') {
             const amount = parseFloat(value);
             if (amount !== 0) {
-              console.log(`💰 Found cash via account value: ${key} = ${amount} ${currency}`);
+              Logger.debug(`💰 Found cash via account value: ${key} = ${amount} ${currency}`);
 
               // Check if we already have this currency from portfolio
               const existingIndex = cashBalances.findIndex(cb => cb.currency === currency);
@@ -1750,7 +1751,7 @@ export class IBService {
 
         const downloadEndHandler = async (accountName: string) => {
           if (!isResolved) {
-            console.log(`💰 Account download ended, found ${cashBalances.length} cash positions:`, cashBalances);
+            Logger.debug(`💰 Account download ended, found ${cashBalances.length} cash positions:`, cashBalances);
             cleanup();
             resolve(cashBalances);
           }
@@ -1762,7 +1763,7 @@ export class IBService {
 
         // Request account updates to get both portfolio and account values
         this.ibApi!.reqAccountUpdates(true, '');
-        console.log('💰 Requested account updates for cash balances');
+        Logger.debug('💰 Requested account updates for cash balances');
       });
     } catch (error) {
       this.isPortfolioRequestInProgress = false;

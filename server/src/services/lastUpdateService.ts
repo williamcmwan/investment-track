@@ -1,3 +1,5 @@
+import { Logger } from '../utils/logger.js';
+
 export class LastUpdateService {
   /**
    * Initialize the service - migrate existing file data to database if needed
@@ -34,14 +36,14 @@ export class LastUpdateService {
             INSERT INTO last_updates (main_account_id, update_type, last_updated, created_at, updated_at)
             VALUES (NULL, 'EXCHANGE_RATES', datetime(?, 'unixepoch', 'subsec'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           `, [fileData.currency / 1000]);
-          console.log('📅 Migrated currency update time to database');
+          Logger.info('📅 Migrated currency update time to database');
         }
         
         // Note: IB and manual investment times are now account-specific, so we don't migrate them
-        console.log('📅 Migration from file to database completed');
+        Logger.info('📅 Migration from file to database completed');
       }
     } catch (error) {
-      console.error('❌ Failed to migrate from file to database:', error);
+      Logger.error('❌ Failed to migrate from file to database:', error);
     }
   }
 
@@ -55,9 +57,9 @@ export class LastUpdateService {
         INSERT OR REPLACE INTO last_updates (main_account_id, update_type, last_updated, updated_at)
         VALUES (NULL, 'EXCHANGE_RATES', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
-      console.log('📅 Updated currency last refresh time in database');
+      Logger.debug('📅 Updated currency last refresh time in database');
     } catch (error) {
-      console.error('❌ Failed to update currency time:', error);
+      Logger.error('❌ Failed to update currency time:', error);
     }
   }
 
@@ -66,7 +68,7 @@ export class LastUpdateService {
    */
   static async updateIBPortfolioTime(mainAccountId?: number): Promise<void> {
     if (!mainAccountId) {
-      console.warn('⚠️ No account ID provided for IB portfolio update - skipping');
+      Logger.warn('⚠️ No account ID provided for IB portfolio update - skipping');
       return;
     }
     
@@ -76,9 +78,9 @@ export class LastUpdateService {
         INSERT OR REPLACE INTO last_updates (main_account_id, update_type, last_updated, updated_at)
         VALUES (?, 'IB_PORTFOLIO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [mainAccountId]);
-      console.log(`📅 Updated IB portfolio last refresh time for account ${mainAccountId}`);
+      Logger.debug(`📅 Updated IB portfolio last refresh time for account ${mainAccountId}`);
     } catch (error) {
-      console.error('❌ Failed to update IB portfolio time:', error);
+      Logger.error('❌ Failed to update IB portfolio time:', error);
     }
   }
 
@@ -87,7 +89,7 @@ export class LastUpdateService {
    */
   static async updateManualInvestmentsTime(mainAccountId?: number): Promise<void> {
     if (!mainAccountId) {
-      console.warn('⚠️ No account ID provided for manual investments update - skipping');
+      Logger.warn('⚠️ No account ID provided for manual investments update - skipping');
       return;
     }
     
@@ -97,9 +99,9 @@ export class LastUpdateService {
         INSERT OR REPLACE INTO last_updates (main_account_id, update_type, last_updated, updated_at)
         VALUES (?, 'MANUAL_PORTFOLIO', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `, [mainAccountId]);
-      console.log(`📅 Updated manual investments last refresh time for account ${mainAccountId}`);
+      Logger.debug(`📅 Updated manual investments last refresh time for account ${mainAccountId}`);
     } catch (error) {
-      console.error('❌ Failed to update manual investments time:', error);
+      Logger.error('❌ Failed to update manual investments time:', error);
     }
   }
 
@@ -130,7 +132,7 @@ export class LastUpdateService {
         manualInvestmentsTimestamp: manualInvestments ? new Date(manualInvestments).getTime() : null
       };
     } catch (error) {
-      console.error('❌ Failed to get all last update times:', error);
+      Logger.error('❌ Failed to get all last update times:', error);
       return {
         currency: null,
         ibPortfolio: null,
@@ -154,7 +156,7 @@ export class LastUpdateService {
       );
       return row ? new Date(row.last_updated).toISOString() : null;
     } catch (error) {
-      console.error('❌ Failed to get currency last update:', error);
+      Logger.error('❌ Failed to get currency last update:', error);
       return null;
     }
   }
@@ -171,7 +173,7 @@ export class LastUpdateService {
       );
       return row ? new Date(row.last_updated).toISOString() : null;
     } catch (error) {
-      console.error('❌ Failed to get IB portfolio last update:', error);
+      Logger.error('❌ Failed to get IB portfolio last update:', error);
       return null;
     }
   }
@@ -188,7 +190,7 @@ export class LastUpdateService {
       );
       return row ? new Date(row.last_updated).toISOString() : null;
     } catch (error) {
-      console.error('❌ Failed to get manual investments last update:', error);
+      Logger.error('❌ Failed to get manual investments last update:', error);
       return null;
     }
   }
@@ -217,7 +219,7 @@ export class LastUpdateService {
       if (!lastUpdate) return null;
       return Math.floor((Date.now() - new Date(lastUpdate).getTime()) / 1000 / 60);
     } catch (error) {
-      console.error('❌ Failed to get time since last update:', error);
+      Logger.error('❌ Failed to get time since last update:', error);
       return null;
     }
   }

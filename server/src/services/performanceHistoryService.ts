@@ -3,6 +3,7 @@ import { AccountModel } from '../models/Account.js';
 import { CurrencyPairModel } from '../models/CurrencyPair.js';
 import { PerformanceModel } from '../models/Performance.js';
 import { ExchangeRateService } from './exchangeRateService.js';
+import { Logger } from '../utils/logger.js';
 
 export interface PerformanceSnapshot {
   date: string;
@@ -20,7 +21,7 @@ export class PerformanceHistoryService {
     const targetDate = date || new Date().toISOString().split('T')[0];
     
     try {
-      console.log(`Calculating performance snapshot for user ${userId} on ${targetDate}...`);
+      Logger.info(`Calculating performance snapshot for user ${userId} on ${targetDate}...`);
       
       // Get all accounts for the user
       const accounts = await AccountModel.findByUserId(userId);
@@ -122,7 +123,7 @@ export class PerformanceHistoryService {
       
       await PerformanceModel.create(userId, snapshot);
       
-      console.log(`✅ Performance snapshot calculated and stored for ${targetDate}:`, {
+      Logger.debug(`✅ Performance snapshot calculated and stored for ${targetDate}:`, {
         totalPL: totalPL.toFixed(2), // Total P&L from INVESTMENT accounts only
         investmentPL: investmentPLCalculated.toFixed(2), // Pure investment performance (Total - Currency)
         currencyPL: currencyPL.toFixed(2), // Currency exchange P&L
@@ -133,7 +134,7 @@ export class PerformanceHistoryService {
       return snapshot;
       
     } catch (error) {
-      console.error('Error calculating performance snapshot:', error);
+      Logger.error('Error calculating performance snapshot:', error);
       throw error;
     }
   }
@@ -167,7 +168,7 @@ export class PerformanceHistoryService {
     const end = new Date(endDate);
     const current = new Date(start);
     
-    console.log(`Backfilling performance history from ${startDate} to ${endDate}...`);
+    Logger.info(`Backfilling performance history from ${startDate} to ${endDate}...`);
     
     while (current <= end) {
       const dateStr = current.toISOString().split('T')[0];
@@ -182,13 +183,13 @@ export class PerformanceHistoryService {
         try {
           await this.calculateAndStoreSnapshot(userId, dateStr);
         } catch (error) {
-          console.warn(`Failed to calculate snapshot for ${dateStr}:`, error);
+          Logger.warn(`Failed to calculate snapshot for ${dateStr}:`, error);
         }
       }
       
       current.setDate(current.getDate() + 1);
     }
     
-    console.log('✅ Performance history backfill completed');
+    Logger.info('✅ Performance history backfill completed');
   }
 }

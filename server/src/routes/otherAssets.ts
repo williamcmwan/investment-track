@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { OtherAssetModel, CreateOtherAssetData, UpdateOtherAssetData } from '../models/OtherAsset.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
+import { Logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -33,7 +34,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     const assets = await OtherAssetModel.findByUserId(req.user?.id || 0);
     return res.json(assets);
   } catch (error) {
-    console.error('Get assets error:', error);
+    Logger.error('Get assets error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -53,7 +54,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
     
     return res.json(asset);
   } catch (error) {
-    console.error('Get asset error:', error);
+    Logger.error('Get asset error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -69,9 +70,9 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
-      console.log(`📈 Updated performance snapshot after asset creation`);
+      Logger.info(`📈 Updated performance snapshot after asset creation`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     return res.status(201).json(asset);
@@ -80,7 +81,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Invalid input', details: error.errors });
     }
     
-    console.error('Create asset error:', error);
+    Logger.error('Create asset error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -104,9 +105,9 @@ router.put('/:id', async (req: AuthenticatedRequest, res) => {
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
-      console.log(`📈 Updated performance snapshot after asset update`);
+      Logger.info(`📈 Updated performance snapshot after asset update`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     return res.json(asset);
@@ -115,7 +116,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Invalid input', details: error.errors });
     }
     
-    console.error('Update asset error:', error);
+    Logger.error('Update asset error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -137,14 +138,14 @@ router.delete('/:id', async (req: AuthenticatedRequest, res) => {
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
-      console.log(`📈 Updated performance snapshot after asset deletion`);
+      Logger.info(`📈 Updated performance snapshot after asset deletion`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     return res.json({ message: 'Asset deleted successfully' });
   } catch (error) {
-    console.error('Delete asset error:', error);
+    Logger.error('Delete asset error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

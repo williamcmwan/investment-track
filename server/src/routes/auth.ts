@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { UserModel, CreateUserData, LoginData } from '../models/User.js';
 import { TwoFactorAuthService } from '../services/twoFactorAuth.js';
+import { Logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -23,16 +24,16 @@ const loginSchema = z.object({
 // Register new user
 router.post('/register', async (req, res) => {
   try {
-    console.log('Registration request body:', req.body);
-    console.log('Request headers:', req.headers);
-    console.log('Content-Type:', req.get('Content-Type'));
+    Logger.debug('Registration request body:', req.body);
+    Logger.debug('Request headers:', req.headers);
+    Logger.debug('Content-Type:', req.get('Content-Type'));
     const validatedData = registerSchema.parse(req.body);
     
     // Check if user already exists
-    console.log('Checking for existing user with email:', validatedData.email);
+    Logger.debug('Checking for existing user with email:', validatedData.email);
     const existingUser = await UserModel.findByEmail(validatedData.email);
     if (existingUser) {
-      console.log('User already exists:', existingUser);
+      Logger.debug('User already exists:', existingUser);
       return res.status(400).json({ 
         error: 'User already exists',
         message: 'An account with this email address already exists. Please try logging in instead.'
@@ -65,7 +66,7 @@ router.post('/register', async (req, res) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.log('Validation error:', error.errors);
+      Logger.debug('Validation error:', error.errors);
       const errorMessages = error.errors.map(err => {
         if (err.path[0] === 'email') return 'Please enter a valid email address';
         if (err.path[0] === 'password') return 'Password must be at least 6 characters long';
@@ -79,7 +80,7 @@ router.post('/register', async (req, res) => {
       });
     }
     
-    console.error('Registration error:', error);
+    Logger.error('Registration error:', error);
     return res.status(500).json({ 
       error: 'Internal server error',
       message: 'Something went wrong. Please try again later.'
@@ -148,7 +149,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid input', details: error.errors });
     }
     
-    console.error('Login error:', error);
+    Logger.error('Login error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

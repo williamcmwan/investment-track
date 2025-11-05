@@ -4,6 +4,7 @@ import { PerformanceModel, CreatePerformanceData } from '../models/Performance.j
 import { PerformanceHistoryService } from '../services/performanceHistoryService.js';
 import { SchedulerService } from '../services/schedulerService.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
+import { Logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     const performance = await PerformanceModel.findByUserId(req.user?.id || 0, limit);
     return res.json(performance);
   } catch (error) {
-    console.error('Get performance error:', error);
+    Logger.error('Get performance error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -48,7 +49,7 @@ router.get('/range', async (req: AuthenticatedRequest, res) => {
     
     return res.json(performance);
   } catch (error) {
-    console.error('Get performance range error:', error);
+    Logger.error('Get performance range error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -63,7 +64,7 @@ router.get('/latest', async (req: AuthenticatedRequest, res) => {
     
     return res.json(performance);
   } catch (error) {
-    console.error('Get latest performance error:', error);
+    Logger.error('Get latest performance error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -80,7 +81,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Invalid input', details: error.errors });
     }
     
-    console.error('Create performance error:', error);
+    Logger.error('Create performance error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -91,7 +92,7 @@ router.post('/calculate-today', async (req: AuthenticatedRequest, res) => {
     const snapshot = await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
     return res.json(snapshot);
   } catch (error) {
-    console.error('Calculate today performance error:', error);
+    Logger.error('Calculate today performance error:', error);
     return res.status(500).json({ error: 'Failed to calculate performance snapshot' });
   }
 });
@@ -107,7 +108,7 @@ router.post('/calculate-snapshot', async (req: AuthenticatedRequest, res) => {
     const snapshot = await PerformanceHistoryService.calculateAndStoreSnapshot(req.user?.id || 0, date);
     return res.json(snapshot);
   } catch (error) {
-    console.error('Calculate snapshot error:', error);
+    Logger.error('Calculate snapshot error:', error);
     return res.status(500).json({ error: 'Failed to calculate performance snapshot' });
   }
 });
@@ -123,7 +124,7 @@ router.post('/backfill', async (req: AuthenticatedRequest, res) => {
     await PerformanceHistoryService.backfillPerformanceHistory(req.user?.id || 0, startDate, endDate);
     return res.json({ message: 'Performance history backfill completed' });
   } catch (error) {
-    console.error('Backfill performance error:', error);
+    Logger.error('Backfill performance error:', error);
     return res.status(500).json({ error: 'Failed to backfill performance history' });
   }
 });
@@ -135,7 +136,7 @@ router.get('/chart', async (req: AuthenticatedRequest, res) => {
     const history = await PerformanceHistoryService.getPerformanceHistory(req.user?.id || 0, limit);
     return res.json(history);
   } catch (error) {
-    console.error('Get performance chart data error:', error);
+    Logger.error('Get performance chart data error:', error);
     return res.status(500).json({ error: 'Failed to get performance chart data' });
   }
 });
@@ -146,7 +147,7 @@ router.post('/trigger-daily-calculation', async (req: AuthenticatedRequest, res)
     await SchedulerService.triggerDailyCalculation();
     return res.json({ message: 'Daily calculation triggered successfully' });
   } catch (error) {
-    console.error('Trigger daily calculation error:', error);
+    Logger.error('Trigger daily calculation error:', error);
     return res.status(500).json({ error: 'Failed to trigger daily calculation' });
   }
 });
@@ -156,7 +157,7 @@ router.get('/scheduler-status', async (req: AuthenticatedRequest, res) => {
     const status = SchedulerService.getStatus();
     return res.json(status);
   } catch (error) {
-    console.error('Get scheduler status error:', error);
+    Logger.error('Get scheduler status error:', error);
     return res.status(500).json({ error: 'Failed to get scheduler status' });
   }
 });

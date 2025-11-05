@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { IBService } from '../services/ibService.js';
 import { IBConnectionService } from '../services/ibConnectionService.js';
+import { Logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -24,7 +25,7 @@ router.get('/ib/settings', authenticateToken, async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error getting IB settings:', error);
+    Logger.error('Error getting IB settings:', error);
     return res.status(500).json({ error: 'Failed to get IB settings' });
   }
 });
@@ -51,7 +52,7 @@ router.post('/ib/settings', authenticateToken, async (req, res) => {
     
     return res.json({ success: true, message: 'IB settings saved successfully' });
   } catch (error) {
-    console.error('Error saving IB settings:', error);
+    Logger.error('Error saving IB settings:', error);
     return res.status(500).json({ error: 'Failed to save IB settings' });
   }
 });
@@ -72,7 +73,7 @@ router.post('/ib/balance', authenticateToken, async (req, res) => {
     const timestamp = userSettings.target_account_id ? await IBService.getBalanceTimestamp(userSettings.target_account_id) : null;
     return res.json({ ...result, timestamp });
   } catch (error) {
-    console.error('Error getting IB balance:', error);
+    Logger.error('Error getting IB balance:', error);
     return res.status(500).json({ error: 'Failed to get IB account balance' });
   }
 });
@@ -80,7 +81,7 @@ router.post('/ib/balance', authenticateToken, async (req, res) => {
 // Force refresh IB account balance
 router.post('/ib/balance/refresh', authenticateToken, async (req, res) => {
   try {
-    console.log('🔄 Force refresh balance endpoint called');
+    Logger.info('🔄 Force refresh balance endpoint called');
     const userId = (req as any).user.id;
     
     // Get user's IB settings
@@ -109,9 +110,9 @@ router.post('/ib/balance/refresh', authenticateToken, async (req, res) => {
           'Manual IB balance refresh'
         );
         
-        console.log(`💰 Updated account balance: ${result.balance} ${result.currency}`);
+        Logger.debug(`💰 Updated account balance: ${result.balance} ${result.currency}`);
       } catch (accountError) {
-        console.error(`❌ Failed to update account balance:`, accountError);
+        Logger.error(`❌ Failed to update account balance:`, accountError);
       }
     }
     
@@ -119,16 +120,16 @@ router.post('/ib/balance/refresh', authenticateToken, async (req, res) => {
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(userId);
-      console.log(`📈 Updated performance snapshot after balance refresh`);
+      Logger.info(`📈 Updated performance snapshot after balance refresh`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     const timestamp = userSettings.target_account_id ? await IBService.getBalanceTimestamp(userSettings.target_account_id) : null;
-    console.log('✅ Balance refresh successful, returning data');
+    Logger.info('✅ Balance refresh successful, returning data');
     return res.json({ ...result, timestamp });
   } catch (error) {
-    console.error('❌ Error refreshing IB balance:', error);
+    Logger.error('❌ Error refreshing IB balance:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to refresh IB account balance';
     return res.status(500).json({ error: errorMessage });
   }
@@ -149,7 +150,7 @@ router.post('/ib/portfolio', authenticateToken, async (req, res) => {
     const result = await IBService.getPortfolio(userSettings);
     return res.json(result);
   } catch (error) {
-    console.error('Error getting IB portfolio:', error);
+    Logger.error('Error getting IB portfolio:', error);
     return res.status(500).json({ error: 'Failed to get IB portfolio' });
   }
 });
@@ -157,7 +158,7 @@ router.post('/ib/portfolio', authenticateToken, async (req, res) => {
 // Force refresh IB portfolio
 router.post('/ib/portfolio/refresh', authenticateToken, async (req, res) => {
   try {
-    console.log('🔄 Force refresh portfolio endpoint called');
+    Logger.info('🔄 Force refresh portfolio endpoint called');
     const userId = (req as any).user.id;
     
     // Get user's IB settings
@@ -173,15 +174,15 @@ router.post('/ib/portfolio/refresh', authenticateToken, async (req, res) => {
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(userId);
-      console.log(`📈 Updated performance snapshot after portfolio refresh`);
+      Logger.info(`📈 Updated performance snapshot after portfolio refresh`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
-    console.log('✅ Portfolio refresh successful, returning data');
+    Logger.info('✅ Portfolio refresh successful, returning data');
     return res.json(result);
   } catch (error) {
-    console.error('❌ Error refreshing IB portfolio:', error);
+    Logger.error('❌ Error refreshing IB portfolio:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to refresh IB portfolio';
     return res.status(500).json({ error: errorMessage });
   }
@@ -202,7 +203,7 @@ router.post('/ib/account-data', authenticateToken, async (req, res) => {
     const result = await IBService.getAccountData(userSettings);
     return res.json(result);
   } catch (error) {
-    console.error('Error getting IB account data:', error);
+    Logger.error('Error getting IB account data:', error);
     return res.status(500).json({ error: 'Failed to get IB account data' });
   }
 });
@@ -238,9 +239,9 @@ router.post('/ib/refresh-all', authenticateToken, async (req, res) => {
           'Manual IB full refresh'
         );
         
-        console.log(`💰 Updated account balance: ${result.balance.balance} ${result.balance.currency}`);
+        Logger.info(`💰 Updated account balance: ${result.balance.balance} ${result.balance.currency}`);
       } catch (accountError) {
-        console.error(`❌ Failed to update account balance:`, accountError);
+        Logger.error(`❌ Failed to update account balance:`, accountError);
       }
     }
     
@@ -248,14 +249,14 @@ router.post('/ib/refresh-all', authenticateToken, async (req, res) => {
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(userId);
-      console.log(`📈 Updated performance snapshot after full refresh`);
+      Logger.info(`📈 Updated performance snapshot after full refresh`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     return res.json(result);
   } catch (error) {
-    console.error('Error refreshing all IB data:', error);
+    Logger.error('Error refreshing all IB data:', error);
     return res.status(500).json({ error: 'Failed to refresh all IB data' });
   }
 });
@@ -275,7 +276,7 @@ router.get('/ib/data-status', authenticateToken, async (req, res) => {
     const status = await IBService.getDataStats(userSettings.target_account_id);
     return res.json(status);
   } catch (error) {
-    console.error('Error getting data status:', error);
+    Logger.error('Error getting data status:', error);
     return res.status(500).json({ error: 'Failed to get data status' });
   }
 });
@@ -283,7 +284,7 @@ router.get('/ib/data-status', authenticateToken, async (req, res) => {
 // Test database data loading endpoint
 router.get('/ib/test-data', authenticateToken, async (req, res) => {
   try {
-    console.log('🧪 Testing database data loading...');
+    Logger.info('🧪 Testing database data loading...');
     const userId = (req as any).user.id;
 
     // Get user's IB settings
@@ -300,7 +301,7 @@ router.get('/ib/test-data', authenticateToken, async (req, res) => {
       dataStatus: userSettings.target_account_id ? await IBService.getDataStats(userSettings.target_account_id) : null
     });
   } catch (error) {
-    console.error('Error testing database data:', error);
+    Logger.error('Error testing database data:', error);
     return res.status(500).json({ error: 'Failed to test database data' });
   }
 });
@@ -311,7 +312,7 @@ router.post('/ib/cleanup', authenticateToken, async (req, res) => {
     await IBService.forceCleanup();
     return res.json({ success: true, message: 'IB subscriptions cleaned up' });
   } catch (error) {
-    console.error('Error cleaning up IB subscriptions:', error);
+    Logger.error('Error cleaning up IB subscriptions:', error);
     return res.status(500).json({ error: 'Failed to cleanup IB subscriptions' });
   }
 });
@@ -332,7 +333,7 @@ router.post('/ib/cash', authenticateToken, async (req, res) => {
     const timestamp = userSettings.target_account_id ? await IBService.getCashTimestamp(userSettings.target_account_id) : null;
     return res.json({ data: result, timestamp });
   } catch (error) {
-    console.error('Error getting IB cash balances:', error);
+    Logger.error('Error getting IB cash balances:', error);
     return res.status(500).json({ error: 'Failed to get IB cash balances' });
   }
 });
@@ -340,7 +341,7 @@ router.post('/ib/cash', authenticateToken, async (req, res) => {
 // Force refresh IB cash balances
 router.post('/ib/cash/refresh', authenticateToken, async (req, res) => {
   try {
-    console.log('🔄 Force refresh cash balances endpoint called');
+    Logger.info('🔄 Force refresh cash balances endpoint called');
     const userId = (req as any).user.id;
     
     // Get user's IB settings
@@ -356,16 +357,16 @@ router.post('/ib/cash/refresh', authenticateToken, async (req, res) => {
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(userId);
-      console.log(`📈 Updated performance snapshot after cash balances refresh`);
+      Logger.info(`📈 Updated performance snapshot after cash balances refresh`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     const timestamp = userSettings.target_account_id ? await IBService.getCashTimestamp(userSettings.target_account_id) : null;
-    console.log('✅ Cash balances refresh successful, returning data');
+    Logger.info('✅ Cash balances refresh successful, returning data');
     return res.json({ data: result, timestamp });
   } catch (error) {
-    console.error('❌ Error refreshing IB cash balances:', error);
+    Logger.error('❌ Error refreshing IB cash balances:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to refresh IB cash balances';
     return res.status(500).json({ error: errorMessage });
   }
@@ -379,7 +380,7 @@ router.post('/ib/disconnect', authenticateToken, async (req, res) => {
     await IBService.disconnect();
     return res.json({ success: true, message: 'Disconnected from IB Gateway' });
   } catch (error) {
-    console.error('Error disconnecting from IB:', error);
+    Logger.error('Error disconnecting from IB:', error);
     return res.status(500).json({ error: 'Failed to disconnect from IB Gateway' });
   }
 });

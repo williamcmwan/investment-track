@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { CurrencyPairModel, CreateCurrencyPairData, UpdateCurrencyPairData } from '../models/CurrencyPair.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
 import { ExchangeRateService } from '../services/exchangeRateService.js';
+import { Logger } from '../utils/logger.js';
 
 
 const router = express.Router();
@@ -15,7 +16,7 @@ router.get('/popular-pairs', async (req, res) => {
     const popularPairs = ExchangeRateService.getPopularPairs(baseCurrency);
     return res.json(popularPairs);
   } catch (error) {
-    console.error('Get popular pairs error:', error);
+    Logger.error('Get popular pairs error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -29,7 +30,7 @@ router.get('/last-update', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Get last update time error:', error);
+    Logger.error('Get last update time error:', error);
     return res.status(500).json({ error: 'Failed to get last update time' });
   }
 });
@@ -44,7 +45,7 @@ router.get('/all-last-updates', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Get all last update times error:', error);
+    Logger.error('Get all last update times error:', error);
     return res.status(500).json({ error: 'Failed to get last update times' });
   }
 });
@@ -70,7 +71,7 @@ router.get('/public-rate/:pair', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Get exchange rate error:', error);
+    Logger.error('Get exchange rate error:', error);
     return res.status(500).json({ error: 'Failed to get exchange rate' });
   }
 });
@@ -88,9 +89,9 @@ router.post('/update-rates-enhanced', authenticateToken, async (req: Authenticat
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(userId);
-      console.log(`📈 Updated performance snapshot after enhanced currency refresh`);
+      Logger.info(`📈 Updated performance snapshot after enhanced currency refresh`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     // Return updated pairs for the authenticated user
@@ -101,7 +102,7 @@ router.post('/update-rates-enhanced', authenticateToken, async (req: Authenticat
       accuracy: 'Multi-source weighted average'
     });
   } catch (error) {
-    console.error('Update enhanced exchange rates error:', error);
+    Logger.error('Update enhanced exchange rates error:', error);
     return res.status(500).json({ error: 'Failed to update enhanced exchange rates' });
   }
 });
@@ -130,14 +131,14 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       try {
         await ExchangeRateService.updateAllCurrencyPairs(userId, true); // Force refresh when explicitly requested
       } catch (e) {
-        console.warn('Currency refresh failed, returning cached pairs instead');
+        Logger.warn('Currency refresh failed, returning cached pairs instead');
       }
     }
 
     const pairs = await CurrencyPairModel.findByUserId(userId);
     return res.json(pairs);
   } catch (error) {
-    console.error('Get currency pairs error:', error);
+    Logger.error('Get currency pairs error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -157,7 +158,7 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => 
     
     return res.json(pair);
   } catch (error) {
-    console.error('Get currency pair error:', error);
+    Logger.error('Get currency pair error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -185,9 +186,9 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
-      console.log(`📈 Updated performance snapshot after currency pair creation`);
+      Logger.info(`📈 Updated performance snapshot after currency pair creation`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     return res.status(201).json(pair);
@@ -196,7 +197,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Invalid input', details: error.errors });
     }
     
-    console.error('Create currency pair error:', error);
+    Logger.error('Create currency pair error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -220,9 +221,9 @@ router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => 
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
-      console.log(`📈 Updated performance snapshot after currency pair update`);
+      Logger.info(`📈 Updated performance snapshot after currency pair update`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     return res.json(pair);
@@ -231,7 +232,7 @@ router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res) => 
       return res.status(400).json({ error: 'Invalid input', details: error.errors });
     }
     
-    console.error('Update currency pair error:', error);
+    Logger.error('Update currency pair error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -253,14 +254,14 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res) 
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
-      console.log(`📈 Updated performance snapshot after currency pair deletion`);
+      Logger.info(`📈 Updated performance snapshot after currency pair deletion`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     return res.json({ message: 'Currency pair deleted successfully' });
   } catch (error) {
-    console.error('Delete currency pair error:', error);
+    Logger.error('Delete currency pair error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -275,9 +276,9 @@ router.post('/update-rates', authenticateToken, async (req: AuthenticatedRequest
     try {
       const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
       await PerformanceHistoryService.calculateTodaySnapshot(userId);
-      console.log(`📈 Updated performance snapshot after currency refresh`);
+      Logger.info(`📈 Updated performance snapshot after currency refresh`);
     } catch (performanceError) {
-      console.error(`❌ Failed to update performance snapshot:`, performanceError);
+      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
     }
     
     // Return updated pairs
@@ -287,7 +288,7 @@ router.post('/update-rates', authenticateToken, async (req: AuthenticatedRequest
       pairs 
     });
   } catch (error) {
-    console.error('Update exchange rates error:', error);
+    Logger.error('Update exchange rates error:', error);
     return res.status(500).json({ error: 'Failed to update exchange rates' });
   }
 });

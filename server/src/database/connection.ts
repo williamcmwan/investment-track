@@ -2,6 +2,7 @@ import sqlite3 from 'sqlite3';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
+import { Logger } from '../utils/logger.js';
 
 const dbPath = process.env.DATABASE_PATH || './data/investment_tracker.db';
 
@@ -14,9 +15,9 @@ if (!fs.existsSync(dataDir)) {
 // Create database connection
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
-    console.error('Error opening database:', err.message);
+    Logger.error('Error opening database:', err.message);
   } else {
-    console.log('Connected to SQLite database');
+    Logger.info('Connected to SQLite database');
   }
 });
 

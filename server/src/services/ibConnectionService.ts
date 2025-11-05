@@ -1,4 +1,5 @@
 import { dbGet, dbRun } from '../database/connection.js';
+import { Logger } from '../utils/logger.js';
 
 interface IBConnectionSettings {
   host: string;
@@ -32,7 +33,7 @@ export class IBConnectionService {
         target_account_id: row.target_account_id
       };
     } catch (error) {
-      console.error('IBConnectionService: Database error:', error);
+      Logger.error('IBConnectionService: Database error:', error);
       throw error;
     }
   }
@@ -75,7 +76,7 @@ export class IBConnectionService {
         ]);
       }
     } catch (error) {
-      console.error('IBConnectionService: Error saving settings:', error);
+      Logger.error('IBConnectionService: Error saving settings:', error);
       throw error;
     }
   }
@@ -96,7 +97,7 @@ export class IBConnectionService {
         userId
       ]);
     } catch (err) {
-      console.error('IBConnectionService: Error updating connection status:', err);
+      Logger.error('IBConnectionService: Error updating connection status:', err);
       throw err;
     }
   }
@@ -112,7 +113,7 @@ export class IBConnectionService {
     try {
       await dbRun(query, [balance, currency, userId]);
     } catch (error) {
-      console.error('IBConnectionService: Error updating account balance:', error);
+      Logger.error('IBConnectionService: Error updating account balance:', error);
       throw error;
     }
   }

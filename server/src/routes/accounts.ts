@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AccountModel, CreateAccountData, UpdateAccountData } from '../models/Account.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
 import { PerformanceHistoryService } from '../services/performanceHistoryService.js';
+import { Logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -45,7 +46,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
     
     return res.json(accountsWithHistory);
   } catch (error) {
-    console.error('Get accounts error:', error);
+    Logger.error('Get accounts error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -67,12 +68,12 @@ router.get('/:id', async (req: AuthenticatedRequest, res) => {
     try {
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
     } catch (e) {
-      console.warn('Performance snapshot update failed after account update');
+      Logger.warn('Performance snapshot update failed after account update');
     }
 
     return res.json(account);
   } catch (error) {
-    console.error('Get account error:', error);
+    Logger.error('Get account error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -89,7 +90,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Invalid input', details: error.errors });
     }
     
-    console.error('Create account error:', error);
+    Logger.error('Create account error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -138,7 +139,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res) => {
     try {
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
     } catch (e) {
-      console.warn('Performance snapshot update failed after account update');
+      Logger.warn('Performance snapshot update failed after account update');
     }
     
     return res.json(account);
@@ -147,7 +148,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Invalid input', details: error.errors });
     }
     
-    console.error('Update account error:', error);
+    Logger.error('Update account error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -167,7 +168,7 @@ router.delete('/:id', async (req: AuthenticatedRequest, res) => {
     
     return res.json({ message: 'Account deleted successfully' });
   } catch (error) {
-    console.error('Delete account error:', error);
+    Logger.error('Delete account error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -197,12 +198,12 @@ router.post('/:id/history', async (req: AuthenticatedRequest, res) => {
     try {
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
     } catch (e) {
-      console.warn('Performance snapshot update failed after adding history');
+      Logger.warn('Performance snapshot update failed after adding history');
     }
 
     return res.status(201).json({ message: 'Balance history entry added' });
   } catch (error) {
-    console.error('Add balance history error:', error);
+    Logger.error('Add balance history error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -234,12 +235,12 @@ router.put('/:id/history/:historyId', async (req: AuthenticatedRequest, res) => 
     try {
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
     } catch (e) {
-      console.warn('Performance snapshot update failed after updating history');
+      Logger.warn('Performance snapshot update failed after updating history');
     }
 
     return res.json({ message: 'Balance history entry updated' });
   } catch (error) {
-    console.error('Update balance history error:', error);
+    Logger.error('Update balance history error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -266,12 +267,12 @@ router.delete('/:id/history/:historyId', async (req: AuthenticatedRequest, res) 
     try {
       await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
     } catch (e) {
-      console.warn('Performance snapshot update failed after deleting history');
+      Logger.warn('Performance snapshot update failed after deleting history');
     }
 
     return res.json({ message: 'Balance history entry deleted' });
   } catch (error) {
-    console.error('Delete balance history error:', error);
+    Logger.error('Delete balance history error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

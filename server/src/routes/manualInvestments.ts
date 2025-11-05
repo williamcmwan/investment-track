@@ -1,10 +1,11 @@
 import express from 'express';
 import { OtherPortfolioService } from '../services/otherPortfolioService.js';
+import { Logger } from '../utils/logger.js';
 
 const router = express.Router();
 
 // Initialize database on first load
-OtherPortfolioService.initializeDatabase().catch(console.error);
+OtherPortfolioService.initializeDatabase().catch(Logger.error);
 
 
 
@@ -27,7 +28,7 @@ router.get('/positions', async (req, res) => {
     
     return res.json(positions);
   } catch (error) {
-    console.error('Error getting manual positions:', error);
+    Logger.error('Error getting manual positions:', error);
     return res.status(500).json({ error: 'Failed to get manual positions' });
   }
 });
@@ -38,7 +39,7 @@ router.get('/positions', async (req, res) => {
  */
 router.post('/positions', async (req, res) => {
   try {
-    console.log('📊 Creating position with request body:', req.body);
+    Logger.info('📊 Creating position with request body:', req.body);
     
     const {
       accountId, // This will be the main account ID
@@ -55,7 +56,7 @@ router.post('/positions', async (req, res) => {
     } = req.body;
     
     if (!accountId || !symbol || !secType || !quantity || !averageCost) {
-      console.log('❌ Validation failed:', { accountId, symbol, secType, quantity, averageCost });
+      Logger.info('❌ Validation failed:', { accountId, symbol, secType, quantity, averageCost });
       return res.status(400).json({ 
         error: 'Account ID, symbol, security type, quantity, and average cost are required' 
       });
@@ -75,7 +76,7 @@ router.post('/positions', async (req, res) => {
       primaryExchange
     };
     
-    console.log('📊 Creating position with processed data:', positionData);
+    Logger.info('📊 Creating position with processed data:', positionData);
 
     const position = OtherPortfolioService.addManualPosition(positionData);
     
@@ -92,18 +93,18 @@ router.post('/positions', async (req, res) => {
         try {
           const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
           await PerformanceHistoryService.calculateTodaySnapshot(user.id);
-          console.log(`📈 Updated performance snapshot after manual position creation for user: ${user.name}`);
+          Logger.info(`📈 Updated performance snapshot after manual position creation for user: ${user.name}`);
         } catch (performanceError) {
-          console.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
+          Logger.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
         }
       }
     } catch (error) {
-      console.error('❌ Failed to update performance snapshots:', error);
+      Logger.error('❌ Failed to update performance snapshots:', error);
     }
     
     return res.status(201).json(position);
   } catch (error) {
-    console.error('Error adding manual position:', error);
+    Logger.error('Error adding manual position:', error);
     return res.status(500).json({ error: 'Failed to add manual position' });
   }
 });
@@ -141,13 +142,13 @@ router.put('/positions/:id', async (req, res) => {
           try {
             const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
             await PerformanceHistoryService.calculateTodaySnapshot(user.id);
-            console.log(`📈 Updated performance snapshot after manual position update for user: ${user.name}`);
+            Logger.info(`📈 Updated performance snapshot after manual position update for user: ${user.name}`);
           } catch (performanceError) {
-            console.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
+            Logger.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
           }
         }
       } catch (error) {
-        console.error('❌ Failed to update performance snapshots:', error);
+        Logger.error('❌ Failed to update performance snapshots:', error);
       }
       
       return res.json({ success: true });
@@ -155,7 +156,7 @@ router.put('/positions/:id', async (req, res) => {
       return res.status(404).json({ error: 'Position not found' });
     }
   } catch (error) {
-    console.error('Error updating manual position:', error);
+    Logger.error('Error updating manual position:', error);
     return res.status(500).json({ error: 'Failed to update manual position' });
   }
 });
@@ -180,13 +181,13 @@ router.delete('/positions/:id', async (req, res) => {
           try {
             const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
             await PerformanceHistoryService.calculateTodaySnapshot(user.id);
-            console.log(`📈 Updated performance snapshot after manual position deletion for user: ${user.name}`);
+            Logger.info(`📈 Updated performance snapshot after manual position deletion for user: ${user.name}`);
           } catch (performanceError) {
-            console.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
+            Logger.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
           }
         }
       } catch (error) {
-        console.error('❌ Failed to update performance snapshots:', error);
+        Logger.error('❌ Failed to update performance snapshots:', error);
       }
       
       res.json({ success: true });
@@ -194,7 +195,7 @@ router.delete('/positions/:id', async (req, res) => {
       res.status(404).json({ error: 'Position not found' });
     }
   } catch (error) {
-    console.error('Error deleting manual position:', error);
+    Logger.error('Error deleting manual position:', error);
     res.status(500).json({ error: 'Failed to delete manual position' });
   }
 });
@@ -218,13 +219,13 @@ router.post('/positions/refresh-market-data', async (req, res) => {
         try {
           const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
           await PerformanceHistoryService.calculateTodaySnapshot(user.id);
-          console.log(`📈 Updated performance snapshot after manual investment refresh for user: ${user.name}`);
+          Logger.info(`📈 Updated performance snapshot after manual investment refresh for user: ${user.name}`);
         } catch (performanceError) {
-          console.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
+          Logger.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
         }
       }
     } catch (error) {
-      console.error('❌ Failed to update performance snapshots:', error);
+      Logger.error('❌ Failed to update performance snapshots:', error);
     }
     
     // Include last refresh time in response
@@ -235,7 +236,7 @@ router.post('/positions/refresh-market-data', async (req, res) => {
       lastRefreshTime: lastRefreshTime ? new Date(lastRefreshTime).toISOString() : null
     });
   } catch (error) {
-    console.error('Error refreshing market data:', error);
+    Logger.error('Error refreshing market data:', error);
     res.status(500).json({ error: 'Failed to refresh market data' });
   }
 });
@@ -258,7 +259,7 @@ router.get('/refresh-status', async (req, res) => {
       autoRefreshEnabled: true
     });
   } catch (error) {
-    console.error('Error getting refresh status:', error);
+    Logger.error('Error getting refresh status:', error);
     res.status(500).json({ error: 'Failed to get refresh status' });
   }
 });
@@ -277,7 +278,7 @@ router.get('/all-last-updates', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error getting all last update times:', error);
+    Logger.error('Error getting all last update times:', error);
     res.status(500).json({ error: 'Failed to get last update times' });
   }
 });
@@ -292,7 +293,7 @@ router.get('/summary', async (req, res) => {
     const summary = OtherPortfolioService.getManualPortfolioSummary(userId);
     res.json(summary);
   } catch (error) {
-    console.error('Error getting portfolio summary:', error);
+    Logger.error('Error getting portfolio summary:', error);
     res.status(500).json({ error: 'Failed to get portfolio summary' });
   }
 });
@@ -315,7 +316,7 @@ router.get('/search-symbols', async (req, res) => {
     
     return res.json(results);
   } catch (error) {
-    console.error('Error searching symbols:', error);
+    Logger.error('Error searching symbols:', error);
     return res.status(500).json({ error: 'Failed to search symbols' });
   }
 });
@@ -363,7 +364,7 @@ router.get('/market-data/:symbol', async (req, res) => {
       return res.status(404).json({ error: 'Market data not found for symbol' });
     }
   } catch (error) {
-    console.error('Error getting market data:', error);
+    Logger.error('Error getting market data:', error);
     return res.status(500).json({ error: 'Failed to get market data' });
   }
 });
@@ -378,7 +379,7 @@ router.get('/cash-balances', async (req, res) => {
     const cashBalances = OtherPortfolioService.getCashBalances(userId);
     return res.json(cashBalances);
   } catch (error) {
-    console.error('Error getting cash balances:', error);
+    Logger.error('Error getting cash balances:', error);
     return res.status(500).json({ error: 'Failed to get cash balances' });
   }
 });
@@ -410,7 +411,7 @@ router.post('/cash-balances', async (req, res) => {
     const cashBalance = OtherPortfolioService.addOrUpdateCashBalance(cashBalanceData);
     return res.status(201).json(cashBalance);
   } catch (error) {
-    console.error('Error adding/updating cash balance:', error);
+    Logger.error('Error adding/updating cash balance:', error);
     return res.status(500).json({ error: 'Failed to add/update cash balance' });
   }
 });
@@ -436,7 +437,7 @@ router.put('/cash-balances/:id', async (req, res) => {
       return res.status(404).json({ error: 'Cash balance not found' });
     }
   } catch (error) {
-    console.error('Error updating cash balance:', error);
+    Logger.error('Error updating cash balance:', error);
     return res.status(500).json({ error: 'Failed to update cash balance' });
   }
 });
@@ -456,7 +457,7 @@ router.delete('/cash-balances/:id', async (req, res) => {
       res.status(404).json({ error: 'Cash balance not found' });
     }
   } catch (error) {
-    console.error('Error deleting cash balance:', error);
+    Logger.error('Error deleting cash balance:', error);
     res.status(500).json({ error: 'Failed to delete cash balance' });
   }
 });

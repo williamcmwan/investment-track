@@ -1,5 +1,6 @@
 import { dbRun, dbGet, dbAll } from '../database/connection.js';
 import { LastUpdateService } from './lastUpdateService.js';
+import { Logger } from '../utils/logger.js';
 
 interface ExchangeRate {
   pair: string;
@@ -32,7 +33,7 @@ export class ExchangeRateService {
       const symbol = `${fromCurrency}${toCurrency}=X`;
       const url = `${this.YAHOO_FINANCE_BASE}/${symbol}`;
       
-      console.log(`Fetching ${fromCurrency}/${toCurrency} rate from Yahoo Finance...`);
+      Logger.debug(`Fetching ${fromCurrency}/${toCurrency} rate from Yahoo Finance...`);
       
       const response = await fetch(url, {
         headers: {
@@ -58,10 +59,10 @@ export class ExchangeRateService {
       }
       
       const rate = meta.regularMarketPrice;
-      console.log(`Successfully fetched ${fromCurrency}/${toCurrency} rate: ${rate}`);
+      Logger.debug(`Successfully fetched ${fromCurrency}/${toCurrency} rate: ${rate}`);
       return rate;
     } catch (error) {
-      console.error(`Error fetching ${fromCurrency}/${toCurrency} from Yahoo Finance:`, error);
+      Logger.error(`Error fetching ${fromCurrency}/${toCurrency} from Yahoo Finance:`, error);
       throw error;
     }
   }
@@ -71,7 +72,7 @@ export class ExchangeRateService {
    */
   static async fetchLatestRates(): Promise<Record<string, number>> {
     try {
-      console.log('Fetching latest exchange rates from Yahoo Finance...');
+      Logger.info('Fetching latest exchange rates from Yahoo Finance...');
       
       // Common currency pairs to fetch
       const commonPairs = [
@@ -98,13 +99,13 @@ export class ExchangeRateService {
           // Also store the inverse rate
           rates[`${pair.to}/${pair.from}`] = 1 / rate;
         } catch (error) {
-          console.warn(`Failed to fetch ${pair.from}/${pair.to} from Yahoo Finance:`, error);
+          Logger.warn(`Failed to fetch ${pair.from}/${pair.to} from Yahoo Finance:`, error);
         }
       }
       
       // If we didn't get enough rates, fallback to exchangerate-api
       if (Object.keys(rates).length < 5) {
-        console.log('Falling back to exchangerate-api for missing rates...');
+        Logger.debug('Falling back to exchangerate-api for missing rates...');
         try {
           const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
           if (response.ok) {
@@ -132,14 +133,14 @@ export class ExchangeRateService {
             }
           }
         } catch (fallbackError) {
-          console.error('Fallback to exchangerate-api also failed:', fallbackError);
+          Logger.error('Fallback to exchangerate-api also failed:', fallbackError);
         }
       }
       
-      console.log(`Successfully fetched ${Object.keys(rates).length} exchange rates`);
+      Logger.debug(`Successfully fetched ${Object.keys(rates).length} exchange rates`);
       return rates;
     } catch (error) {
-      console.error('Error fetching exchange rates:', error);
+      Logger.error('Error fetching exchange rates:', error);
       throw new Error('Failed to fetch exchange rates');
     }
   }
@@ -159,7 +160,7 @@ export class ExchangeRateService {
       
       // If no cached rate exists, or cache is invalid, or should force update, fetch fresh rate
       if (!cached || !this.isCacheValid(cached.timestamp) || this.shouldForceUpdate(cached.timestamp)) {
-        console.log(`${!cached ? 'No cached rate found' : 'Cache expired'} for ${fromCurrency}/${toCurrency}, fetching fresh rate...`);
+        Logger.debug(`${!cached ? 'No cached rate found' : 'Cache expired'} for ${fromCurrency}/${toCurrency}, fetching fresh rate...`);
       } else {
         // Use cached rate if valid
         return cached.rate;
@@ -171,7 +172,7 @@ export class ExchangeRateService {
         // Try Yahoo Finance first for direct pair
         rate = await this.fetchYahooFinanceRate(fromCurrency, toCurrency);
       } catch (yahooError) {
-        console.warn(`Yahoo Finance failed for ${fromCurrency}/${toCurrency}, trying fallback...`);
+        Logger.warn(`Yahoo Finance failed for ${fromCurrency}/${toCurrency}, trying fallback...`);
         
         // Fallback: try to get rate through USD conversion
         try {
@@ -188,7 +189,7 @@ export class ExchangeRateService {
             rate = fromToUSD * usdToTarget;
           }
         } catch (fallbackError) {
-          console.warn(`Yahoo Finance fallback failed, using exchangerate-api...`);
+          Logger.warn(`Yahoo Finance fallback failed, using exchangerate-api...`);
           
           // Final fallback to exchangerate-api
           const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
@@ -218,7 +219,7 @@ export class ExchangeRateService {
       
       return rate;
     } catch (error) {
-      console.error(`Error getting exchange rate for ${fromCurrency}/${toCurrency}:`, error);
+      Logger.error(`Error getting exchange rate for ${fromCurrency}/${toCurrency}:`, error);
       return 1; // Fallback to 1:1
     }
   }
@@ -228,7 +229,7 @@ export class ExchangeRateService {
    */
   static async updateAllCurrencyPairs(userId: number, forceRefresh: boolean = false): Promise<void> {
     try {
-      console.log(`Updating currency pairs for user ${userId} with Yahoo Finance...`);
+      Logger.info(`Updating currency pairs for user ${userId} with Yahoo Finance...`);
       
       // Get all currency pairs for the user
       const pairs = await dbAll(
@@ -237,7 +238,7 @@ export class ExchangeRateService {
       ) as CurrencyPair[];
 
       if (pairs.length === 0) {
-        console.log('No currency pairs to update');
+        Logger.info('No currency pairs to update');
         return;
       }
 
@@ -245,7 +246,7 @@ export class ExchangeRateService {
       for (const pair of pairs) {
         const [fromCurrency, toCurrency] = pair.pair.split('/');
         if (!fromCurrency || !toCurrency) {
-          console.warn(`Invalid currency pair format: ${pair.pair}`);
+          Logger.warn(`Invalid currency pair format: ${pair.pair}`);
           continue;
         }
         let newRate: number;
@@ -264,7 +265,7 @@ export class ExchangeRateService {
               newRate = await this.getExchangeRate(fromCurrency, toCurrency);
             }
           } catch (error) {
-            console.warn(`Failed to update rate for ${pair.pair}, keeping current rate:`, error);
+            Logger.warn(`Failed to update rate for ${pair.pair}, keeping current rate:`, error);
             newRate = pair.currentRate; // Keep current rate if update fails
           }
         }
@@ -276,10 +277,10 @@ export class ExchangeRateService {
         );
       }
 
-      console.log(`Updated ${pairs.length} currency pairs with Yahoo Finance data`);
+      Logger.info(`Updated ${pairs.length} currency pairs with Yahoo Finance data`);
       await LastUpdateService.updateCurrencyTime();
     } catch (error) {
-      console.error('Error updating currency pairs:', error);
+      Logger.error('Error updating currency pairs:', error);
       throw error;
     }
   }
@@ -296,7 +297,7 @@ export class ExchangeRateService {
       
       return result ? { rate: result.rate, timestamp: result.updated_at } : null;
     } catch (error) {
-      console.error('Error getting cached rate:', error);
+      Logger.error('Error getting cached rate:', error);
       return null;
     }
   }
@@ -311,7 +312,7 @@ export class ExchangeRateService {
         [`${fromCurrency}/${toCurrency}`, rate]
       );
     } catch (error) {
-      console.error('Error caching rate:', error);
+      Logger.error('Error caching rate:', error);
     }
   }
 
@@ -343,7 +344,7 @@ export class ExchangeRateService {
       );
       return result?.last_update || null;
     } catch (error) {
-      console.error('Error getting last update time:', error);
+      Logger.error('Error getting last update time:', error);
       return null;
     }
   }

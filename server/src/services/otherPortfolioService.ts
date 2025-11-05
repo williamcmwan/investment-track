@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { YahooFinanceService, MarketData } from './yahooFinanceService.js';
 import { LastUpdateService } from './lastUpdateService.js';
+import { Logger } from '../utils/logger.js';
 
 
 
@@ -108,7 +109,7 @@ export class OtherPortfolioService {
   static async initializeDatabase(): Promise<void> {
     const db = this.getDatabase();
     try {
-      console.log('📊 Initializing portfolios table');
+      Logger.info('📊 Initializing portfolios table');
 
       // Create unified portfolios table (IB + MANUAL)
       const createPortfolios = `
@@ -151,7 +152,7 @@ export class OtherPortfolioService {
         const countPortfolio = db.prepare('SELECT COUNT(1) as cnt FROM portfolios').get() as any;
         const countManual = db.prepare('SELECT COUNT(1) as cnt FROM manual_positions').get() as any;
         if ((countPortfolio?.cnt || 0) === 0 && (countManual?.cnt || 0) > 0) {
-          console.log('🔄 Migrating data from manual_positions to portfolios...');
+          Logger.info('🔄 Migrating data from manual_positions to portfolios...');
           const migrateInsert = `
             INSERT INTO portfolios (
               id, main_account_id, symbol, sec_type, currency, country, industry, category,
@@ -168,19 +169,19 @@ export class OtherPortfolioService {
           `;
           db.exec(migrateInsert);
           db.exec('DROP TABLE IF EXISTS manual_positions');
-          console.log('✅ Migration from manual_positions completed and legacy table dropped');
+          Logger.info('✅ Migration from manual_positions completed and legacy table dropped');
         }
       } else if (manualExists && !portfoliosExists) {
         // Fallback: rename legacy table if portfolios did not exist for some reason
         try {
-          console.log('🔁 Renaming manual_positions to portfolios...');
+          Logger.info('🔁 Renaming manual_positions to portfolios...');
           db.exec('ALTER TABLE manual_positions RENAME TO portfolios');
           db.exec("ALTER TABLE portfolios ADD COLUMN con_id INTEGER");
           db.exec("ALTER TABLE portfolios ADD COLUMN realized_pnl REAL");
           db.exec("ALTER TABLE portfolios ADD COLUMN source TEXT NOT NULL DEFAULT 'MANUAL'");
-          console.log('✅ Legacy table renamed and columns added');
+          Logger.info('✅ Legacy table renamed and columns added');
         } catch (err) {
-          console.error('❌ Error renaming manual_positions to portfolios:', err);
+          Logger.error('❌ Error renaming manual_positions to portfolios:', err);
         }
       }
 
@@ -200,12 +201,12 @@ export class OtherPortfolioService {
       // Cleanup: remove unused legacy table if present
       db.exec("DROP TABLE IF EXISTS investment_accounts");
 
-      console.log('✅ Portfolios table initialized');
+      Logger.info('✅ Portfolios table initialized');
       
       // Start auto-refresh timer
       this.startAutoRefresh('default');
     } catch (error) {
-      console.error('❌ Error initializing portfolios:', error);
+      Logger.error('❌ Error initializing portfolios:', error);
     }
   }
 
@@ -246,7 +247,7 @@ export class OtherPortfolioService {
    * Add a new manual position
    */
   static addManualPosition(position: Omit<ManualPosition, 'id' | 'createdAt' | 'updatedAt' | 'lastPriceUpdate'>): ManualPosition {
-    console.log('📊 Adding manual position:', position);
+    Logger.debug('📊 Adding manual position:', position);
     
     const db = this.getDatabase();
     const stmt = db.prepare(`
@@ -273,17 +274,17 @@ export class OtherPortfolioService {
         'MANUAL'
       );
       
-      console.log('✅ Position inserted with ID:', result.lastInsertRowid);
+      Logger.debug('✅ Position inserted with ID:', result.lastInsertRowid);
       
       // Return the created position
       const getStmt = db.prepare('SELECT * FROM portfolios WHERE id = ?');
       const rawPosition = getStmt.get(result.lastInsertRowid) as any;
       const createdPosition = this.mapDatabaseToPosition(rawPosition);
-      console.log('📊 Created position:', createdPosition);
+      Logger.debug('📊 Created position:', createdPosition);
       
       return createdPosition;
     } catch (error) {
-      console.error('❌ Error inserting position:', error);
+      Logger.error('❌ Error inserting position:', error);
       throw error;
     }
   }
@@ -321,7 +322,7 @@ export class OtherPortfolioService {
           updates.lastPriceUpdate = new Date().toISOString();
         }
         
-        console.log(`📊 Recalculated P&L for position ${positionId}: Market Value = ${marketValue}, Unrealized P&L = ${unrealizedPnl}`);
+        Logger.debug(`📊 Recalculated P&L for position ${positionId}: Market Value = ${marketValue}, Unrealized P&L = ${unrealizedPnl}`);
       }
     }
     
@@ -382,12 +383,12 @@ export class OtherPortfolioService {
    */
   private static async getEnhancedMarketData(symbol: string): Promise<any> {
     try {
-      console.log(`📊 Fetching enhanced data for ${symbol} using yahoo-finance2...`);
+      Logger.debug(`📊 Fetching enhanced data for ${symbol} using yahoo-finance2...`);
       
       const marketData = await YahooFinanceService.getMarketData(symbol);
       
       if (marketData) {
-        console.log(`✅ Enhanced data for ${symbol}:`, {
+        Logger.debug(`✅ Enhanced data for ${symbol}:`, {
           price: marketData.marketPrice,
           change: marketData.dayChange,
           changePercent: marketData.dayChangePercent?.toFixed(2) + '%'
@@ -408,11 +409,11 @@ export class OtherPortfolioService {
         };
       }
       
-      console.log(`⚠️ No market data available for ${symbol}, keeping existing data`);
+      Logger.debug(`⚠️ No market data available for ${symbol}, keeping existing data`);
       return null;
       
     } catch (error: any) {
-      console.error(`❌ Failed to fetch enhanced data for ${symbol}:`, error?.message || error);
+      Logger.error(`❌ Failed to fetch enhanced data for ${symbol}:`, error?.message || error);
       return null;
     }
   }
@@ -428,7 +429,7 @@ export class OtherPortfolioService {
       return { updated: 0, failed: 0 };
     }
 
-    console.log(`📊 Updating market data for ${symbols.length} symbols using yahoo-finance2...`);
+    Logger.info(`📊 Updating market data for ${symbols.length} symbols using yahoo-finance2...`);
     const startTime = Date.now();
     
     const db = this.getDatabase();
@@ -468,7 +469,7 @@ export class OtherPortfolioService {
       
       // Add delay between chunks to avoid rate limiting
       if (i > 0) {
-        console.log(`⏱️ Waiting 1s before next batch to avoid rate limiting...`);
+        Logger.debug(`⏱️ Waiting 1s before next batch to avoid rate limiting...`);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
       
@@ -506,7 +507,7 @@ export class OtherPortfolioService {
         
         updated++;
       } else {
-        console.log(`❌ Failed to get market data for ${position.symbol}`);
+        Logger.debug(`❌ Failed to get market data for ${position.symbol}`);
         failed++;
       }
     }
@@ -519,7 +520,7 @@ export class OtherPortfolioService {
     // Note: Manual investment update times are now tracked per-account
     // This will need to be updated when we have proper account context
     
-    console.log(`✅ Updated market data: ${updated} successful, ${failed} failed in ${duration}ms`);
+    Logger.info(`✅ Updated market data: ${updated} successful, ${failed} failed in ${duration}ms`);
     return { updated, failed };
   }
 
@@ -611,14 +612,14 @@ export class OtherPortfolioService {
       clearInterval(this.autoRefreshInterval);
     }
 
-    console.log('📊 Starting auto-refresh for manual investments (30 minutes interval)');
+    Logger.info('📊 Starting auto-refresh for manual investments (30 minutes interval)');
     
     this.autoRefreshInterval = setInterval(async () => {
       try {
-        console.log('📊 Auto-refreshing manual investment market data...');
+        Logger.info('📊 Auto-refreshing manual investment market data...');
         await this.updateAllMarketData(userId);
       } catch (error) {
-        console.error('❌ Auto-refresh failed:', error);
+        Logger.error('❌ Auto-refresh failed:', error);
       }
     }, this.AUTO_REFRESH_INTERVAL_MS);
   }
@@ -630,7 +631,7 @@ export class OtherPortfolioService {
     if (this.autoRefreshInterval) {
       clearInterval(this.autoRefreshInterval);
       this.autoRefreshInterval = null;
-      console.log('📊 Stopped auto-refresh for manual investments');
+      Logger.info('📊 Stopped auto-refresh for manual investments');
     }
   }
 

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { TwoFactorAuthService } from '../services/twoFactorAuth.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
 import { UserModel } from '../models/User.js';
+import { Logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -41,7 +42,7 @@ router.post('/setup', authenticateToken, async (req: AuthenticatedRequest, res) 
       manualEntryKey: setup.manualEntryKey
     });
   } catch (error) {
-    console.error('2FA setup error:', error);
+    Logger.error('2FA setup error:', error);
     return res.status(500).json({ 
       error: 'Internal server error',
       message: 'Failed to generate 2FA setup'
@@ -80,7 +81,7 @@ router.post('/verify', authenticateToken, async (req: AuthenticatedRequest, res)
       });
     }
     
-    console.error('2FA verification error:', error);
+    Logger.error('2FA verification error:', error);
     return res.status(500).json({ 
       error: 'Internal server error',
       message: 'Failed to verify 2FA token'
@@ -146,7 +147,7 @@ router.post('/verify-login', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('2FA login verification error:', error);
+    Logger.error('2FA login verification error:', error);
     return res.status(500).json({ 
       error: 'Internal server error',
       message: 'Failed to verify 2FA token'
@@ -168,7 +169,7 @@ router.get('/status', authenticateToken, async (req: AuthenticatedRequest, res) 
       enabled: isEnabled
     });
   } catch (error) {
-    console.error('2FA status check error:', error);
+    Logger.error('2FA status check error:', error);
     return res.status(500).json({ 
       error: 'Internal server error',
       message: 'Failed to check 2FA status'
@@ -190,7 +191,7 @@ router.post('/disable', authenticateToken, async (req: AuthenticatedRequest, res
       message: '2FA disabled successfully'
     });
   } catch (error) {
-    console.error('2FA disable error:', error);
+    Logger.error('2FA disable error:', error);
     return res.status(500).json({ 
       error: 'Internal server error',
       message: 'Failed to disable 2FA'

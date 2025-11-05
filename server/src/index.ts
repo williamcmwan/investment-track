@@ -19,6 +19,7 @@ import otherAssetsRoutes from './routes/otherAssets.js';
 import { SchedulerService } from './services/schedulerService.js';
 import { IBService } from './services/ibService.js';
 import { OtherPortfolioService } from './services/otherPortfolioService.js';
+import { Logger, LogLevel } from './utils/logger.js';
 
 // Load environment variables
 dotenv.config();
@@ -108,7 +109,7 @@ app.get('*', (req, res) => {
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
+  Logger.error('Error:', err);
 
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ error: 'Invalid JSON' });
@@ -123,6 +124,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // Initialize services and start server
 async function startServer() {
   try {
+    // Configure logger based on environment
+    if (process.env.NODE_ENV === 'development' && process.env.LOG_LEVEL === 'debug') {
+      Logger.setLogLevel(LogLevel.DEBUG);
+    }
+    
     // Initialize services
     await SchedulerService.initialize();
     await IBService.initialize();
@@ -131,16 +137,16 @@ async function startServer() {
 
     // Start server
     const server = app.listen(PORT, () => {
-      console.log(`🚀 Investment Tracker running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/health`);
-      console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
-      console.log(`🌐 Frontend: http://localhost:${PORT}`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      Logger.info(`🚀 Investment Tracker running on port ${PORT}`);
+      Logger.info(`📊 Health check: http://localhost:${PORT}/health`);
+      Logger.info(`🔗 API Base URL: http://localhost:${PORT}/api`);
+      Logger.info(`🌐 Frontend: http://localhost:${PORT}`);
+      Logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
 
     return server;
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    Logger.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 }
@@ -149,26 +155,26 @@ const server = await startServer();
 
 // Graceful shutdown handling
 const gracefulShutdown = async (signal: string) => {
-  console.log(`\n${signal} received, starting graceful shutdown...`);
+  Logger.info(`\n${signal} received, starting graceful shutdown...`);
   
   // Stop accepting new connections
   server.close(async () => {
-    console.log('HTTP server closed');
+    Logger.info('HTTP server closed');
     
     // Shutdown services
     try {
       await IBService.shutdown();
-      console.log('✅ All services shut down successfully');
+      Logger.info('✅ All services shut down successfully');
       process.exit(0);
     } catch (error) {
-      console.error('❌ Error during shutdown:', error);
+      Logger.error('❌ Error during shutdown:', error);
       process.exit(1);
     }
   });
 
   // Force shutdown after 30 seconds
   setTimeout(() => {
-    console.error('⚠️  Forced shutdown after timeout');
+    Logger.error('⚠️  Forced shutdown after timeout');
     process.exit(1);
   }, 30000);
 };
@@ -179,12 +185,12 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
+  Logger.error('❌ Uncaught Exception:', error);
   gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  Logger.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
   gracefulShutdown('UNHANDLED_REJECTION');
 });
 
