@@ -1922,35 +1922,72 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                       Quick Update
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                  <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Quick Update Account Balances</DialogTitle>
                       <DialogDescription>
                         Update the current balance for your investment accounts. Leave empty to skip an account.
                       </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      {accounts.filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT').map((account) => (
-                        <div key={account.id} className="grid grid-cols-4 items-center gap-4">
-                          <Label htmlFor={`account-${account.id}`} className="text-right font-medium">
-                            {account.name}
-                          </Label>
-                          <div className="col-span-2">
+                    <div className="space-y-3 py-4">
+                      {(() => {
+                        // Define the desired order
+                        const accountOrder = [
+                          'Charles Schwab',
+                          'Interactive Broker HK',
+                          'Futu - William',
+                          'Futu - Joy',
+                          'Charles Schwab - Joy'
+                        ];
+                        
+                        // Filter investment accounts
+                        const investmentAccounts = accounts.filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT');
+                        
+                        // Sort accounts based on the defined order
+                        const sortedAccounts = [...investmentAccounts].sort((a, b) => {
+                          const indexA = accountOrder.indexOf(a.name);
+                          const indexB = accountOrder.indexOf(b.name);
+                          
+                          // If both are in the order list, sort by their position
+                          if (indexA !== -1 && indexB !== -1) {
+                            return indexA - indexB;
+                          }
+                          // If only A is in the list, it comes first
+                          if (indexA !== -1) return -1;
+                          // If only B is in the list, it comes first
+                          if (indexB !== -1) return 1;
+                          // If neither is in the list, maintain original order
+                          return 0;
+                        });
+                        
+                        return sortedAccounts.map((account, index) => (
+                          <div key={account.id} className="flex items-center gap-3">
+                            <Label htmlFor={`account-${account.id}`} className="font-medium text-sm min-w-[180px]">
+                              {account.name}
+                            </Label>
                             <Input
                               id={`account-${account.id}`}
                               type="number"
+                              inputMode="decimal"
                               step="0.01"
-                              placeholder="Enter new balance"
+                              placeholder={`Current: ${account.currentBalance.toFixed(2)}`}
                               value={quickUpdateAmounts[account.id] || ''}
                               onChange={(e) => handleAmountChange(account.id, e.target.value)}
-                              className="w-full"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleQuickUpdate();
+                                }
+                              }}
+                              className="flex-1"
+                              autoFocus={index === 0}
                             />
+                            <div className="text-sm text-muted-foreground font-medium min-w-[50px]">
+                              {account.currency}
+                            </div>
                           </div>
-                          <div className="text-sm text-muted-foreground">
-                            {account.currency}
-                          </div>
-                        </div>
-                      ))}
+                        ));
+                      })()}
                       {accounts.filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT').length === 0 && (
                         <div className="text-center py-8 text-muted-foreground">
                           No investment accounts found. Create an account first.
