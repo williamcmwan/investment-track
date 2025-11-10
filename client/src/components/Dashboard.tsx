@@ -1922,7 +1922,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                       Quick Update
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto sm:top-[50%] top-[10%]">
+                  <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto sm:top-[50%] top-[5%] sm:translate-y-[-50%] translate-y-0">
                     <DialogHeader>
                       <DialogTitle>Quick Update Account Balances</DialogTitle>
                       <DialogDescription>
