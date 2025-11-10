@@ -1922,7 +1922,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                       Quick Update
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                  <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto sm:top-[50%] top-[10%]">
                     <DialogHeader>
                       <DialogTitle>Quick Update Account Balances</DialogTitle>
                       <DialogDescription>
@@ -1970,7 +1970,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                               type="number"
                               inputMode="decimal"
                               step="0.01"
-                              placeholder={`Current: ${account.currentBalance.toFixed(2)}`}
+                              placeholder={account.currentBalance.toFixed(2)}
                               value={quickUpdateAmounts[account.id] || ''}
                               onChange={(e) => handleAmountChange(account.id, e.target.value)}
                               onKeyDown={(e) => {
