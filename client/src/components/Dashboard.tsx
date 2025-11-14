@@ -90,12 +90,23 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const [showPerformanceDetails, setShowPerformanceDetails] = useState(true);
   const [performancePage, setPerformancePage] = useState(0);
   const [allPerformanceData, setAllPerformanceData] = useState<any[]>([]);
+  const [performanceDays, setPerformanceDays] = useState(() => {
+    const saved = localStorage.getItem('dashboard-performance-days');
+    return saved ? parseInt(saved, 10) : 30;
+  });
   
   // Pagination constants
   const ITEMS_PER_PAGE = 30;
   
+  // Get filtered performance data based on selected days
+  const getFilteredPerformanceData = () => {
+    if (performanceDays === 0) return allPerformanceData; // Show all data
+    return allPerformanceData.slice(0, performanceDays);
+  };
+
   // Get paginated performance data with previous day data
   const getPaginatedPerformanceData = () => {
+    const filteredData = getFilteredPerformanceData();
     const startIndex = performancePage * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
     
@@ -105,7 +116,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       dataByDate.set(item.date, item);
     });
     
-    return allPerformanceData.slice(startIndex, endIndex).map(row => {
+    return filteredData.slice(startIndex, endIndex).map(row => {
       // Find the chronologically previous day
       const currentDate = new Date(row.date);
       let prev = null;
@@ -124,7 +135,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     });
   };
   
-  const totalPages = Math.ceil(allPerformanceData.length / ITEMS_PER_PAGE);
+  const filteredDataLength = getFilteredPerformanceData().length;
+  const totalPages = Math.ceil(filteredDataLength / ITEMS_PER_PAGE);
   const canGoPrevious = performancePage > 0;
   const canGoNext = performancePage < totalPages - 1;
   
@@ -137,6 +149,11 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   useEffect(() => {
     localStorage.setItem('dashboard-current-view', currentView);
   }, [currentView]);
+
+  // Update localStorage whenever performanceDays changes
+  useEffect(() => {
+    localStorage.setItem('dashboard-performance-days', performanceDays.toString());
+  }, [performanceDays]);
 
   // Load accounts when component mounts and user is authenticated
   useEffect(() => {
@@ -200,7 +217,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           const db = new Date(b.date).getTime();
           return da - db; // Ascending order for chart
         });
-        setPerformanceHistory(sortedAsc.slice(-30)); // Last 30 days for chart
+        // Chart will use performanceDays filter, so store all data
+        setPerformanceHistory(sortedAsc);
       }
     } catch (error) {
       console.error('Error loading performance history:', error);
@@ -228,10 +246,10 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Note: updateTodaysPerformanceData() is now only called manually when needed
   // to avoid overriding correct performance data on refresh
 
-  // Reset page when performance data changes
+  // Reset page when performance data or days filter changes
   useEffect(() => {
     setPerformancePage(0);
-  }, [allPerformanceData.length]);
+  }, [allPerformanceData.length, performanceDays]);
 
   // Load accounts from API
   const loadAccounts = async () => {
@@ -709,7 +727,11 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     const totalProfitLossConverted = summaryData.totalProfitLoss;
     const investmentProfitLossConverted = summaryData.investmentProfitLoss;
     const currencyProfitLossConverted = summaryData.currencyProfitLoss;
-    const chartData = performanceHistory;
+    
+    // Filter chart data based on selected days
+    const chartData = performanceDays === 0 
+      ? performanceHistory 
+      : performanceHistory.slice(-performanceDays);
 
     // Calculate Total Assets breakdown
     const investmentAccountsValue = accounts
@@ -1173,32 +1195,48 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       <div className="space-y-6">
         {/* Performance Chart */}
         <Card className="bg-gradient-card border-border shadow-card">
-          <CardHeader className="pb-2 md:pb-6 flex flex-row items-start md:items-center justify-between gap-3">
-            <CardTitle className="text-sm md:text-base text-foreground">Performance Overview</CardTitle>
-            <div className="flex items-center gap-2 ml-auto">
-              <CardDescription className="text-xs md:text-sm hidden md:block">Profit & Loss trends over time</CardDescription>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-green-500 text-green-500 hover:bg-green-500/10"
-                onClick={handleComprehensiveRefresh}
-                disabled={isLoadingPerformance}
-              >
-                {isLoadingPerformance ? (
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Refresh
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-primary text-primary hover:bg-primary/10"
-                onClick={() => setShowPerformanceDetails(v => !v)}
-              >
-                {showPerformanceDetails ? 'Hide Details' : 'View Details'}
-              </Button>
+          <CardHeader className="pb-2 md:pb-6 flex flex-col gap-3">
+            <div className="flex flex-row items-start md:items-center justify-between gap-3">
+              <CardTitle className="text-sm md:text-base text-foreground">Performance Overview</CardTitle>
+              <div className="flex items-center gap-2 ml-auto">
+                <CardDescription className="text-xs md:text-sm hidden md:block">Profit & Loss trends over time</CardDescription>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-green-500 text-green-500 hover:bg-green-500/10"
+                  onClick={handleComprehensiveRefresh}
+                  disabled={isLoadingPerformance}
+                >
+                  {isLoadingPerformance ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Refresh
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-primary text-primary hover:bg-primary/10"
+                  onClick={() => setShowPerformanceDetails(v => !v)}
+                >
+                  {showPerformanceDetails ? 'Hide Details' : 'View Details'}
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-muted-foreground">Show:</span>
+              {[30, 60, 90, 180, 365].map((days) => (
+                <Button
+                  key={days}
+                  variant={performanceDays === days ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => setPerformanceDays(days)}
+                >
+                  {days}d
+                </Button>
+              ))}
             </div>
           </CardHeader>
           <CardContent className="p-2 md:p-6">
@@ -1422,10 +1460,10 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                 </table>
               </div>
               {/* Pagination Controls */}
-              {allPerformanceData.length > ITEMS_PER_PAGE && (
+              {filteredDataLength > ITEMS_PER_PAGE && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-border/30">
                   <div className="text-xs text-muted-foreground">
-                    Showing {performancePage * ITEMS_PER_PAGE + 1} to {Math.min((performancePage + 1) * ITEMS_PER_PAGE, allPerformanceData.length)} of {allPerformanceData.length} entries
+                    Showing {performancePage * ITEMS_PER_PAGE + 1} to {Math.min((performancePage + 1) * ITEMS_PER_PAGE, filteredDataLength)} of {filteredDataLength} entries
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
