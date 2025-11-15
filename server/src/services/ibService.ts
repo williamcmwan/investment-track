@@ -1,5 +1,6 @@
 import { IBApi, EventName, ErrorCode } from '@stoqey/ib';
 import { Logger } from '../utils/logger.js';
+import { IBRequestThrottler } from './ibRequestThrottler.js';
 
 interface AccountSummary {
   balance: number;
@@ -338,6 +339,12 @@ export class IBService {
 
       this.ibApi!.on(EventName.error, (err: Error, code: ErrorCode, reqId: number) => {
         Logger.error(`❌ IB API Error [${code}]:`, err.message);
+
+        // Handle pacing violations (error 162) and data farm disconnections (error 420)
+        const errorCode = code as unknown as number;
+        if (errorCode === 162 || errorCode === 420) {
+          IBRequestThrottler.markPacingViolation(errorCode);
+        }
 
         // Handle "client id already in use" error
         if (err.message.includes('client id is already in use')) {
@@ -906,12 +913,20 @@ export class IBService {
       throw new Error('IB API not initialized');
     }
 
+    // Apply throttling before making request
+    try {
+      await IBRequestThrottler.checkHistoricalDataRequest();
+    } catch (error) {
+      Logger.warn(`Skipping historical data for ${contract.symbol}: ${error instanceof Error ? error.message : 'throttling error'}`);
+      return undefined;
+    }
+
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
         Logger.debug(`Timeout getting historical data for ${contract.symbol} (${contract.secType})`);
         this.ibApi!.removeAllListeners('historicalData' as any);
         resolve(undefined);
-      }, 8000); // Increased timeout for crypto/bonds
+      }, 15000); // Increased timeout to 15 seconds for better reliability
 
       const reqId = Math.floor(Math.random() * 10000) + 1000;
       const closePrices: number[] = [];
@@ -1136,10 +1151,11 @@ export class IBService {
             const enrichmentStartTime = Date.now();
 
             // Fetch contract details and market data for each position
-            const enrichedPositions = await Promise.all(
-              this.portfolioPositions.map(async (position) => {
-                try {
-                  let enrichedPosition = { ...position };
+            // Process sequentially instead of parallel to avoid overwhelming IB Gateway
+            const enrichedPositions: PortfolioPosition[] = [];
+            for (const position of this.portfolioPositions) {
+              try {
+                let enrichedPosition = { ...position };
 
                   if (position.conId && ['STK', 'CRYPTO', 'BOND'].includes(position.secType)) {
                     Logger.debug(`Processing ${position.symbol} (${position.secType}) for day change data...`);
@@ -1261,13 +1277,12 @@ export class IBService {
                     }
                   }
 
-                  return enrichedPosition;
-                } catch (error) {
-                  Logger.error(`Failed to get details for ${position.symbol}:`, error);
-                  return position;
-                }
-              })
-            );
+                enrichedPositions.push(enrichedPosition);
+              } catch (error) {
+                Logger.error(`Failed to get details for ${position.symbol}:`, error);
+                enrichedPositions.push(position);
+              }
+            }
 
             const enrichmentEndTime = Date.now();
             const enrichmentDuration = enrichmentEndTime - enrichmentStartTime;

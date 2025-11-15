@@ -1240,7 +1240,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
             </div>
           </CardHeader>
           <CardContent className="p-2 md:p-6">
-            <ChartContainer config={chartConfig} className="h-[250px] md:h-[400px] w-full">
+            <ChartContainer config={chartConfig} className="h-[250px] md:h-[400px] w-full" key={`chart-${performanceDays}-${chartData.length}`}>
               <LineChart 
                 data={chartData} 
                 margin={{ 
