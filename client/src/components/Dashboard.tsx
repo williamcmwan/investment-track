@@ -182,7 +182,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const loadPerformanceHistory = async () => {
     try {
       setIsLoadingPerformance(true);
-      const response = await apiClient.getPerformanceChartData(); // Get all data
+      // Request more data than the max days we'll show (365) to ensure we have enough
+      const response = await apiClient.getPerformanceChartData(365); // Get up to 365 days of data
       if (response.data) {
         // Calculate Daily P&L (current day Investment P&L - previous day Investment P&L)
         const sortedForDailyCalc = [...response.data].sort((a: any, b: any) => {
@@ -729,9 +730,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     const currencyProfitLossConverted = summaryData.currencyProfitLoss;
     
     // Filter chart data based on selected days
-    const chartData = performanceDays === 0 
-      ? performanceHistory 
-      : performanceHistory.slice(-performanceDays);
+    const chartData = performanceHistory.slice(-performanceDays);
 
     // Calculate Total Assets breakdown
     const investmentAccountsValue = accounts
