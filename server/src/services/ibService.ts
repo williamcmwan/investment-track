@@ -913,13 +913,9 @@ export class IBService {
       throw new Error('IB API not initialized');
     }
 
-    // Apply throttling before making request
-    try {
-      await IBRequestThrottler.checkHistoricalDataRequest();
-    } catch (error) {
-      Logger.warn(`Skipping historical data for ${contract.symbol}: ${error instanceof Error ? error.message : 'throttling error'}`);
-      return undefined;
-    }
+    // Throttling disabled - remove rate limiting for historical data requests
+    // Note: Be careful with this as IB Gateway has limits (60 requests per 10 minutes)
+    // If you encounter pacing violations (error 162), re-enable throttling
 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
