@@ -463,7 +463,7 @@ export class SchwabService {
       
       // Log first position to see what data is available
       if (positions.length > 0) {
-        Logger.debug('Sample Schwab position data:', JSON.stringify(positions[0], null, 2));
+        Logger.info('📊 Sample Schwab position data:', JSON.stringify(positions[0], null, 2));
       }
       
       return positions.map((pos: any) => {
@@ -478,7 +478,7 @@ export class SchwabService {
         const dayChange = pos.currentDayProfitLoss || 0;
         const dayChangePercent = pos.currentDayProfitLossPercentage || 0;
         
-        Logger.debug(`Position ${pos.instrument.symbol}: dayChange=${dayChange}, dayChangePercent=${dayChangePercent}`);
+        Logger.info(`📈 Position ${pos.instrument.symbol}: dayChange=${dayChange}, dayChangePercent=${dayChangePercent}, currentDayProfitLoss=${pos.currentDayProfitLoss}, currentDayProfitLossPercentage=${pos.currentDayProfitLossPercentage}`);
         
         return {
           symbol: pos.instrument.symbol,
