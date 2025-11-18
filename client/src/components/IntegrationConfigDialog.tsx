@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle2, AlertCircle, RefreshCw, TestTube } from "lucide-react";
+import { Loader2, RefreshCw, TestTube } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api";
 
@@ -42,8 +42,7 @@ export default function IntegrationConfigDialog({
   // Schwab form state
   const [schwabForm, setSchwabForm] = useState({
     appKey: '',
-    appSecret: '',
-    accountHash: ''
+    appSecret: ''
   });
 
   useEffect(() => {
@@ -73,8 +72,7 @@ export default function IntegrationConfigDialog({
         } else if (response.data.type === 'SCHWAB' && response.data.config) {
           setSchwabForm({
             appKey: response.data.config.appKey || '',
-            appSecret: '', // Don't load secret for security
-            accountHash: response.data.config.accountHash || ''
+            appSecret: '' // Don't load secret for security
           });
         }
       } else {
@@ -141,8 +139,7 @@ export default function IntegrationConfigDialog({
 
         const config = {
           appKey: schwabForm.appKey,
-          appSecret: schwabForm.appSecret,
-          accountHash: schwabForm.accountHash || undefined
+          appSecret: schwabForm.appSecret
         };
 
         const response = await apiClient.setAccountIntegration(accountId, 'SCHWAB', config);
@@ -474,16 +471,6 @@ export default function IntegrationConfigDialog({
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="schwab-hash">Account Hash (Optional)</Label>
-                    <Input
-                      id="schwab-hash"
-                      value={schwabForm.accountHash}
-                      onChange={(e) => setSchwabForm({ ...schwabForm, accountHash: e.target.value })}
-                      placeholder="Schwab account hash"
-                    />
-                  </div>
-
                   <Alert>
                     <AlertDescription className="text-xs">
                       <strong>Note:</strong> Get your App Key and Secret from the{' '}
@@ -495,7 +482,7 @@ export default function IntegrationConfigDialog({
                       >
                         Schwab Developer Portal
                       </a>
-                      . OAuth authentication will be required after saving.
+                      . OAuth authentication will be required after saving. Your account hash will be automatically fetched during authentication.
                     </AlertDescription>
                   </Alert>
                 </div>
