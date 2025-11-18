@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     account_number TEXT,
     original_capital REAL NOT NULL,
     current_balance REAL NOT NULL,
+    integration_type TEXT DEFAULT NULL,
+    integration_config TEXT DEFAULT NULL,
     last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -112,7 +114,7 @@ CREATE TABLE IF NOT EXISTS other_assets (
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
--- Charles Schwab settings table
+-- Charles Schwab settings table (deprecated - use accounts.integration_config instead)
 CREATE TABLE IF NOT EXISTS schwab_settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL UNIQUE,
@@ -126,6 +128,10 @@ CREATE TABLE IF NOT EXISTS schwab_settings (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- Account integrations (new approach)
+-- integration_type: 'IB', 'SCHWAB', or NULL
+-- integration_config: JSON string with integration-specific configuration
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_account_balance_history_account_id ON account_balance_history(account_id);
@@ -138,3 +144,4 @@ CREATE INDEX IF NOT EXISTS idx_other_assets_user_id ON other_assets(user_id);
 CREATE INDEX IF NOT EXISTS idx_other_assets_asset_type ON other_assets(asset_type);
 CREATE INDEX IF NOT EXISTS idx_other_assets_created_at ON other_assets(created_at);
 CREATE INDEX IF NOT EXISTS idx_schwab_settings_user_id ON schwab_settings(user_id);
+CREATE INDEX IF NOT EXISTS idx_accounts_integration_type ON accounts(integration_type);

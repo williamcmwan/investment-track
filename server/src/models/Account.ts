@@ -9,11 +9,36 @@ export interface Account {
   accountNumber?: string;
   originalCapital: number;
   currentBalance: number;
+  integrationType?: string | null;
+  integrationConfig?: string | null;
   lastUpdated: string;
   createdAt: string;
   updatedAt: string;
   profitLoss: number;
   profitLossPercent: number;
+}
+
+export interface IntegrationConfig {
+  type: 'IB' | 'SCHWAB';
+  [key: string]: any;
+}
+
+export interface IBIntegrationConfig extends IntegrationConfig {
+  type: 'IB';
+  host: string;
+  port: number;
+  clientId: number;
+  lastConnected?: string;
+}
+
+export interface SchwabIntegrationConfig extends IntegrationConfig {
+  type: 'SCHWAB';
+  appKey: string;
+  appSecret: string;
+  accessToken?: string;
+  refreshToken?: string;
+  tokenExpiresAt?: number;
+  accountHash?: string;
 }
 
 export interface AccountWithHistory extends Account {
@@ -44,6 +69,8 @@ export interface UpdateAccountData {
   accountNumber?: string;
   originalCapital?: number;
   currentBalance?: number;
+  integrationType?: string | null;
+  integrationConfig?: string | null;
 }
 
 export class AccountModel {
@@ -145,6 +172,16 @@ export class AccountModel {
       values.push(accountData.currentBalance);
     }
     
+    if (accountData.integrationType !== undefined) {
+      updateFields.push('integration_type = ?');
+      values.push(accountData.integrationType);
+    }
+    
+    if (accountData.integrationConfig !== undefined) {
+      updateFields.push('integration_config = ?');
+      values.push(accountData.integrationConfig);
+    }
+    
     if (updateFields.length === 0) {
       return await this.findById(id, userId);
     }
@@ -231,5 +268,51 @@ export class AccountModel {
       'DELETE FROM account_balance_history WHERE id = ? AND account_id = ?',
       [historyId, accountId]
     );
+  }
+
+  // Integration management methods
+  static async setIntegration(
+    accountId: number,
+    userId: number,
+    type: 'IB' | 'SCHWAB',
+    config: IBIntegrationConfig | SchwabIntegrationConfig
+  ): Promise<Account | null> {
+    return await this.update(accountId, userId, {
+      integrationType: type,
+      integrationConfig: JSON.stringify(config)
+    });
+  }
+
+  static async getIntegration(accountId: number, userId: number): Promise<IntegrationConfig | null> {
+    const account = await this.findById(accountId, userId);
+    if (!account || !account.integrationConfig) {
+      return null;
+    }
+    try {
+      return JSON.parse(account.integrationConfig) as IntegrationConfig;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  static async removeIntegration(accountId: number, userId: number): Promise<Account | null> {
+    return await this.update(accountId, userId, {
+      integrationType: null,
+      integrationConfig: null
+    });
+  }
+
+  static async findByIntegrationType(userId: number, type: 'IB' | 'SCHWAB'): Promise<Account[]> {
+    const accounts = await dbAll(
+      'SELECT * FROM accounts WHERE user_id = ? AND integration_type = ?',
+      [userId, type]
+    ) as Account[];
+    return accounts.map(acc => ({
+      ...acc,
+      profitLoss: acc.currentBalance - acc.originalCapital,
+      profitLossPercent: acc.originalCapital > 0 
+        ? ((acc.currentBalance - acc.originalCapital) / acc.originalCapital) * 100 
+        : 0
+    }));
   }
 }
