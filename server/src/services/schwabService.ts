@@ -143,8 +143,16 @@ export class SchwabService {
 
       Logger.info('✅ Schwab access token refreshed successfully');
       return access_token;
-    } catch (error) {
+    } catch (error: any) {
       Logger.error('❌ Failed to refresh Schwab access token:', error);
+      
+      // Log more details for debugging
+      if (error.response) {
+        Logger.error(`Status: ${error.response.status}`);
+        Logger.error(`Response data:`, error.response.data);
+        Logger.error(`Response headers:`, error.response.headers);
+      }
+      
       throw new Error('Failed to refresh access token. Please re-authenticate.');
     }
   }

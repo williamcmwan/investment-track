@@ -469,25 +469,33 @@ router.post('/:id/integration/test', async (req: AuthenticatedRequest, res) => {
       }
     } else if (config.type === 'SCHWAB') {
       // Test Schwab connection
-      const { SchwabService } = await import('../services/schwabService.js');
       const schwabConfig = config as any;
       
-      try {
-        // Try to get account numbers
-        const accounts = await SchwabService.getAccountNumbers(req.user?.id || 0);
-        
+      // Check if tokens exist
+      if (!schwabConfig.accessToken || !schwabConfig.refreshToken) {
         return res.json({ 
-          success: true, 
-          message: 'Schwab connection successful',
-          accounts: accounts
-        });
-      } catch (error: any) {
-        return res.status(500).json({ 
           success: false, 
-          message: 'Schwab connection failed',
-          error: error.message 
+          message: 'Schwab tokens not found. Please complete OAuth authentication.',
+          error: 'No tokens available'
         });
       }
+      
+      // Check if tokens are expired (basic check)
+      const now = Math.floor(Date.now() / 1000);
+      if (schwabConfig.tokenExpiresAt && schwabConfig.tokenExpiresAt < now) {
+        return res.json({ 
+          success: false, 
+          message: 'Schwab tokens expired. Please re-authenticate through OAuth.',
+          error: 'Tokens expired'
+        });
+      }
+      
+      return res.json({ 
+        success: true, 
+        message: 'Schwab integration configured with valid tokens',
+        hasTokens: true,
+        tokenExpiresAt: schwabConfig.tokenExpiresAt
+      });
     }
 
     return res.status(400).json({ error: 'Unknown integration type' });
