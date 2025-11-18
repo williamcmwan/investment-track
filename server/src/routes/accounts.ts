@@ -539,7 +539,8 @@ router.get('/:id/integration/portfolio', async (req: AuthenticatedRequest, res) 
         return res.status(400).json({ error: 'Schwab account hash not configured' });
       }
 
-      const positions = await SchwabService.getPositions(
+      const positions = await SchwabService.getPositionsForAccount(
+        accountId,
         req.user?.id || 0,
         schwabConfig.accountHash
       );
@@ -659,40 +660,46 @@ router.post('/:id/integration/refresh', async (req: AuthenticatedRequest, res) =
 
       return res.status(500).json({ error: 'Failed to refresh balance from IB' });
     } else if (config.type === 'SCHWAB') {
-      // Schwab refresh - currently not supported with account-level tokens
+      // Refresh from Schwab using account-level tokens
+      const { SchwabService } = await import('../services/schwabService.js');
       const schwabConfig = config as any;
 
       if (!schwabConfig.accountHash) {
         return res.status(400).json({ error: 'Schwab account hash not configured. Please re-authenticate.' });
       }
 
-      if (!schwabConfig.accessToken || !schwabConfig.refreshToken) {
-        return res.status(400).json({ error: 'Schwab tokens not found. Please re-authenticate through OAuth.' });
-      }
+      const result = await SchwabService.getAccountBalanceForAccount(
+        accountId,
+        req.user?.id || 0,
+        schwabConfig.accountHash
+      );
 
-      // Check if tokens are expired
-      const now = Math.floor(Date.now() / 1000);
-      if (schwabConfig.tokenExpiresAt && schwabConfig.tokenExpiresAt < now) {
-        return res.status(400).json({ 
-          error: 'Schwab tokens expired. Please re-authenticate through the integration settings.',
-          needsReauth: true
+      if (result && result.currentBalance) {
+        // Update account balance
+        await AccountModel.update(accountId, req.user?.id || 0, {
+          currentBalance: result.currentBalance
         });
-      }
 
-      // For now, return current balance since automatic refresh with account-level tokens needs refactoring
-      const account = await AccountModel.findById(accountId, req.user?.id || 0);
-      if (account) {
-        Logger.info(`ℹ️ Returning current Schwab balance for account ${accountId}: ${account.currentBalance}`);
+        // Add balance history
+        await AccountModel.addBalanceHistory(
+          accountId,
+          result.currentBalance,
+          'Schwab integration refresh'
+        );
+
+        // Recalculate performance
+        await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+
+        Logger.info(`✅ Refreshed Schwab balance for account ${accountId}: ${result.currentBalance}`);
         return res.json({ 
           success: true, 
-          balance: account.currentBalance,
-          currency: account.currency,
-          timestamp: new Date().toISOString(),
-          message: 'Showing current balance. Automatic refresh coming soon.'
+          balance: result.currentBalance,
+          currency: result.currency || 'USD',
+          timestamp: new Date().toISOString()
         });
       }
 
-      return res.status(500).json({ error: 'Failed to get Schwab balance' });
+      return res.status(500).json({ error: 'Failed to refresh balance from Schwab' });
     }
 
     return res.status(400).json({ error: 'Unknown integration type' });

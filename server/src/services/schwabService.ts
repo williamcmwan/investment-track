@@ -312,4 +312,169 @@ export class SchwabService {
       throw error;
     }
   }
+
+  // ============================================================================
+  // Account-Level Token Methods (New)
+  // ============================================================================
+
+  /**
+   * Refresh access token using account-level integration config
+   */
+  private static async refreshAccessTokenForAccount(
+    accountId: number,
+    userId: number,
+    config: any
+  ): Promise<string> {
+    if (!config.refreshToken) {
+      throw new Error('No refresh token available. Please re-authenticate.');
+    }
+
+    try {
+      const credentials = Buffer.from(`${config.appKey}:${config.appSecret}`).toString('base64');
+      
+      const response = await axios.post(`${SCHWAB_API_BASE}/v1/oauth/token`, 
+        new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: config.refreshToken
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': `Basic ${credentials}`
+          }
+        }
+      );
+
+      const { access_token, refresh_token, expires_in } = response.data;
+      const expires_at = Math.floor(Date.now() / 1000) + expires_in;
+
+      const { AccountModel } = await import('../models/Account.js');
+      await AccountModel.setIntegration(accountId, userId, 'SCHWAB', {
+        type: 'SCHWAB',
+        appKey: config.appKey,
+        appSecret: config.appSecret,
+        accessToken: access_token,
+        refreshToken: refresh_token || config.refreshToken,
+        tokenExpiresAt: expires_at,
+        accountHash: config.accountHash
+      });
+
+      Logger.info(`✅ Refreshed Schwab token for account ${accountId}`);
+      return access_token;
+    } catch (error: any) {
+      Logger.error(`❌ Failed to refresh token for account ${accountId}:`, error);
+      
+      const errorData = error.response?.data;
+      if (errorData?.error === 'unsupported_token_type' || 
+          errorData?.error === 'refresh_token_authentication_error' ||
+          errorData?.error_description?.includes('refresh token')) {
+        throw new Error('Refresh token expired. Please re-authenticate.');
+      }
+      
+      throw new Error('Failed to refresh access token.');
+    }
+  }
+
+  /**
+   * Get valid access token for account (refresh if needed)
+   */
+  static async getValidAccessTokenForAccount(accountId: number, userId: number): Promise<string> {
+    const { AccountModel } = await import('../models/Account.js');
+    const config = await AccountModel.getIntegration(accountId, userId);
+    
+    if (!config || config.type !== 'SCHWAB') {
+      throw new Error('Schwab integration not configured.');
+    }
+
+    const schwabConfig = config as any;
+
+    if (!schwabConfig.accessToken) {
+      throw new Error('No access token. Please complete OAuth authentication.');
+    }
+
+    if (this.isTokenExpired(schwabConfig.tokenExpiresAt)) {
+      return await this.refreshAccessTokenForAccount(accountId, userId, schwabConfig);
+    }
+
+    return schwabConfig.accessToken;
+  }
+
+  /**
+   * Get account balance using account-level tokens
+   */
+  static async getAccountBalanceForAccount(accountId: number, userId: number, accountHash: string): Promise<any> {
+    try {
+      const accessToken = await this.getValidAccessTokenForAccount(accountId, userId);
+
+      const response = await axios.get(
+        `${SCHWAB_API_BASE}/trader/v1/accounts/${accountHash}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          },
+          params: {
+            fields: 'positions'
+          }
+        }
+      );
+
+      const accountData = response.data.securitiesAccount;
+      
+      Logger.info(`✅ Retrieved Schwab balance for account ${accountId}: ${accountData.currentBalances.liquidationValue}`);
+      
+      return {
+        accountNumber: accountData.accountNumber,
+        accountType: accountData.type,
+        currentBalance: accountData.currentBalances.liquidationValue,
+        cashBalance: accountData.currentBalances.cashBalance,
+        buyingPower: accountData.currentBalances.buyingPower,
+        equity: accountData.currentBalances.equity,
+        currency: 'USD',
+        timestamp: new Date().toISOString()
+      };
+    } catch (error: any) {
+      Logger.error(`❌ Failed to get balance for account ${accountId}:`, error.response?.data || error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get positions using account-level tokens
+   */
+  static async getPositionsForAccount(accountId: number, userId: number, accountHash: string): Promise<any[]> {
+    try {
+      const accessToken = await this.getValidAccessTokenForAccount(accountId, userId);
+
+      const response = await axios.get(
+        `${SCHWAB_API_BASE}/trader/v1/accounts/${accountHash}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          },
+          params: {
+            fields: 'positions'
+          }
+        }
+      );
+
+      const positions = response.data.securitiesAccount.positions || [];
+      
+      Logger.info(`✅ Retrieved ${positions.length} positions for account ${accountId}`);
+      
+      return positions.map((pos: any) => ({
+        symbol: pos.instrument.symbol,
+        secType: pos.instrument.assetType,
+        currency: 'USD',
+        position: pos.longQuantity || pos.shortQuantity || 0,
+        averageCost: pos.averagePrice || 0,
+        marketPrice: pos.marketValue / (pos.longQuantity || pos.shortQuantity || 1),
+        marketValue: pos.marketValue || 0,
+        unrealizedPNL: (pos.marketValue || 0) - (pos.averagePrice || 0) * (pos.longQuantity || pos.shortQuantity || 0),
+        realizedPNL: 0
+      }));
+    } catch (error: any) {
+      Logger.error(`❌ Failed to get positions for account ${accountId}:`, error.response?.data || error.message);
+      throw error;
+    }
+  }
 }
