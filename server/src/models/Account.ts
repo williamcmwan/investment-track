@@ -79,7 +79,8 @@ export class AccountModel {
       `SELECT 
         id, user_id as userId, name, currency, account_type as accountType,
         account_number as accountNumber, original_capital as originalCapital, 
-        current_balance as currentBalance, last_updated as lastUpdated, 
+        current_balance as currentBalance, integration_type as integrationType,
+        integration_config as integrationConfig, last_updated as lastUpdated, 
         created_at as createdAt, updated_at as updatedAt,
         CASE 
           WHEN account_type = 'BANK' THEN 0
@@ -104,7 +105,8 @@ export class AccountModel {
       `SELECT 
         id, user_id as userId, name, currency, account_type as accountType,
         account_number as accountNumber, original_capital as originalCapital, 
-        current_balance as currentBalance, last_updated as lastUpdated, 
+        current_balance as currentBalance, integration_type as integrationType,
+        integration_config as integrationConfig, last_updated as lastUpdated, 
         created_at as createdAt, updated_at as updatedAt,
         CASE 
           WHEN account_type = 'BANK' THEN 0
