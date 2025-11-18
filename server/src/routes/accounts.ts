@@ -328,7 +328,8 @@ router.get('/:id/integration', async (req: AuthenticatedRequest, res) => {
       });
     }
 
-    return res.json({ type: config.type, config });
+    // For IB, return the config directly (it already has the type field)
+    return res.json({ type: config.type, config: config });
   } catch (error) {
     Logger.error('Get integration error:', error);
     return res.status(500).json({ error: 'Internal server error' });

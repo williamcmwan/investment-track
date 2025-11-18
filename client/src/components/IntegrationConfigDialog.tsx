@@ -57,11 +57,14 @@ export default function IntegrationConfigDialog({
       setLoading(true);
       const response = await apiClient.getAccountIntegration(accountId);
       
+      console.log('Integration response:', response.data);
+      
       if (response.data && response.data.type) {
         setCurrentType(response.data.type);
         setSelectedTab(response.data.type.toLowerCase());
         
         if (response.data.type === 'IB' && response.data.config) {
+          console.log('Loading IB config:', response.data.config);
           setIbForm({
             host: response.data.config.host || 'localhost',
             port: response.data.config.port?.toString() || '4001',
@@ -75,6 +78,7 @@ export default function IntegrationConfigDialog({
           });
         }
       } else {
+        console.log('No integration configured');
         setCurrentType(null);
         setSelectedTab('none');
       }
