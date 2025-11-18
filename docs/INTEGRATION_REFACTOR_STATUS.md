@@ -24,13 +24,23 @@
 - [x] Frontend API client methods
 - [x] TypeScript compilation successful
 
-## In Progress 🚧
+## Completed ✅
 
 ### Phase 3: Service Layer Updates
-Need to update:
-- [ ] `IBService` - Accept account-level config instead of user-level
-- [ ] `SchwabService` - Accept account-level config instead of user-level
-- [ ] Create `IntegrationService` - Unified interface for all integrations
+- [x] Created `IntegrationService` - Unified interface for all integrations
+- [x] `refreshAccountBalance()` - Refresh single account
+- [x] `refreshAllIntegrations()` - Refresh all integrated accounts
+- [x] `testConnection()` - Test integration connection
+- [x] Updated Dashboard to use new integration service
+- [x] Replaced old refresh logic with account-level approach
+
+### Phase 4: Frontend Components (Partial)
+- [x] Created `IntegrationConfigDialog.tsx` - Complete integration setup UI
+- [x] Support for IB and Schwab configuration
+- [x] Test connection and refresh balance buttons
+- [x] Tab-based interface for integration types
+
+## In Progress 🚧
 
 ### Phase 4: Frontend Components
 Need to create/update:

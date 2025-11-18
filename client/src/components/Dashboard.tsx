@@ -289,58 +289,40 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     }
   };
 
-  // Refresh Schwab account balances
-  const refreshSchwabAccounts = async () => {
+  // Refresh all accounts with integrations (IB and Schwab)
+  const refreshIntegratedAccounts = async () => {
     try {
-      // Get Schwab settings to check if configured
-      const settingsResponse = await apiClient.getSchwabSettings();
-      if (!settingsResponse.data?.has_tokens) {
-        // Schwab not configured, skip silently
-        console.log('Schwab not configured or no tokens, skipping refresh');
-        return;
-      }
+      console.log('Refreshing integrated accounts...');
 
-      console.log('Refreshing Schwab accounts...');
-
-      // Get all Schwab accounts
-      const accountsResponse = await apiClient.getSchwabAccounts();
-      if (!accountsResponse.data || accountsResponse.data.length === 0) {
-        console.log('No Schwab accounts found');
-        return;
-      }
-
-      console.log(`Found ${accountsResponse.data.length} Schwab accounts`);
-
-      // For each Schwab account, find matching account in our system and refresh
+      // Refresh all accounts that have integrations configured
       let refreshedCount = 0;
-      for (const schwabAccount of accountsResponse.data) {
-        // Find matching account by account number
-        const matchingAccount = accounts.find(
-          acc => acc.accountNumber === schwabAccount.accountNumber
-        );
-
-        if (matchingAccount) {
-          console.log(`Refreshing balance for account ${matchingAccount.name} (${schwabAccount.accountNumber})`);
-          // Refresh balance for this account
-          const balanceResponse = await apiClient.getSchwabAccountBalance(
-            schwabAccount.hashValue,
-            matchingAccount.id
-          );
+      for (const account of accounts) {
+        // Check if account has integration
+        const integrationResponse = await apiClient.getAccountIntegration(account.id);
+        
+        if (integrationResponse.data && integrationResponse.data.type) {
+          console.log(`Refreshing ${integrationResponse.data.type} account: ${account.name}`);
           
-          if (balanceResponse.data) {
-            refreshedCount++;
-            console.log(`✅ Updated ${matchingAccount.name}: ${balanceResponse.data.currentBalance}`);
+          try {
+            const refreshResponse = await apiClient.refreshAccountIntegration(account.id);
+            
+            if (refreshResponse.data && refreshResponse.data.success) {
+              refreshedCount++;
+              console.log(`✅ Updated ${account.name}: ${refreshResponse.data.balance} ${refreshResponse.data.currency}`);
+            }
+          } catch (error) {
+            console.warn(`Failed to refresh ${account.name}:`, error);
           }
-        } else {
-          console.log(`No matching account found for Schwab account ${schwabAccount.accountNumber}`);
         }
       }
 
       if (refreshedCount > 0) {
-        console.log(`✅ Schwab: Refreshed ${refreshedCount} account(s)`);
+        console.log(`✅ Integrations: Refreshed ${refreshedCount} account(s)`);
+      } else {
+        console.log('No integrated accounts found');
       }
     } catch (error) {
-      console.warn('Schwab refresh failed:', error);
+      console.warn('Integration refresh failed:', error);
       // Don't throw - allow other refreshes to continue
     }
   };
@@ -715,11 +697,11 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         console.warn('Failed to refresh other assets data:', error);
       }
 
-      // 5. Refresh Schwab account balances (if configured)
+      // 5. Refresh all integrated accounts (IB and Schwab)
       try {
-        await refreshSchwabAccounts();
+        await refreshIntegratedAccounts();
       } catch (error) {
-        console.warn('Failed to refresh Schwab data:', error);
+        console.warn('Failed to refresh integrated accounts:', error);
       }
 
       // 6. Refresh Accounts data (including IB account balance updates)
