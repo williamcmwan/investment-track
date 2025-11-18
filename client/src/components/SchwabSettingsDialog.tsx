@@ -46,6 +46,27 @@ export default function SchwabSettingsDialog({
     }
   }, [open]);
 
+  // Listen for OAuth success message from popup
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data.type === 'schwab_auth_success') {
+        // Reload settings to update status
+        setTimeout(() => {
+          loadSettings();
+          toast({
+            title: 'Connected',
+            description: 'Schwab account connected successfully!'
+          });
+        }, 500);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   const loadSettings = async () => {
     try {
       const response = await apiClient.getSchwabSettings();

@@ -46,32 +46,54 @@ export default function SchwabCallback() {
     try {
       setMessage('Exchanging authorization code for tokens...');
       
-      // Note: In a production environment, this token exchange should happen
-      // on the backend to keep the client_secret secure.
-      // For now, we'll show a success message and let the user manually
-      // complete the process through the settings dialog.
+      // Get code verifier from session storage (set during OAuth initiation)
+      const codeVerifier = sessionStorage.getItem('schwab_code_verifier');
+      const redirectUri = `${window.location.origin}/schwab/callback`;
       
-      setStatus('success');
-      setMessage('Authentication successful! You can now close this window and return to the settings dialog.');
-      
-      toast({
-        title: 'Success',
-        description: 'Schwab authentication completed. Please save your tokens in the settings dialog.'
+      // Exchange code for tokens on backend (secure)
+      const response = await apiClient.exchangeSchwabOAuthCode({
+        code,
+        code_verifier: codeVerifier || undefined,
+        redirect_uri: redirectUri
       });
+      
+      // Clean up code verifier
+      sessionStorage.removeItem('schwab_code_verifier');
+      
+      if (response.data) {
+        setStatus('success');
+        setMessage('Authentication successful! Tokens saved. You can now close this window.');
+        
+        toast({
+          title: 'Success',
+          description: 'Schwab authentication completed successfully!'
+        });
 
-      // Close window after 3 seconds
-      setTimeout(() => {
-        window.close();
-      }, 3000);
+        // Notify parent window if it exists
+        if (window.opener) {
+          window.opener.postMessage({ type: 'schwab_auth_success' }, window.location.origin);
+        }
+
+        // Close window after 2 seconds
+        setTimeout(() => {
+          window.close();
+        }, 2000);
+      } else {
+        throw new Error(response.error || 'Failed to exchange authorization code');
+      }
       
     } catch (error: any) {
       setStatus('error');
-      setMessage('Failed to complete authentication');
+      setMessage(`Failed to complete authentication: ${error.message || 'Unknown error'}`);
       toast({
         title: 'Error',
         description: error.message || 'Failed to complete authentication',
         variant: 'destructive'
       });
+      
+      // Clean up code verifier
+      sessionStorage.removeItem('schwab_code_verifier');
+      
       setTimeout(() => {
         window.close();
       }, 3000);

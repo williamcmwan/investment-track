@@ -97,6 +97,71 @@ router.post('/tokens', async (req: AuthenticatedRequest, res) => {
 });
 
 /**
+ * Exchange OAuth authorization code for tokens (secure backend exchange)
+ */
+router.post('/oauth/exchange', async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user?.id || 0;
+    const { code, code_verifier, redirect_uri } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'Authorization code is required' });
+    }
+    
+    const settings = await SchwabService.getUserSettings(userId);
+    if (!settings) {
+      return res.status(400).json({ error: 'Please configure Schwab settings first' });
+    }
+    
+    Logger.info(`🔄 Exchanging OAuth code for tokens for user ${userId}`);
+    
+    // Exchange code for tokens using backend (keeps client_secret secure)
+    const axios = (await import('axios')).default;
+    const tokenResponse = await axios.post(
+      'https://api.schwabapi.com/v1/oauth/token',
+      new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: redirect_uri,
+        client_id: settings.app_key,
+        client_secret: settings.app_secret,
+        ...(code_verifier && { code_verifier })
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }
+    );
+    
+    const { access_token, refresh_token, expires_in } = tokenResponse.data;
+    const expires_at = Math.floor(Date.now() / 1000) + expires_in;
+    
+    // Save tokens
+    await SchwabService.saveUserSettings(userId, {
+      app_key: settings.app_key,
+      app_secret: settings.app_secret,
+      access_token,
+      refresh_token,
+      token_expires_at: expires_at
+    });
+    
+    Logger.info(`✅ Successfully exchanged OAuth code and saved tokens for user ${userId}`);
+    return res.json({ 
+      success: true, 
+      message: 'OAuth tokens saved successfully',
+      expires_in 
+    });
+  } catch (error: any) {
+    Logger.error('Error exchanging OAuth code:', error.response?.data || error.message);
+    return res.status(500).json({ 
+      error: 'Failed to exchange authorization code',
+      details: error.response?.data?.error_description || error.message
+    });
+  }
+});
+
+/**
  * Get all account numbers
  */
 router.get('/accounts', async (req: AuthenticatedRequest, res) => {

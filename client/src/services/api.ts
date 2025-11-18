@@ -582,6 +582,13 @@ class ApiClient {
     });
   }
 
+  async exchangeSchwabOAuthCode(data: { code: string; code_verifier?: string; redirect_uri: string }) {
+    return this.request<{ success: boolean; message: string; expires_in: number }>('/schwab/oauth/exchange', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getSchwabAccounts() {
     return this.request<any[]>('/schwab/accounts');
   }

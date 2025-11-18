@@ -42,6 +42,7 @@ interface Account {
   name: string;
   currency: string;
   accountType: string;
+  accountNumber?: string;
   originalCapital: number;
   currentBalance: number;
   lastUpdated: string;
@@ -295,16 +296,23 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       const settingsResponse = await apiClient.getSchwabSettings();
       if (!settingsResponse.data?.has_tokens) {
         // Schwab not configured, skip silently
+        console.log('Schwab not configured or no tokens, skipping refresh');
         return;
       }
+
+      console.log('Refreshing Schwab accounts...');
 
       // Get all Schwab accounts
       const accountsResponse = await apiClient.getSchwabAccounts();
-      if (!accountsResponse.data) {
+      if (!accountsResponse.data || accountsResponse.data.length === 0) {
+        console.log('No Schwab accounts found');
         return;
       }
 
+      console.log(`Found ${accountsResponse.data.length} Schwab accounts`);
+
       // For each Schwab account, find matching account in our system and refresh
+      let refreshedCount = 0;
       for (const schwabAccount of accountsResponse.data) {
         // Find matching account by account number
         const matchingAccount = accounts.find(
@@ -312,15 +320,25 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         );
 
         if (matchingAccount) {
+          console.log(`Refreshing balance for account ${matchingAccount.name} (${schwabAccount.accountNumber})`);
           // Refresh balance for this account
-          await apiClient.getSchwabAccountBalance(
+          const balanceResponse = await apiClient.getSchwabAccountBalance(
             schwabAccount.hashValue,
             matchingAccount.id
           );
+          
+          if (balanceResponse.data) {
+            refreshedCount++;
+            console.log(`✅ Updated ${matchingAccount.name}: ${balanceResponse.data.currentBalance}`);
+          }
+        } else {
+          console.log(`No matching account found for Schwab account ${schwabAccount.accountNumber}`);
         }
       }
 
-      Logger.info('✅ Schwab accounts refreshed successfully');
+      if (refreshedCount > 0) {
+        console.log(`✅ Schwab: Refreshed ${refreshedCount} account(s)`);
+      }
     } catch (error) {
       console.warn('Schwab refresh failed:', error);
       // Don't throw - allow other refreshes to continue
