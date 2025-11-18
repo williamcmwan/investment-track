@@ -344,7 +344,11 @@ router.put('/:id/integration', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Invalid account ID' });
     }
 
+    Logger.info(`📝 Setting integration for account ${accountId}:`, req.body);
+    
     const validatedConfig = integrationSchema.parse(req.body);
+    
+    Logger.info(`✅ Validated config:`, validatedConfig);
     
     const account = await AccountModel.setIntegration(
       accountId,
@@ -358,6 +362,12 @@ router.put('/:id/integration', async (req: AuthenticatedRequest, res) => {
     }
 
     Logger.info(`✅ Set ${validatedConfig.type} integration for account ${accountId}`);
+    Logger.info(`📊 Updated account:`, { 
+      id: account.id, 
+      integrationType: account.integrationType,
+      hasConfig: !!account.integrationConfig 
+    });
+    
     return res.json(account);
   } catch (error) {
     if (error instanceof z.ZodError) {
