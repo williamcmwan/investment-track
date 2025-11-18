@@ -63,30 +63,7 @@ export default function SchwabCallback() {
         throw new Error(response.error || 'Failed to exchange authorization code');
       }
 
-      setMessage('Fetching account information...');
-      
-      // Fetch account numbers to get the account hash
-      const accountsResponse = await apiClient.getSchwabAccounts();
-      
-      if (accountsResponse.data && accountsResponse.data.length > 0) {
-        // Get the first account hash (or let user select if multiple)
-        const accountHash = accountsResponse.data[0].hashValue;
-        
-        // Update the account integration with the account hash
-        if (accountId) {
-          const updateResponse = await apiClient.setAccountIntegration(
-            parseInt(accountId),
-            'SCHWAB',
-            {
-              accountHash: accountHash
-            }
-          );
-          
-          if (updateResponse.data) {
-            setMessage('Account hash saved successfully!');
-          }
-        }
-      }
+      setMessage('Authentication successful!');
       
       // Clean up session storage
       sessionStorage.removeItem('schwab_code_verifier');

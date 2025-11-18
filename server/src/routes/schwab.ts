@@ -175,6 +175,29 @@ router.post('/oauth/exchange', async (req: AuthenticatedRequest, res) => {
       const existingConfig = await AccountModel.getIntegration(accountId, userId);
       if (existingConfig && existingConfig.type === 'SCHWAB') {
         const schwabConfig = existingConfig as any;
+        
+        // Try to fetch account hash using the new access token
+        let accountHash = schwabConfig.accountHash;
+        
+        try {
+          Logger.info('🔍 Fetching Schwab account numbers...');
+          const accountsResponse = await axios.get(
+            'https://api.schwabapi.com/trader/v1/accounts/accountNumbers',
+            {
+              headers: {
+                'Authorization': `Bearer ${access_token}`
+              }
+            }
+          );
+          
+          if (accountsResponse.data && accountsResponse.data.length > 0) {
+            accountHash = accountsResponse.data[0].hashValue;
+            Logger.info(`✅ Fetched account hash: ${accountHash}`);
+          }
+        } catch (fetchError) {
+          Logger.warn('⚠️ Failed to fetch account hash, will use existing or empty:', fetchError);
+        }
+        
         await AccountModel.setIntegration(accountId, userId, 'SCHWAB', {
           type: 'SCHWAB',
           appKey: schwabConfig.appKey,
@@ -182,9 +205,9 @@ router.post('/oauth/exchange', async (req: AuthenticatedRequest, res) => {
           accessToken: access_token,
           refreshToken: refresh_token,
           tokenExpiresAt: expires_at,
-          accountHash: schwabConfig.accountHash
+          accountHash: accountHash
         });
-        Logger.info(`✅ Saved tokens to account ${accountId} integration`);
+        Logger.info(`✅ Saved tokens and account hash to account ${accountId} integration`);
       }
     } else {
       // Fallback to old global settings
