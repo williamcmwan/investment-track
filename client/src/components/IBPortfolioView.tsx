@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api";
-import IBConfigDialog from "./IBConfigDialog";
 
 interface IBPortfolioViewProps {
   baseCurrency: string;
@@ -77,7 +76,6 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
     port: 7497,
     clientId: 1
   });
-  const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
 
   // Load connection settings and initial data from server on mount
   useEffect(() => {
@@ -225,7 +223,7 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
       if (balanceResponse.error) {
         console.error('Balance error detected:', balanceResponse.error);
         if (balanceResponse.error.includes('not configured')) {
-          throw new Error('IB connection not configured. Please click "Configure" to set up your Interactive Brokers connection.');
+          throw new Error('IB connection not configured. Please configure IB integration in the Accounts page.');
         }
         throw new Error(balanceResponse.error);
       }
@@ -233,7 +231,7 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
       if (portfolioResponse.error) {
         console.error('Portfolio error detected:', portfolioResponse.error);
         if (portfolioResponse.error.includes('not configured')) {
-          throw new Error('IB connection not configured. Please click "Configure" to set up your Interactive Brokers connection.');
+          throw new Error('IB connection not configured. Please configure IB integration in the Accounts page.');
         }
         throw new Error(portfolioResponse.error);
       }
@@ -241,7 +239,7 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
       if (cashResponse.error) {
         console.error('Cash balances error detected:', cashResponse.error);
         if (cashResponse.error.includes('not configured')) {
-          throw new Error('IB connection not configured. Please click "Configure" to set up your Interactive Brokers connection.');
+          throw new Error('IB connection not configured. Please configure IB integration in the Accounts page.');
         }
         throw new Error(cashResponse.error);
       }
@@ -639,16 +637,6 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
               </CardTitle>
               <div className="flex items-center gap-2">
                 <Button
-                  onClick={() => setIsConfigDialogOpen(true)}
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2"
-                >
-                  <Settings className="h-4 w-4" />
-                  Configure
-                </Button>
-
-                <Button
                   onClick={handleRefreshAll}
                   disabled={isConnecting || isLoadingPortfolio}
                   size="sm"
@@ -1026,12 +1014,7 @@ const IBPortfolioView = ({ baseCurrency, onAccountUpdate }: IBPortfolioViewProps
         </CardContent>
       </Card>
 
-      {/* IB Configuration Dialog */}
-      <IBConfigDialog
-        open={isConfigDialogOpen}
-        onOpenChange={setIsConfigDialogOpen}
-        onSettingsSaved={loadConnectionSettings}
-      />
+
     </div>
   );
 };
