@@ -288,6 +288,45 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     }
   };
 
+  // Refresh Schwab account balances
+  const refreshSchwabAccounts = async () => {
+    try {
+      // Get Schwab settings to check if configured
+      const settingsResponse = await apiClient.getSchwabSettings();
+      if (!settingsResponse.data?.has_tokens) {
+        // Schwab not configured, skip silently
+        return;
+      }
+
+      // Get all Schwab accounts
+      const accountsResponse = await apiClient.getSchwabAccounts();
+      if (!accountsResponse.data) {
+        return;
+      }
+
+      // For each Schwab account, find matching account in our system and refresh
+      for (const schwabAccount of accountsResponse.data) {
+        // Find matching account by account number
+        const matchingAccount = accounts.find(
+          acc => acc.accountNumber === schwabAccount.accountNumber
+        );
+
+        if (matchingAccount) {
+          // Refresh balance for this account
+          await apiClient.getSchwabAccountBalance(
+            schwabAccount.hashValue,
+            matchingAccount.id
+          );
+        }
+      }
+
+      Logger.info('✅ Schwab accounts refreshed successfully');
+    } catch (error) {
+      console.warn('Schwab refresh failed:', error);
+      // Don't throw - allow other refreshes to continue
+    }
+  };
+
   // Handle Quick Update of account balances
   const handleQuickUpdate = async () => {
     setIsUpdatingBalances(true);
@@ -658,17 +697,24 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         console.warn('Failed to refresh other assets data:', error);
       }
 
-      // 5. Refresh Accounts data (including IB account balance updates)
+      // 5. Refresh Schwab account balances (if configured)
+      try {
+        await refreshSchwabAccounts();
+      } catch (error) {
+        console.warn('Failed to refresh Schwab data:', error);
+      }
+
+      // 6. Refresh Accounts data (including IB account balance updates)
       try {
         await loadAccounts();
       } catch (error) {
         console.warn('Failed to refresh accounts data:', error);
       }
 
-      // 6. Update exchange rates for currency conversion
+      // 7. Update exchange rates for currency conversion
       await fetchExchangeRates();
 
-      // 7. Force server to compute today's snapshot and reload performance history
+      // 8. Force server to compute today's snapshot and reload performance history
       await handlePostAccountUpdate();
 
       toast({

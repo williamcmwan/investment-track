@@ -112,6 +112,20 @@ CREATE TABLE IF NOT EXISTS other_assets (
   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
+-- Charles Schwab settings table
+CREATE TABLE IF NOT EXISTS schwab_settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL UNIQUE,
+  app_key TEXT NOT NULL,
+  app_secret TEXT NOT NULL,
+  access_token TEXT,
+  refresh_token TEXT,
+  token_expires_at INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_account_balance_history_account_id ON account_balance_history(account_id);
@@ -123,3 +137,4 @@ CREATE INDEX IF NOT EXISTS idx_ib_connections_user_id ON ib_connections(user_id)
 CREATE INDEX IF NOT EXISTS idx_other_assets_user_id ON other_assets(user_id);
 CREATE INDEX IF NOT EXISTS idx_other_assets_asset_type ON other_assets(asset_type);
 CREATE INDEX IF NOT EXISTS idx_other_assets_created_at ON other_assets(created_at);
+CREATE INDEX IF NOT EXISTS idx_schwab_settings_user_id ON schwab_settings(user_id);

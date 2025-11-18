@@ -20,11 +20,13 @@ import {
     Search,
     AlertCircle,
     Activity,
-    DollarSign
+    DollarSign,
+    Settings
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "../services/api";
+import SchwabSettingsDialog from "./SchwabSettingsDialog";
 
 type SortField = 'symbol' | 'secType' | 'currency' | 'quantity' | 'averageCost' | 'marketPrice' | 'pnlPercent' | 'unrealizedPnl' | 'marketValue' | 'country' | 'industry' | 'category' | 'dayChange' | 'dayChangePercent' | 'account';
 type SortDirection = 'asc' | 'desc';
@@ -477,6 +479,7 @@ const OtherPortfolioView: React.FC<OtherPortfolioViewProps> = ({ accounts = [] }
     // Dialog states
     const [positionDialogOpen, setPositionDialogOpen] = useState(false);
     const [editingPosition, setEditingPosition] = useState<ManualPosition | null>(null);
+    const [schwabDialogOpen, setSchwabDialogOpen] = useState(false);
 
     const [positionForm, setPositionForm] = useState({
         accountId: '',
@@ -944,6 +947,15 @@ const OtherPortfolioView: React.FC<OtherPortfolioViewProps> = ({ accounts = [] }
                                 Other Portfolio
                             </CardTitle>
                             <div className="flex items-center gap-2">
+                                <Button 
+                                    variant="outline" 
+                                    onClick={() => setSchwabDialogOpen(true)} 
+                                    size="sm"
+                                    className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
+                                >
+                                    <Settings className="h-4 w-4 mr-2" />
+                                    Schwab API
+                                </Button>
                                 <Button variant="outline" onClick={handleRefreshMarketData} disabled={loading} size="sm">
                                     <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                                     {loading ? 'Refreshing...' : 'Refresh Market Data'}
@@ -1475,6 +1487,19 @@ const OtherPortfolioView: React.FC<OtherPortfolioViewProps> = ({ accounts = [] }
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Schwab Settings Dialog */}
+            <SchwabSettingsDialog
+                open={schwabDialogOpen}
+                onOpenChange={setSchwabDialogOpen}
+                accounts={accounts}
+                onBalanceRefreshed={() => {
+                    // Reload positions and refresh status after balance update
+                    loadPositions();
+                    loadRefreshStatus();
+                    loadAllLastUpdateTimes();
+                }}
+            />
         </div>
     );
 };

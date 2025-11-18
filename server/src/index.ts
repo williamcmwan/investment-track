@@ -16,6 +16,7 @@ import twoFactorRoutes from './routes/twoFactor.js';
 import integrationRoutes from './routes/integration.js';
 import manualInvestmentRoutes from './routes/manualInvestments.js';
 import otherAssetsRoutes from './routes/otherAssets.js';
+import schwabRoutes from './routes/schwab.js';
 import { SchedulerService } from './services/schedulerService.js';
 import { IBService } from './services/ibService.js';
 import { OtherPortfolioService } from './services/otherPortfolioService.js';
@@ -92,6 +93,7 @@ app.use('/api/2fa', twoFactorRoutes);
 app.use('/api/integration', integrationRoutes);
 app.use('/api/manual-investments', manualInvestmentRoutes);
 app.use('/api/other-assets', otherAssetsRoutes);
+app.use('/api/schwab', schwabRoutes);
 
 // Serve static files from client build (both development and production)
 const clientBuildPath = path.join(__dirname, '../../client/dist');

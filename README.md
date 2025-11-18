@@ -67,6 +67,7 @@ investment-track/
 
 ### 💰 **Multi-Portfolio Management**
 - **Interactive Brokers Integration**: Real-time portfolio data with user-configurable connections
+- **Charles Schwab Integration**: Automatic account balance refresh via Schwab API (OAuth 2.0)
 - **Manual Investment Tracking**: Add positions from any broker with Yahoo Finance market data
 - **Bank Account Management**: Simple balance tracking without P&L calculations
 - **Multi-Currency Support**: Track investments across different currencies
@@ -155,6 +156,9 @@ Comprehensive documentation is available in the `docs/` directory:
 - **[Logging System](docs/LOGGING.md)** - Structured logging configuration and usage
 - **[Memory Optimization](docs/MEMORY_OPTIMIZATION.md)** - Performance optimization techniques
 - **[Refresh System](docs/REFRESH_SYSTEM.md)** - Automatic data refresh system details
+- **[Schwab Integration](docs/SCHWAB_INTEGRATION.md)** - Charles Schwab API integration guide
+- **[Schwab Quick Start](docs/SCHWAB_QUICK_START.md)** - Quick setup guide for Schwab API
+- **[Schwab UI Guide](docs/SCHWAB_UI_GUIDE.md)** - User interface guide for Schwab integration
 
 ## 🚀 Deployment
 

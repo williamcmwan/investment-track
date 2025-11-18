@@ -562,6 +562,45 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // Charles Schwab endpoints
+  async getSchwabSettings() {
+    return this.request<{ app_key: string; has_tokens: boolean }>('/schwab/settings');
+  }
+
+  async saveSchwabSettings(settings: { app_key: string; app_secret: string }) {
+    return this.request<{ success: boolean; message: string }>('/schwab/settings', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async saveSchwabTokens(tokens: { access_token: string; refresh_token: string; expires_in?: number }) {
+    return this.request<{ success: boolean; message: string }>('/schwab/tokens', {
+      method: 'POST',
+      body: JSON.stringify(tokens),
+    });
+  }
+
+  async getSchwabAccounts() {
+    return this.request<any[]>('/schwab/accounts');
+  }
+
+  async getSchwabAccountBalance(accountHash: string, accountId?: number) {
+    const params = accountId ? `?accountId=${accountId}` : '';
+    return this.request<any>(`/schwab/accounts/${accountHash}/balance${params}`);
+  }
+
+  async getSchwabPositions(accountHash: string) {
+    return this.request<any[]>(`/schwab/accounts/${accountHash}/positions`);
+  }
+
+  async getSchwabQuotes(symbols: string[]) {
+    return this.request<any>('/schwab/quotes', {
+      method: 'POST',
+      body: JSON.stringify({ symbols }),
+    });
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);
