@@ -362,11 +362,7 @@ router.put('/:id/integration', async (req: AuthenticatedRequest, res) => {
     }
 
     Logger.info(`✅ Set ${validatedConfig.type} integration for account ${accountId}`);
-    Logger.info(`📊 Updated account:`, { 
-      id: account.id, 
-      integrationType: account.integrationType,
-      hasConfig: !!account.integrationConfig 
-    });
+    Logger.info(`📊 Updated account:`, account);
     
     return res.json(account);
   } catch (error) {

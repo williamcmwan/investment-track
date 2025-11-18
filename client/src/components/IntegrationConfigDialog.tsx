@@ -149,10 +149,17 @@ export default function IntegrationConfigDialog({
         if (response.data) {
           toast({
             title: 'Success',
-            description: 'Schwab integration configured successfully'
+            description: 'Schwab integration configured. Starting OAuth flow...'
           });
           setCurrentType('SCHWAB');
-          if (onIntegrationUpdated) onIntegrationUpdated();
+          
+          // Close dialog before redirecting
+          onOpenChange(false);
+          
+          // Initiate OAuth flow
+          setTimeout(() => {
+            initiateOAuthFlow(accountId);
+          }, 500);
         } else {
           toast({
             title: 'Error',
@@ -230,6 +237,51 @@ export default function IntegrationConfigDialog({
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const initiateOAuthFlow = (accountId: number) => {
+    // Generate PKCE code verifier and challenge
+    const generateCodeVerifier = () => {
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+      return btoa(String.fromCharCode(...array))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    };
+
+    const generateCodeChallenge = async (verifier: string) => {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(verifier);
+      const hash = await crypto.subtle.digest('SHA-256', data);
+      return btoa(String.fromCharCode(...new Uint8Array(hash)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+    };
+
+    const startOAuth = async () => {
+      const codeVerifier = generateCodeVerifier();
+      const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+      // Store code verifier and account ID in session storage
+      sessionStorage.setItem('schwab_code_verifier', codeVerifier);
+      sessionStorage.setItem('schwab_account_id', accountId.toString());
+
+      // Build OAuth URL
+      const redirectUri = `${window.location.origin}/schwab/callback`;
+      const authUrl = new URL('https://api.schwabapi.com/v1/oauth/authorize');
+      authUrl.searchParams.append('client_id', schwabForm.appKey);
+      authUrl.searchParams.append('redirect_uri', redirectUri);
+      authUrl.searchParams.append('response_type', 'code');
+      authUrl.searchParams.append('code_challenge', codeChallenge);
+      authUrl.searchParams.append('code_challenge_method', 'S256');
+
+      // Redirect to Schwab OAuth
+      window.location.href = authUrl.toString();
+    };
+
+    startOAuth();
   };
 
   return (
