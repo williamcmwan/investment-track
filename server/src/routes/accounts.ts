@@ -585,16 +585,41 @@ router.get('/:id/integration/cash', async (req: AuthenticatedRequest, res) => {
 
       return res.json({ success: true, cash: cash || [] });
     } else if (config.type === 'SCHWAB') {
-      // Schwab cash is included in the account balance
-      // For now, return the account balance as cash
-      const account = await AccountModel.findById(accountId, req.user?.id || 0);
-      if (account) {
+      // Get actual cash balance from Schwab API
+      const { SchwabService } = await import('../services/schwabService.js');
+      const schwabConfig = config as any;
+
+      if (!schwabConfig.accountHash) {
+        return res.status(400).json({ error: 'Schwab account hash not configured' });
+      }
+
+      try {
+        const balanceData = await SchwabService.getAccountBalanceForAccount(
+          accountId,
+          req.user?.id || 0,
+          schwabConfig.accountHash
+        );
+
+        // Return the actual cash balance from Schwab
         return res.json({ 
           success: true, 
-          cash: [{ currency: account.currency, balance: account.currentBalance }] 
+          cash: [{ 
+            currency: 'USD', 
+            balance: balanceData.cashBalance || 0 
+          }] 
         });
+      } catch (error: any) {
+        Logger.error('Failed to get Schwab cash balance:', error);
+        // Fallback to account balance if API call fails
+        const account = await AccountModel.findById(accountId, req.user?.id || 0);
+        if (account) {
+          return res.json({ 
+            success: true, 
+            cash: [{ currency: account.currency, balance: account.currentBalance }] 
+          });
+        }
+        return res.json({ success: true, cash: [] });
       }
-      return res.json({ success: true, cash: [] });
     }
 
     return res.status(400).json({ error: 'Unknown integration type' });
