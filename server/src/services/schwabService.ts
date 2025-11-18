@@ -116,16 +116,18 @@ export class SchwabService {
     }
 
     try {
+      // Schwab requires Basic Authentication (Base64 encoded client_id:client_secret)
+      const credentials = Buffer.from(`${settings.app_key}:${settings.app_secret}`).toString('base64');
+      
       const response = await axios.post(`${SCHWAB_API_BASE}/v1/oauth/token`, 
         new URLSearchParams({
           grant_type: 'refresh_token',
-          refresh_token: settings.refresh_token,
-          client_id: settings.app_key,
-          client_secret: settings.app_secret
+          refresh_token: settings.refresh_token
         }),
         {
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': `Basic ${credentials}`
           }
         }
       );
