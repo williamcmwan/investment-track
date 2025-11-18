@@ -111,24 +111,15 @@ export default function ConsolidatedPortfolioView({
       const portfolio = portfolioResponse.data?.portfolio || [];
       const cash = cashResponse.data?.cash || [];
 
-      // Calculate total portfolio value
-      const portfolioValue = portfolio.reduce((sum: number, pos: any) => {
-        return sum + (pos.marketValue || 0);
-      }, 0);
-
-      // Calculate total cash value
-      const cashValue = cash.reduce((sum: number, c: any) => {
-        return sum + (c.balance || 0);
-      }, 0);
-
-      const totalValue = portfolioValue + cashValue;
+      // Use currentBalance from account (most accurate - from broker API)
+      const totalValue = account?.currentBalance || 0;
 
       setPortfolioData(prev => ({
         ...prev,
         [accountId]: {
           portfolio: portfolio,
           cash: cash,
-          totalValue: totalValue || account?.currentBalance || 0,
+          totalValue: totalValue,
           lastUpdated: new Date().toISOString()
         }
       }));
