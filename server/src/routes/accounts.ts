@@ -438,8 +438,15 @@ router.post('/:id/integration/test', async (req: AuthenticatedRequest, res) => {
       const ibConfig = config as any;
       
       try {
-        // Try to get account balance as a connection test
-        const result = await IBService.getAccountBalance({
+        // Disconnect any existing connection to force a fresh connection test
+        Logger.info(`🧪 Testing IB connection to ${ibConfig.host}:${ibConfig.port}...`);
+        await IBService.disconnect();
+        
+        // Wait a bit for cleanup
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Force refresh to actually test the connection to IB Gateway
+        const result = await IBService.forceRefreshAccountBalance({
           host: ibConfig.host,
           port: ibConfig.port,
           client_id: ibConfig.clientId,
@@ -453,7 +460,8 @@ router.post('/:id/integration/test', async (req: AuthenticatedRequest, res) => {
           currency: result?.currency
         });
       } catch (error: any) {
-        return res.status(500).json({ 
+        Logger.error('IB connection test failed:', error);
+        return res.json({ 
           success: false, 
           message: 'IB connection failed',
           error: error.message 
@@ -486,6 +494,107 @@ router.post('/:id/integration/test', async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     Logger.error('Test integration error:', error);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get portfolio positions for account
+router.get('/:id/integration/portfolio', async (req: AuthenticatedRequest, res) => {
+  try {
+    const accountId = parseInt(req.params.id || '0');
+    if (isNaN(accountId)) {
+      return res.status(400).json({ error: 'Invalid account ID' });
+    }
+
+    const config = await AccountModel.getIntegration(accountId, req.user?.id || 0);
+    
+    if (!config) {
+      return res.status(400).json({ error: 'No integration configured for this account' });
+    }
+
+    if (config.type === 'IB') {
+      const { IBService } = await import('../services/ibService.js');
+      const ibConfig = config as any;
+      
+      const portfolio = await IBService.getPortfolio({
+        host: ibConfig.host,
+        port: ibConfig.port,
+        client_id: ibConfig.clientId,
+        target_account_id: accountId
+      });
+
+      return res.json({ success: true, portfolio: portfolio || [] });
+    } else if (config.type === 'SCHWAB') {
+      const { SchwabService } = await import('../services/schwabService.js');
+      const schwabConfig = config as any;
+
+      if (!schwabConfig.accountHash) {
+        return res.status(400).json({ error: 'Schwab account hash not configured' });
+      }
+
+      const positions = await SchwabService.getPositions(
+        req.user?.id || 0,
+        schwabConfig.accountHash
+      );
+
+      return res.json({ success: true, portfolio: positions || [] });
+    }
+
+    return res.status(400).json({ error: 'Unknown integration type' });
+  } catch (error: any) {
+    Logger.error('Get portfolio error:', error);
+    return res.status(500).json({ 
+      error: 'Failed to get portfolio',
+      details: error.message 
+    });
+  }
+});
+
+// Get cash balances for account
+router.get('/:id/integration/cash', async (req: AuthenticatedRequest, res) => {
+  try {
+    const accountId = parseInt(req.params.id || '0');
+    if (isNaN(accountId)) {
+      return res.status(400).json({ error: 'Invalid account ID' });
+    }
+
+    const config = await AccountModel.getIntegration(accountId, req.user?.id || 0);
+    
+    if (!config) {
+      return res.status(400).json({ error: 'No integration configured for this account' });
+    }
+
+    if (config.type === 'IB') {
+      const { IBService } = await import('../services/ibService.js');
+      const ibConfig = config as any;
+      
+      const cash = await IBService.getCashBalances({
+        host: ibConfig.host,
+        port: ibConfig.port,
+        client_id: ibConfig.clientId,
+        target_account_id: accountId
+      });
+
+      return res.json({ success: true, cash: cash || [] });
+    } else if (config.type === 'SCHWAB') {
+      // Schwab cash is included in the account balance
+      // For now, return the account balance as cash
+      const account = await AccountModel.findById(accountId, req.user?.id || 0);
+      if (account) {
+        return res.json({ 
+          success: true, 
+          cash: [{ currency: account.currency, balance: account.currentBalance }] 
+        });
+      }
+      return res.json({ success: true, cash: [] });
+    }
+
+    return res.status(400).json({ error: 'Unknown integration type' });
+  } catch (error: any) {
+    Logger.error('Get cash balances error:', error);
+    return res.status(500).json({ 
+      error: 'Failed to get cash balances',
+      details: error.message 
+    });
   }
 });
 

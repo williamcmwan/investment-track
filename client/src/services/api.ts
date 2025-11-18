@@ -638,6 +638,14 @@ class ApiClient {
       method: 'POST',
     });
   }
+
+  async getAccountPortfolio(accountId: number) {
+    return this.request<{ success: boolean; portfolio: any[] }>(`/accounts/${accountId}/integration/portfolio`);
+  }
+
+  async getAccountCash(accountId: number) {
+    return this.request<{ success: boolean; cash: Array<{ currency: string; balance: number }> }>(`/accounts/${accountId}/integration/cash`);
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

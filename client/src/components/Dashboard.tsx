@@ -29,6 +29,7 @@ import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
 import CurrencyView from "./CurrencyView";
 import IBPortfolioView from "./IBPortfolioView";
+import ConsolidatedPortfolioView from "./ConsolidatedPortfolioView";
 import OtherPortfolioView from "./OtherPortfolioView";
 import OtherAssetsView from "./OtherAssetsView";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1984,6 +1985,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               {currentView === "overview" && "Dashboard Overview"}
               {currentView === "accounts" && "Accounts"}
               {currentView === "currency" && "Currency Exchange"}
+              {currentView === "portfolio" && "Portfolio"}
               {currentView === "integration" && "IB Portfolio"}
               {currentView === "manual-investments" && "Other Portfolios"}
               {currentView === "other-assets" && "Other Assets"}
@@ -1992,6 +1994,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               {currentView === "overview" && "Monitor your investment performance"}
               {currentView === "accounts" && "Manage your investment & bank accounts"}
               {currentView === "currency" && "Track currency exchange rates"}
+              {currentView === "portfolio" && "View all integrated account portfolios in one place"}
               {currentView === "integration" && "Interactive Brokers portfolio and positions"}
               {currentView === "manual-investments" && "Add and manage other investment accounts manually"}
               {currentView === "other-assets" && "Track real estate, collectibles, and other investments"}
@@ -2121,6 +2124,16 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           {currentView === "currency" && (
             <CurrencyView 
               baseCurrency={baseCurrency}
+            />
+          )}
+          {currentView === "portfolio" && (
+            <ConsolidatedPortfolioView 
+              baseCurrency={baseCurrency}
+              onAccountUpdate={async () => {
+                await loadAccounts();
+                await handlePostAccountUpdate();
+                updateTodaysPerformanceData();
+              }}
             />
           )}
           {currentView === "integration" && (
