@@ -277,4 +277,292 @@ router.delete('/:id/history/:historyId', async (req: AuthenticatedRequest, res) 
   }
 });
 
+// Integration validation schemas
+const ibIntegrationSchema = z.object({
+  type: z.literal('IB'),
+  host: z.string().min(1),
+  port: z.number().int().positive(),
+  clientId: z.number().int().nonnegative(),
+  lastConnected: z.string().optional()
+});
+
+const schwabIntegrationSchema = z.object({
+  type: z.literal('SCHWAB'),
+  appKey: z.string().min(1),
+  appSecret: z.string().min(1),
+  accessToken: z.string().optional(),
+  refreshToken: z.string().optional(),
+  tokenExpiresAt: z.number().optional(),
+  accountHash: z.string().optional()
+});
+
+const integrationSchema = z.discriminatedUnion('type', [
+  ibIntegrationSchema,
+  schwabIntegrationSchema
+]);
+
+// Get integration config for account
+router.get('/:id/integration', async (req: AuthenticatedRequest, res) => {
+  try {
+    const accountId = parseInt(req.params.id || '0');
+    if (isNaN(accountId)) {
+      return res.status(400).json({ error: 'Invalid account ID' });
+    }
+
+    const config = await AccountModel.getIntegration(accountId, req.user?.id || 0);
+    
+    if (!config) {
+      return res.json({ type: null, config: null });
+    }
+
+    // Don't send sensitive data to client
+    if (config.type === 'SCHWAB') {
+      const schwabConfig = config as any;
+      return res.json({
+        type: 'SCHWAB',
+        config: {
+          appKey: schwabConfig.appKey,
+          hasTokens: !!(schwabConfig.accessToken && schwabConfig.refreshToken),
+          accountHash: schwabConfig.accountHash
+        }
+      });
+    }
+
+    return res.json({ type: config.type, config });
+  } catch (error) {
+    Logger.error('Get integration error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Set integration config for account
+router.put('/:id/integration', async (req: AuthenticatedRequest, res) => {
+  try {
+    const accountId = parseInt(req.params.id || '0');
+    if (isNaN(accountId)) {
+      return res.status(400).json({ error: 'Invalid account ID' });
+    }
+
+    const validatedConfig = integrationSchema.parse(req.body);
+    
+    const account = await AccountModel.setIntegration(
+      accountId,
+      req.user?.id || 0,
+      validatedConfig.type,
+      validatedConfig as any
+    );
+
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    Logger.info(`✅ Set ${validatedConfig.type} integration for account ${accountId}`);
+    return res.json(account);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid integration config', details: error.errors });
+    }
+    
+    Logger.error('Set integration error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Remove integration from account
+router.delete('/:id/integration', async (req: AuthenticatedRequest, res) => {
+  try {
+    const accountId = parseInt(req.params.id || '0');
+    if (isNaN(accountId)) {
+      return res.status(400).json({ error: 'Invalid account ID' });
+    }
+
+    const account = await AccountModel.removeIntegration(accountId, req.user?.id || 0);
+    
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    Logger.info(`✅ Removed integration from account ${accountId}`);
+    return res.json(account);
+  } catch (error) {
+    Logger.error('Remove integration error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Test integration connection
+router.post('/:id/integration/test', async (req: AuthenticatedRequest, res) => {
+  try {
+    const accountId = parseInt(req.params.id || '0');
+    if (isNaN(accountId)) {
+      return res.status(400).json({ error: 'Invalid account ID' });
+    }
+
+    const config = await AccountModel.getIntegration(accountId, req.user?.id || 0);
+    
+    if (!config) {
+      return res.status(400).json({ error: 'No integration configured for this account' });
+    }
+
+    if (config.type === 'IB') {
+      // Test IB connection
+      const { IBService } = await import('../services/ibService.js');
+      const ibConfig = config as any;
+      
+      try {
+        // Try to get account balance as a connection test
+        const result = await IBService.getAccountBalance({
+          host: ibConfig.host,
+          port: ibConfig.port,
+          client_id: ibConfig.clientId,
+          target_account_id: accountId
+        });
+        
+        return res.json({ 
+          success: true, 
+          message: 'IB connection successful',
+          balance: result?.balance,
+          currency: result?.currency
+        });
+      } catch (error: any) {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'IB connection failed',
+          error: error.message 
+        });
+      }
+    } else if (config.type === 'SCHWAB') {
+      // Test Schwab connection
+      const { SchwabService } = await import('../services/schwabService.js');
+      const schwabConfig = config as any;
+      
+      try {
+        // Try to get account numbers
+        const accounts = await SchwabService.getAccountNumbers(req.user?.id || 0);
+        
+        return res.json({ 
+          success: true, 
+          message: 'Schwab connection successful',
+          accounts: accounts
+        });
+      } catch (error: any) {
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Schwab connection failed',
+          error: error.message 
+        });
+      }
+    }
+
+    return res.status(400).json({ error: 'Unknown integration type' });
+  } catch (error) {
+    Logger.error('Test integration error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Refresh balance from integration
+router.post('/:id/integration/refresh', async (req: AuthenticatedRequest, res) => {
+  try {
+    const accountId = parseInt(req.params.id || '0');
+    if (isNaN(accountId)) {
+      return res.status(400).json({ error: 'Invalid account ID' });
+    }
+
+    const config = await AccountModel.getIntegration(accountId, req.user?.id || 0);
+    
+    if (!config) {
+      return res.status(400).json({ error: 'No integration configured for this account' });
+    }
+
+    if (config.type === 'IB') {
+      // Refresh from IB
+      const { IBService } = await import('../services/ibService.js');
+      const ibConfig = config as any;
+      
+      const result = await IBService.forceRefreshAccountBalance({
+        host: ibConfig.host,
+        port: ibConfig.port,
+        client_id: ibConfig.clientId,
+        target_account_id: accountId
+      });
+
+      if (result && result.balance) {
+        // Update account balance
+        await AccountModel.update(accountId, req.user?.id || 0, {
+          currentBalance: result.balance
+        });
+
+        // Add balance history
+        await AccountModel.addBalanceHistory(
+          accountId,
+          result.balance,
+          'IB integration refresh'
+        );
+
+        // Recalculate performance
+        await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+
+        Logger.info(`✅ Refreshed IB balance for account ${accountId}: ${result.balance}`);
+        return res.json({ 
+          success: true, 
+          balance: result.balance,
+          currency: result.currency,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      return res.status(500).json({ error: 'Failed to refresh balance from IB' });
+    } else if (config.type === 'SCHWAB') {
+      // Refresh from Schwab
+      const { SchwabService } = await import('../services/schwabService.js');
+      const schwabConfig = config as any;
+
+      if (!schwabConfig.accountHash) {
+        return res.status(400).json({ error: 'Schwab account hash not configured' });
+      }
+
+      const result = await SchwabService.getAccountBalance(
+        req.user?.id || 0,
+        schwabConfig.accountHash
+      );
+
+      if (result && result.currentBalance) {
+        // Update account balance
+        await AccountModel.update(accountId, req.user?.id || 0, {
+          currentBalance: result.currentBalance
+        });
+
+        // Add balance history
+        await AccountModel.addBalanceHistory(
+          accountId,
+          result.currentBalance,
+          'Schwab integration refresh'
+        );
+
+        // Recalculate performance
+        await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
+
+        Logger.info(`✅ Refreshed Schwab balance for account ${accountId}: ${result.currentBalance}`);
+        return res.json({ 
+          success: true, 
+          balance: result.currentBalance,
+          currency: result.currency || 'USD',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      return res.status(500).json({ error: 'Failed to refresh balance from Schwab' });
+    }
+
+    return res.status(400).json({ error: 'Unknown integration type' });
+  } catch (error: any) {
+    Logger.error('Refresh integration error:', error);
+    return res.status(500).json({ 
+      error: 'Failed to refresh balance',
+      details: error.message 
+    });
+  }
+});
+
 export default router;

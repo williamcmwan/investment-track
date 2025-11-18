@@ -608,6 +608,36 @@ class ApiClient {
       body: JSON.stringify({ symbols }),
     });
   }
+
+  // Account Integration endpoints
+  async getAccountIntegration(accountId: number) {
+    return this.request<{ type: string | null; config: any }>(`/accounts/${accountId}/integration`);
+  }
+
+  async setAccountIntegration(accountId: number, type: 'IB' | 'SCHWAB', config: any) {
+    return this.request<any>(`/accounts/${accountId}/integration`, {
+      method: 'PUT',
+      body: JSON.stringify({ type, ...config }),
+    });
+  }
+
+  async removeAccountIntegration(accountId: number) {
+    return this.request<any>(`/accounts/${accountId}/integration`, {
+      method: 'DELETE',
+    });
+  }
+
+  async testAccountIntegration(accountId: number) {
+    return this.request<{ success: boolean; message: string; details?: any }>(`/accounts/${accountId}/integration/test`, {
+      method: 'POST',
+    });
+  }
+
+  async refreshAccountIntegration(accountId: number) {
+    return this.request<{ success: boolean; balance: number; currency: string; timestamp: string }>(`/accounts/${accountId}/integration/refresh`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

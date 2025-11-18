@@ -14,14 +14,17 @@
 - [x] Updated `update()` method to handle integration fields
 - [x] TypeScript compilation successful
 
-## In Progress 🚧
+## Completed ✅
 
 ### Phase 2: Backend API Routes
-Need to implement:
-- [ ] `/api/accounts/:id/integration` - GET/PUT/DELETE endpoints
-- [ ] `/api/accounts/:id/integration/test` - Test connection
-- [ ] `/api/accounts/:id/integration/refresh` - Refresh balance
-- [ ] Update existing account routes to include integration data
+- [x] `/api/accounts/:id/integration` - GET/PUT/DELETE endpoints
+- [x] `/api/accounts/:id/integration/test` - Test connection
+- [x] `/api/accounts/:id/integration/refresh` - Refresh balance
+- [x] Integration validation schemas (Zod)
+- [x] Frontend API client methods
+- [x] TypeScript compilation successful
+
+## In Progress 🚧
 
 ### Phase 3: Service Layer Updates
 Need to update:
