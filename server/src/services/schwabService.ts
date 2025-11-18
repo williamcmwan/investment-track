@@ -461,24 +461,20 @@ export class SchwabService {
       
       Logger.info(`✅ Retrieved ${positions.length} positions for account ${accountId}`);
       
-      // Log first position to see what data is available
-      if (positions.length > 0) {
-        Logger.info('📊 Sample Schwab position data:', JSON.stringify(positions[0], null, 2));
-      }
-      
       return positions.map((pos: any) => {
         const quantity = pos.longQuantity || pos.shortQuantity || 0;
         const marketPrice = quantity > 0 ? pos.marketValue / quantity : 0;
         const costBasis = (pos.averagePrice || 0) * quantity;
         const unrealizedPNL = (pos.marketValue || 0) - costBasis;
         
-        // Use Schwab's provided day change data directly
-        // currentDayProfitLoss is the dollar amount change for the day
-        // currentDayProfitLossPercentage is the percentage change for the day
-        const dayChange = pos.currentDayProfitLoss || 0;
-        const dayChangePercent = pos.currentDayProfitLossPercentage || 0;
+        // Calculate day change from netChange (price change per share) * quantity
+        const netChange = pos.instrument?.netChange || 0;
+        const dayChange = netChange * quantity;
         
-        Logger.info(`📈 Position ${pos.instrument.symbol}: dayChange=${dayChange}, dayChangePercent=${dayChangePercent}, currentDayProfitLoss=${pos.currentDayProfitLoss}, currentDayProfitLossPercentage=${pos.currentDayProfitLossPercentage}`);
+        // Calculate day change percentage: (netChange / previous close price) * 100
+        // Previous close = current price - netChange
+        const previousClose = marketPrice - netChange;
+        const dayChangePercent = previousClose > 0 ? (netChange / previousClose) * 100 : 0;
         
         return {
           symbol: pos.instrument.symbol,
