@@ -114,22 +114,34 @@ router.post('/oauth/exchange', async (req: AuthenticatedRequest, res) => {
     }
     
     Logger.info(`🔄 Exchanging OAuth code for tokens for user ${userId}`);
+    Logger.debug(`Using redirect_uri: ${redirect_uri}`);
     
     // Exchange code for tokens using backend (keeps client_secret secure)
     const axios = (await import('axios')).default;
+    
+    // Schwab requires Basic Authentication (Base64 encoded client_id:client_secret)
+    const credentials = Buffer.from(`${settings.app_key}:${settings.app_secret}`).toString('base64');
+    
+    const tokenParams = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: redirect_uri
+    });
+    
+    // Add code_verifier if using PKCE
+    if (code_verifier) {
+      tokenParams.append('code_verifier', code_verifier);
+    }
+    
+    Logger.debug(`Token request params: ${tokenParams.toString()}`);
+    
     const tokenResponse = await axios.post(
       'https://api.schwabapi.com/v1/oauth/token',
-      new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: code,
-        redirect_uri: redirect_uri,
-        client_id: settings.app_key,
-        client_secret: settings.app_secret,
-        ...(code_verifier && { code_verifier })
-      }),
+      tokenParams.toString(),
       {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${credentials}`
         }
       }
     );
@@ -153,10 +165,19 @@ router.post('/oauth/exchange', async (req: AuthenticatedRequest, res) => {
       expires_in 
     });
   } catch (error: any) {
-    Logger.error('Error exchanging OAuth code:', error.response?.data || error.message);
+    Logger.error('❌ Error exchanging OAuth code:', error.response?.data || error.message);
+    
+    // Log more details for debugging
+    if (error.response) {
+      Logger.error(`Status: ${error.response.status}`);
+      Logger.error(`Response data:`, error.response.data);
+      Logger.error(`Response headers:`, error.response.headers);
+    }
+    
     return res.status(500).json({ 
       error: 'Failed to exchange authorization code',
-      details: error.response?.data?.error_description || error.message
+      details: error.response?.data?.error_description || error.response?.data?.error || error.message,
+      schwab_error: error.response?.data
     });
   }
 });

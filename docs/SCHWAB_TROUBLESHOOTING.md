@@ -117,6 +117,57 @@ Server logs should show:
 3. Clear browser cache and try again
 4. Check server logs for detailed error
 
+### "invalid_client" or "Unauthorized" Error
+
+**Cause:** Schwab rejecting client credentials
+
+**Common reasons:**
+1. **App Key or Secret is incorrect**
+   - Copy directly from Schwab Developer Portal
+   - No extra spaces or characters
+   - Case-sensitive
+
+2. **App not approved for production**
+   - Check app status in Schwab Portal
+   - May need to use sandbox/test environment first
+   - Request production approval if needed
+
+3. **Wrong API endpoint**
+   - Production: `https://api.schwabapi.com`
+   - Sandbox: Check Schwab docs for sandbox URL
+   - Ensure credentials match environment
+
+4. **Authentication method**
+   - Schwab requires Basic Auth (Base64 encoded)
+   - Format: `Authorization: Basic base64(client_id:client_secret)`
+   - Now handled automatically by backend
+
+**Fix:**
+1. **Verify credentials in Schwab Portal:**
+   - Log into https://developer.schwab.com/
+   - Go to your app
+   - Copy App Key and Secret again
+   - Paste into Investment Tracker (no spaces)
+
+2. **Check app status:**
+   - Status should be "Active" or "Approved"
+   - If "Pending", wait for approval
+   - If "Sandbox", use sandbox credentials
+
+3. **Verify callback URL:**
+   - Must exactly match: `http://localhost:3002/schwab/callback`
+   - No trailing slash
+   - Correct protocol (http for localhost)
+
+4. **Check app permissions:**
+   - "Accounts and Trading Production" enabled
+   - All required OAuth scopes selected
+
+5. **Try re-creating the app:**
+   - Sometimes helps with persistent issues
+   - Create new app in Schwab Portal
+   - Use new credentials
+
 ### Schwab accounts not loading
 
 **Cause:** Token expired or invalid
