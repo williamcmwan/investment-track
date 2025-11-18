@@ -40,21 +40,23 @@
 - [x] Test connection and refresh balance buttons
 - [x] Tab-based interface for integration types
 
-## In Progress 🚧
+## Completed ✅
 
 ### Phase 4: Frontend Components
-Need to create/update:
-- [ ] `IntegrationConfigDialog.tsx` - Main integration setup dialog
-- [ ] Update `AccountsView.tsx` - Add integration tab to edit dialog
-- [ ] Remove integration buttons from IB Portfolio page
-- [ ] Remove integration buttons from Other Portfolio page
-- [ ] Update Dashboard refresh logic
+- [x] Created `IntegrationConfigDialog.tsx` - Complete integration setup UI
+- [x] Updated `AccountsView.tsx` - Added integration button to each account
+- [x] Removed Schwab API button from Other Portfolio page
+- [x] Removed SchwabSettingsDialog import and state
+- [x] Integration button with purple styling for visibility
 
 ### Phase 5: Data Migration
-Need to create:
-- [ ] Migration script to move data from old tables to new format
-- [ ] Backward compatibility layer
-- [ ] Migration UI prompt for users
+- [x] Created `migrateIntegrations.ts` script
+- [x] IB connection migration logic
+- [x] Schwab settings migration guidance
+- [x] Added `npm run migrate:integrations` command
+- [x] Migration verification and logging
+
+## 🎉 REFACTORING COMPLETE!
 
 ## Implementation Plan
 

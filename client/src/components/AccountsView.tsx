@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import IntegrationConfigDialog from "./IntegrationConfigDialog";
 import { 
   PlusCircle, 
   Edit, 
@@ -24,7 +25,8 @@ import {
   History,
   Trash2,
   Building2,
-  Landmark
+  Landmark,
+  Settings
 } from "lucide-react";
 
 interface Account {
@@ -69,6 +71,8 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
   const [updatingAccount, setUpdatingAccount] = useState<Account | null>(null);
   const [isEditHistoryDialogOpen, setIsEditHistoryDialogOpen] = useState(false);
   const [editingHistoryEntry, setEditingHistoryEntry] = useState<any>(null);
+  const [integrationDialogOpen, setIntegrationDialogOpen] = useState(false);
+  const [integrationAccount, setIntegrationAccount] = useState<Account | null>(null);
   const [historyEdit, setHistoryEdit] = useState({
     balance: 0,
     note: "",
@@ -524,7 +528,19 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
                   </CardDescription>
                 </div>
               </div>
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0 flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-purple-500 text-purple-500 hover:bg-purple-500/10"
+                  onClick={() => {
+                    setIntegrationAccount(account);
+                    setIntegrationDialogOpen(true);
+                  }}
+                  title="Configure Integration"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
                 <Button 
                   variant="outline" 
                   size="sm" 
@@ -1060,6 +1076,17 @@ const AccountsView = ({ accounts, baseCurrency, exchangeRates, convertToBaseCurr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Integration Config Dialog */}
+      <IntegrationConfigDialog
+        open={integrationDialogOpen}
+        onOpenChange={setIntegrationDialogOpen}
+        accountId={integrationAccount?.id || 0}
+        accountName={integrationAccount?.name || ''}
+        onIntegrationUpdated={() => {
+          onAccountUpdate(); // Reload accounts after integration update
+        }}
+      />
     </div>
   );
 };

@@ -10,6 +10,7 @@
     "start": "node --max-old-space-size=2048 dist/index.js",
     "db:migrate": "tsx src/database/migrate.ts",
     "db:seed": "tsx src/database/seed.ts",
+    "migrate:integrations": "tsx src/scripts/migrateIntegrations.ts",
     "test": "jest"
   },
   "dependencies": {
