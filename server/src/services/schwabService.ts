@@ -467,12 +467,11 @@ export class SchwabService {
         const costBasis = (pos.averagePrice || 0) * quantity;
         const unrealizedPNL = (pos.marketValue || 0) - costBasis;
         
-        // Calculate day change
-        const currentDayProfitLoss = pos.currentDayProfitLoss || 0;
-        const previousDayValue = (pos.marketValue || 0) - currentDayProfitLoss;
-        const dayChangePercent = previousDayValue > 0 
-          ? (currentDayProfitLoss / previousDayValue) * 100 
-          : 0;
+        // Use Schwab's provided day change data directly
+        // currentDayProfitLoss is the dollar amount change for the day
+        // currentDayProfitLossPercentage is the percentage change for the day
+        const dayChange = pos.currentDayProfitLoss || 0;
+        const dayChangePercent = pos.currentDayProfitLossPercentage || 0;
         
         return {
           symbol: pos.instrument.symbol,
@@ -484,10 +483,8 @@ export class SchwabService {
           marketValue: pos.marketValue || 0,
           unrealizedPNL: unrealizedPNL,
           realizedPNL: 0,
-          dayChange: currentDayProfitLoss,
-          dayChangePercent: dayChangePercent,
-          currentDayProfitLoss: currentDayProfitLoss,
-          currentDayProfitLossPercentage: pos.currentDayProfitLossPercentage || dayChangePercent
+          dayChange: dayChange,
+          dayChangePercent: dayChangePercent
         };
       });
     } catch (error: any) {
