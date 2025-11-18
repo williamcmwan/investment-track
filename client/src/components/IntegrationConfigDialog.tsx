@@ -107,12 +107,12 @@ export default function IntegrationConfigDialog({
       } else if (selectedTab === 'ib') {
         // Save IB integration
         const config = {
-          type: 'IB' as const,
           host: ibForm.host,
           port: parseInt(ibForm.port),
           clientId: parseInt(ibForm.clientId)
         };
 
+        console.log('Saving IB config:', { type: 'IB', ...config });
         const response = await apiClient.setAccountIntegration(accountId, 'IB', config);
         if (response.data) {
           toast({
@@ -140,7 +140,6 @@ export default function IntegrationConfigDialog({
         }
 
         const config = {
-          type: 'SCHWAB' as const,
           appKey: schwabForm.appKey,
           appSecret: schwabForm.appSecret,
           accountHash: schwabForm.accountHash || undefined
