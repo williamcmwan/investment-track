@@ -46,41 +46,69 @@ export default function SchwabCallback() {
     try {
       setMessage('Exchanging authorization code for tokens...');
       
-      // Get code verifier from session storage (set during OAuth initiation)
+      // Get code verifier and account ID from session storage
       const codeVerifier = sessionStorage.getItem('schwab_code_verifier');
+      const accountId = sessionStorage.getItem('schwab_account_id');
       const redirectUri = `${window.location.origin}/schwab/callback`;
       
       // Exchange code for tokens on backend (secure)
       const response = await apiClient.exchangeSchwabOAuthCode({
         code,
         code_verifier: codeVerifier || undefined,
-        redirect_uri: redirectUri
+        redirect_uri: redirectUri,
+        account_id: accountId || undefined
       });
       
-      // Clean up code verifier
-      sessionStorage.removeItem('schwab_code_verifier');
-      
-      if (response.data) {
-        setStatus('success');
-        setMessage('Authentication successful! Tokens saved. You can now close this window.');
-        
-        toast({
-          title: 'Success',
-          description: 'Schwab authentication completed successfully!'
-        });
-
-        // Notify parent window if it exists
-        if (window.opener) {
-          window.opener.postMessage({ type: 'schwab_auth_success' }, window.location.origin);
-        }
-
-        // Close window after 2 seconds
-        setTimeout(() => {
-          window.close();
-        }, 2000);
-      } else {
+      if (!response.data) {
         throw new Error(response.error || 'Failed to exchange authorization code');
       }
+
+      setMessage('Fetching account information...');
+      
+      // Fetch account numbers to get the account hash
+      const accountsResponse = await apiClient.getSchwabAccounts();
+      
+      if (accountsResponse.data && accountsResponse.data.length > 0) {
+        // Get the first account hash (or let user select if multiple)
+        const accountHash = accountsResponse.data[0].hashValue;
+        
+        // Update the account integration with the account hash
+        if (accountId) {
+          const updateResponse = await apiClient.setAccountIntegration(
+            parseInt(accountId),
+            'SCHWAB',
+            {
+              accountHash: accountHash
+            }
+          );
+          
+          if (updateResponse.data) {
+            setMessage('Account hash saved successfully!');
+          }
+        }
+      }
+      
+      // Clean up session storage
+      sessionStorage.removeItem('schwab_code_verifier');
+      sessionStorage.removeItem('schwab_account_id');
+      
+      setStatus('success');
+      setMessage('Authentication successful! You can now close this window.');
+      
+      toast({
+        title: 'Success',
+        description: 'Schwab authentication completed successfully!'
+      });
+
+      // Notify parent window if it exists
+      if (window.opener) {
+        window.opener.postMessage({ type: 'schwab_auth_success' }, window.location.origin);
+      }
+
+      // Close window after 2 seconds
+      setTimeout(() => {
+        window.close();
+      }, 2000);
       
     } catch (error: any) {
       setStatus('error');
@@ -91,8 +119,17 @@ export default function SchwabCallback() {
         variant: 'destructive'
       });
       
-      // Clean up code verifier
+      // Clean up session storage
       sessionStorage.removeItem('schwab_code_verifier');
+      sessionStorage.removeItem('schwab_account_id');
+      
+      // Notify parent window of error
+      if (window.opener) {
+        window.opener.postMessage({ 
+          type: 'schwab_auth_error',
+          message: error.message || 'Authentication failed'
+        }, window.location.origin);
+      }
       
       setTimeout(() => {
         window.close();

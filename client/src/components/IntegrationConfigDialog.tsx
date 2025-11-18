@@ -277,8 +277,59 @@ export default function IntegrationConfigDialog({
       authUrl.searchParams.append('code_challenge', codeChallenge);
       authUrl.searchParams.append('code_challenge_method', 'S256');
 
-      // Redirect to Schwab OAuth
-      window.location.href = authUrl.toString();
+      // Open OAuth in popup window
+      const width = 600;
+      const height = 700;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      
+      const popup = window.open(
+        authUrl.toString(),
+        'schwab_oauth',
+        `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no`
+      );
+
+      // Listen for OAuth completion message from popup
+      const handleMessage = async (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        
+        if (event.data.type === 'schwab_auth_success') {
+          window.removeEventListener('message', handleMessage);
+          
+          toast({
+            title: 'Success',
+            description: 'Schwab authentication completed! Fetching account details...'
+          });
+
+          // Reload integration data to get account hash
+          await loadIntegration();
+          
+          // Trigger parent refresh if callback provided
+          if (onIntegrationUpdated) {
+            onIntegrationUpdated();
+          }
+        } else if (event.data.type === 'schwab_auth_error') {
+          window.removeEventListener('message', handleMessage);
+          
+          toast({
+            title: 'Error',
+            description: event.data.message || 'Authentication failed',
+            variant: 'destructive'
+          });
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+
+      // Check if popup was blocked
+      if (!popup || popup.closed) {
+        toast({
+          title: 'Popup Blocked',
+          description: 'Please allow popups for this site to complete authentication',
+          variant: 'destructive'
+        });
+        window.removeEventListener('message', handleMessage);
+      }
     };
 
     startOAuth();

@@ -102,25 +102,46 @@ router.post('/tokens', async (req: AuthenticatedRequest, res) => {
 router.post('/oauth/exchange', async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user?.id || 0;
-    const { code, code_verifier, redirect_uri } = req.body;
+    const { code, code_verifier, redirect_uri, account_id } = req.body;
     
     if (!code) {
       return res.status(400).json({ error: 'Authorization code is required' });
     }
-    
-    const settings = await SchwabService.getUserSettings(userId);
-    if (!settings) {
-      return res.status(400).json({ error: 'Please configure Schwab settings first' });
+
+    let appKey: string;
+    let appSecret: string;
+    let accountId: number | null = null;
+
+    // Try to get credentials from account integration first
+    if (account_id) {
+      accountId = parseInt(account_id);
+      const accountConfig = await AccountModel.getIntegration(accountId, userId);
+      
+      if (accountConfig && accountConfig.type === 'SCHWAB') {
+        const schwabConfig = accountConfig as any;
+        appKey = schwabConfig.appKey;
+        appSecret = schwabConfig.appSecret;
+      } else {
+        return res.status(400).json({ error: 'Schwab integration not configured for this account' });
+      }
+    } else {
+      // Fallback to old global settings (for backward compatibility)
+      const settings = await SchwabService.getUserSettings(userId);
+      if (!settings) {
+        return res.status(400).json({ error: 'Please configure Schwab settings first' });
+      }
+      appKey = settings.app_key;
+      appSecret = settings.app_secret;
     }
     
-    Logger.info(`🔄 Exchanging OAuth code for tokens for user ${userId}`);
+    Logger.info(`🔄 Exchanging OAuth code for tokens for user ${userId}${accountId ? ` (account ${accountId})` : ''}`);
     Logger.debug(`Using redirect_uri: ${redirect_uri}`);
     
     // Exchange code for tokens using backend (keeps client_secret secure)
     const axios = (await import('axios')).default;
     
     // Schwab requires Basic Authentication (Base64 encoded client_id:client_secret)
-    const credentials = Buffer.from(`${settings.app_key}:${settings.app_secret}`).toString('base64');
+    const credentials = Buffer.from(`${appKey}:${appSecret}`).toString('base64');
     
     const tokenParams = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -149,14 +170,33 @@ router.post('/oauth/exchange', async (req: AuthenticatedRequest, res) => {
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
     const expires_at = Math.floor(Date.now() / 1000) + expires_in;
     
-    // Save tokens
-    await SchwabService.saveUserSettings(userId, {
-      app_key: settings.app_key,
-      app_secret: settings.app_secret,
-      access_token,
-      refresh_token,
-      token_expires_at: expires_at
-    });
+    // Save tokens to account integration if account_id provided
+    if (accountId) {
+      const existingConfig = await AccountModel.getIntegration(accountId, userId);
+      if (existingConfig && existingConfig.type === 'SCHWAB') {
+        const schwabConfig = existingConfig as any;
+        await AccountModel.setIntegration(accountId, userId, 'SCHWAB', {
+          type: 'SCHWAB',
+          appKey: schwabConfig.appKey,
+          appSecret: schwabConfig.appSecret,
+          accessToken: access_token,
+          refreshToken: refresh_token,
+          tokenExpiresAt: expires_at,
+          accountHash: schwabConfig.accountHash
+        });
+        Logger.info(`✅ Saved tokens to account ${accountId} integration`);
+      }
+    } else {
+      // Fallback to old global settings
+      await SchwabService.saveUserSettings(userId, {
+        app_key: appKey,
+        app_secret: appSecret,
+        access_token,
+        refresh_token,
+        token_expires_at: expires_at
+      });
+      Logger.info(`✅ Saved tokens to global settings`);
+    }
     
     Logger.info(`✅ Successfully exchanged OAuth code and saved tokens for user ${userId}`);
     return res.json({ 

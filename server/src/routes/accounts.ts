@@ -346,7 +346,28 @@ router.put('/:id/integration', async (req: AuthenticatedRequest, res) => {
 
     Logger.info(`📝 Setting integration for account ${accountId}:`, req.body);
     
-    const validatedConfig = integrationSchema.parse(req.body);
+    // Check if this is a partial update (e.g., only updating accountHash)
+    const existingConfig = await AccountModel.getIntegration(accountId, req.user?.id || 0);
+    
+    let configToSave = req.body;
+    
+    // If there's an existing config and we're only updating certain fields, merge them
+    if (existingConfig && req.body.type === existingConfig.type) {
+      if (req.body.type === 'SCHWAB') {
+        // For Schwab, allow partial updates (e.g., just accountHash)
+        configToSave = {
+          type: 'SCHWAB',
+          appKey: req.body.appKey || (existingConfig as any).appKey,
+          appSecret: req.body.appSecret || (existingConfig as any).appSecret,
+          accessToken: req.body.accessToken || (existingConfig as any).accessToken,
+          refreshToken: req.body.refreshToken || (existingConfig as any).refreshToken,
+          tokenExpiresAt: req.body.tokenExpiresAt || (existingConfig as any).tokenExpiresAt,
+          accountHash: req.body.accountHash || (existingConfig as any).accountHash
+        };
+      }
+    }
+    
+    const validatedConfig = integrationSchema.parse(configToSave);
     
     Logger.info(`✅ Validated config:`, validatedConfig);
     
