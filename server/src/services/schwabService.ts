@@ -153,6 +153,14 @@ export class SchwabService {
         Logger.error(`Response headers:`, error.response.headers);
       }
       
+      // Check for specific error types
+      const errorData = error.response?.data;
+      if (errorData?.error === 'unsupported_token_type' || 
+          errorData?.error === 'refresh_token_authentication_error' ||
+          errorData?.error_description?.includes('refresh token')) {
+        throw new Error('Refresh token expired or invalid. Please re-authenticate through the integration settings.');
+      }
+      
       throw new Error('Failed to refresh access token. Please re-authenticate.');
     }
   }
