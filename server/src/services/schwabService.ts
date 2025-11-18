@@ -461,17 +461,35 @@ export class SchwabService {
       
       Logger.info(`✅ Retrieved ${positions.length} positions for account ${accountId}`);
       
-      return positions.map((pos: any) => ({
-        symbol: pos.instrument.symbol,
-        secType: pos.instrument.assetType,
-        currency: 'USD',
-        position: pos.longQuantity || pos.shortQuantity || 0,
-        averageCost: pos.averagePrice || 0,
-        marketPrice: pos.marketValue / (pos.longQuantity || pos.shortQuantity || 1),
-        marketValue: pos.marketValue || 0,
-        unrealizedPNL: (pos.marketValue || 0) - (pos.averagePrice || 0) * (pos.longQuantity || pos.shortQuantity || 0),
-        realizedPNL: 0
-      }));
+      return positions.map((pos: any) => {
+        const quantity = pos.longQuantity || pos.shortQuantity || 0;
+        const marketPrice = quantity > 0 ? pos.marketValue / quantity : 0;
+        const costBasis = (pos.averagePrice || 0) * quantity;
+        const unrealizedPNL = (pos.marketValue || 0) - costBasis;
+        
+        // Calculate day change
+        const currentDayProfitLoss = pos.currentDayProfitLoss || 0;
+        const previousDayValue = (pos.marketValue || 0) - currentDayProfitLoss;
+        const dayChangePercent = previousDayValue > 0 
+          ? (currentDayProfitLoss / previousDayValue) * 100 
+          : 0;
+        
+        return {
+          symbol: pos.instrument.symbol,
+          secType: pos.instrument.assetType,
+          currency: 'USD',
+          position: quantity,
+          averageCost: pos.averagePrice || 0,
+          marketPrice: marketPrice,
+          marketValue: pos.marketValue || 0,
+          unrealizedPNL: unrealizedPNL,
+          realizedPNL: 0,
+          dayChange: currentDayProfitLoss,
+          dayChangePercent: dayChangePercent,
+          currentDayProfitLoss: currentDayProfitLoss,
+          currentDayProfitLossPercentage: pos.currentDayProfitLossPercentage || dayChangePercent
+        };
+      });
     } catch (error: any) {
       Logger.error(`❌ Failed to get positions for account ${accountId}:`, error.response?.data || error.message);
       throw error;
