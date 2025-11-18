@@ -32,6 +32,7 @@ export default function SchwabSettingsDialog({
   const [hasTokens, setHasTokens] = useState(false);
   const [schwabAccounts, setSchwabAccounts] = useState<any[]>([]);
   const [loadingSchwabAccounts, setLoadingSchwabAccounts] = useState(false);
+  const [refreshingSettings, setRefreshingSettings] = useState(false);
   
   const [form, setForm] = useState({
     appKey: '',
@@ -52,14 +53,17 @@ export default function SchwabSettingsDialog({
       if (event.origin !== window.location.origin) return;
       
       if (event.data.type === 'schwab_auth_success') {
-        // Reload settings to update status
-        setTimeout(() => {
-          loadSettings();
+        console.log('Received OAuth success message, reloading settings...');
+        setRefreshingSettings(true);
+        // Reload settings to update status (wait a bit for backend to save)
+        setTimeout(async () => {
+          await loadSettings();
+          setRefreshingSettings(false);
           toast({
             title: 'Connected',
-            description: 'Schwab account connected successfully!'
+            description: 'Schwab account connected successfully! You can now link accounts.'
           });
-        }, 500);
+        }, 1000); // Increased delay to ensure backend has saved tokens
       }
     };
 
@@ -69,8 +73,10 @@ export default function SchwabSettingsDialog({
 
   const loadSettings = async () => {
     try {
+      console.log('Loading Schwab settings...');
       const response = await apiClient.getSchwabSettings();
       if (response.data) {
+        console.log('Settings loaded:', { has_tokens: response.data.has_tokens });
         setForm(prev => ({
           ...prev,
           appKey: response.data.app_key || ''
@@ -79,7 +85,10 @@ export default function SchwabSettingsDialog({
         
         // If has tokens, load Schwab accounts
         if (response.data.has_tokens) {
-          loadSchwabAccounts();
+          console.log('Has tokens, loading Schwab accounts...');
+          await loadSchwabAccounts();
+        } else {
+          console.log('No tokens found');
         }
       }
     } catch (error) {
@@ -279,7 +288,12 @@ export default function SchwabSettingsDialog({
           {/* Status Badge */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Status:</span>
-            {hasTokens ? (
+            {refreshingSettings ? (
+              <Badge variant="secondary" className="gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Updating...
+              </Badge>
+            ) : hasTokens ? (
               <Badge variant="default" className="gap-1">
                 <CheckCircle2 className="h-3 w-3" />
                 Connected
@@ -349,7 +363,7 @@ export default function SchwabSettingsDialog({
 
           {/* Account Linking Section */}
           {hasTokens && (
-            <div className="space-y-3 border-t pt-4">
+            <div key={`account-linking-${hasTokens}`} className="space-y-3 border-t pt-4">
               <h4 className="text-sm font-semibold">Link Account & Refresh Balance</h4>
               
               {loadingSchwabAccounts ? (
