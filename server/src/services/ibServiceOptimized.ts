@@ -36,44 +36,31 @@ interface CashBalance {
   marketValueUSD?: number;
 }
 
-// Temporary in-memory storage for real-time updates
-interface TemporaryDataStore {
-  accountValues: Map<string, { value: string; currency: string; timestamp: number }>;
-  portfolioUpdates: Map<string, PortfolioPosition & { timestamp: number }>;
-  marketData: Map<number, { lastPrice: number; closePrice: number; timestamp: number }>;
-  lastDbSync: number;
-}
-
-
 export class IBServiceOptimized {
   private static ibApi: IBApi | null = null;
   private static isConnected = false;
   private static isConnecting = false;
   private static connectionPromise: Promise<void> | null = null;
   
-  // Temporary storage for real-time updates
-  private static tempStore: TemporaryDataStore = {
+  // Storage for account data
+  private static accountData: {
+    accountValues: Map<string, { value: string; currency: string }>;
+    portfolioPositions: Map<number, PortfolioPosition>; // Use Map with conId as key
+  } = {
     accountValues: new Map(),
-    portfolioUpdates: new Map(),
-    marketData: new Map(),
-    lastDbSync: 0
+    portfolioPositions: new Map()
   };
   
   // Subscription tracking
   private static activeSubscriptions = {
-    accountUpdates: false,
-    marketDataReqIds: new Set<number>()
+    accountUpdates: false
   };
-  
-  // Sync interval (1 minute)
-  private static readonly DB_SYNC_INTERVAL = 60 * 1000;
-  private static syncTimer: NodeJS.Timeout | null = null;
   
   // Track contract details already fetched to avoid redundant calls
   private static contractDetailsCache = new Map<number, any>();
   
-  // Track reqId to symbol mapping for better logging
-  private static reqIdToSymbol = new Map<number, string>();
+  // Store mainAccountId for continuous updates
+  private static currentMainAccountId: number | null = null;
 
   static getUserConnectionSettings(userSettings?: { host: string; port: number; client_id: number }): { host: string; port: number; clientId: number } {
     if (!userSettings) {
@@ -180,13 +167,11 @@ export class IBServiceOptimized {
   private static handleDisconnection(): void {
     this.isConnected = false;
     this.stopAllSubscriptions();
-    this.stopSyncTimer();
   }
 
   static async disconnect(): Promise<void> {
     Logger.info('🔌 Disconnecting from IB Gateway...');
     this.stopAllSubscriptions();
-    this.stopSyncTimer();
     
     if (this.ibApi && this.isConnected) {
       try {
@@ -226,48 +211,35 @@ export class IBServiceOptimized {
       throw new Error('IB API not initialized');
     }
 
+    // Store mainAccountId for continuous updates
+    this.currentMainAccountId = mainAccountId;
+    
     // Clear temporary storage for fresh data
-    this.tempStore.accountValues.clear();
-    this.tempStore.portfolioUpdates.clear();
-    this.tempStore.marketData.clear();
+    this.accountData.accountValues.clear();
+    this.accountData.portfolioPositions.clear();
 
-    // Step 1: Subscribe to reqAccountUpdates() - gets account values, cash, and positions
-    await this.subscribeToAccountUpdates();
+    // Step 1: Subscribe to reqAccountUpdates() and wait for data
+    await this.subscribeToAccountUpdates(mainAccountId);
 
-    // Step 2: Wait for initial data to populate
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Step 2: Fetch close prices from Yahoo Finance for all positions
+    const positions = Array.from(this.accountData.portfolioPositions.values());
+    await this.fetchClosePricesFromYahoo(positions, mainAccountId);
 
-    // Step 3: Get positions and subscribe to market data for each
-    const positions = Array.from(this.tempStore.portfolioUpdates.values());
-    Logger.debug(`Found ${positions.length} positions, subscribing to market data...`);
-
-    // Step 4: Subscribe to market data (reqMktData) for all positions
-    await this.subscribeToMarketData(positions);
-
-    // Step 5: Fetch close prices for positions (using historical data as fallback)
-    await this.fetchClosePrices(positions);
-
-    // Step 6: Fetch contract details only for positions missing industry/category
+    // Step 3: Fetch contract details only for positions missing industry/category
     await this.fetchMissingContractDetails(positions);
 
-    // Step 7: Sync to database immediately
+    // Step 4: Sync everything to database
     await this.syncToDatabase(mainAccountId);
 
-    // Step 8: Start periodic sync timer (every 1 minute)
-    this.startSyncTimer(mainAccountId);
-
-    // Step 9: Fetch historical close prices in background (after startup completes)
-    this.fetchHistoricalClosePricesInBackground(positions, mainAccountId);
-
-    // Step 10: Return current data
+    // Step 5: Return current data
     return this.getCurrentData(mainAccountId);
   }
 
   /**
    * Subscribe to account updates - gets account values, cash balances, and positions
-   * This is a single subscription that provides multiple data types
+   * Syncs directly to database when download completes
    */
-  private static async subscribeToAccountUpdates(): Promise<void> {
+  private static async subscribeToAccountUpdates(mainAccountId: number): Promise<void> {
     if (!this.ibApi || !this.isConnected) {
       throw new Error('Not connected to IB');
     }
@@ -287,23 +259,26 @@ export class IBServiceOptimized {
       let downloadComplete = false;
 
       // Handle account value updates (cash balances, net liquidation, etc.)
-      const accountValueHandler = (key: string, value: string, currency: string, accountName: string) => {
+      const accountValueHandler = async (key: string, value: string, currency: string, accountName: string) => {
         // Use composite key for cash balances to handle multiple currencies
-        // IB sends "CashBalance" multiple times with different currencies
         const mapKey = (key === 'CashBalance' || key === 'TotalCashBalance') 
           ? `${key}_${currency}` 
           : key;
         
-        this.tempStore.accountValues.set(mapKey, {
+        this.accountData.accountValues.set(mapKey, {
           value,
-          currency,
-          timestamp: Date.now()
+          currency
         });
-        Logger.debug(`💰 Account value: ${key} = ${value} ${currency} (stored as: ${mapKey})`);
+        Logger.debug(`💰 Account value: ${key} = ${value} ${currency}`);
+        
+        // If initial download is complete and this is NetLiquidation, update account balance immediately
+        if (downloadComplete && key === 'NetLiquidation' && this.currentMainAccountId) {
+          await this.syncAccountBalance(this.currentMainAccountId);
+        }
       };
 
       // Handle portfolio position updates
-      const portfolioHandler = (
+      const portfolioHandler = async (
         contract: any,
         position: number,
         marketPrice: number,
@@ -318,8 +293,8 @@ export class IBServiceOptimized {
           return;
         }
 
-        const key = `${contract.conId}_${contract.symbol}`;
-        this.tempStore.portfolioUpdates.set(key, {
+        const conId = contract.conId || 0;
+        const positionData: PortfolioPosition = {
           symbol: contract.symbol || '',
           secType: contract.secType || '',
           currency: contract.currency || '',
@@ -331,11 +306,18 @@ export class IBServiceOptimized {
           realizedPNL: realizedPNL || 0,
           exchange: contract.exchange || '',
           primaryExchange: contract.primaryExch || '',
-          conId: contract.conId || 0,
-          timestamp: Date.now()
-        });
+          conId
+        };
+        
+        // Update or add position in map
+        this.accountData.portfolioPositions.set(conId, positionData);
         
         Logger.debug(`📊 Position update: ${contract.symbol} (${contract.secType}) - ${position} @ ${marketPrice}`);
+        
+        // If initial download is complete, sync this position to database immediately
+        if (downloadComplete && this.currentMainAccountId) {
+          await this.syncSinglePosition(positionData, this.currentMainAccountId);
+        }
       };
 
       // Handle download end
@@ -343,7 +325,7 @@ export class IBServiceOptimized {
         if (!downloadComplete) {
           downloadComplete = true;
           clearTimeout(timeout);
-          Logger.debug('Initial account data download complete');
+          Logger.debug(`Initial account data download complete: ${this.accountData.portfolioPositions.size} positions`);
           this.activeSubscriptions.accountUpdates = true;
           resolve();
         }
@@ -359,103 +341,13 @@ export class IBServiceOptimized {
   }
 
 
-  /**
-   * Subscribe to market data for all positions
-   * Gets last price and close price via streaming updates
-   */
-  private static async subscribeToMarketData(positions: PortfolioPosition[]): Promise<void> {
-    if (!this.ibApi || !this.isConnected) {
-      throw new Error('Not connected to IB');
-    }
 
-    Logger.debug(`Subscribing to market data for ${positions.length} positions...`);
-
-    // Set market data type to delayed (free)
-    this.ibApi.reqMarketDataType(3);
-
-    for (const position of positions) {
-      if (!position.conId || position.conId <= 0) {
-        Logger.debug(`Skipping market data for ${position.symbol} - no contract ID`);
-        continue;
-      }
-
-      const reqId = position.conId; // Use conId as reqId for easy tracking
-      
-      // Skip if already subscribed
-      if (this.activeSubscriptions.marketDataReqIds.has(reqId)) {
-        continue;
-      }
-
-      const contract = {
-        conId: position.conId,
-        secType: position.secType as any,
-        exchange: position.primaryExchange || position.exchange || 'SMART',
-        currency: position.currency || 'USD'
-      };
-
-      try {
-        // Subscribe to market data (this stays active)
-        // Generic tick list: empty string '' gets default ticks (bid, ask, last, close, volume, etc.)
-        // For delayed data, IB automatically sends tick 68 (delayed last) and 69 (delayed close)
-        // For real-time data, IB sends tick 4 (last) and 9 (close)
-        // No need to specify tick types explicitly - IB sends appropriate ticks based on subscription level
-        this.ibApi.reqMktData(reqId, contract, '', false, false);
-        this.activeSubscriptions.marketDataReqIds.add(reqId);
-        
-        // Store symbol mapping for better logging
-        this.reqIdToSymbol.set(reqId, `${position.symbol} (${position.secType}, ${position.exchange || position.primaryExchange})`);
-        
-        Logger.debug(`Subscribed to market data for ${position.symbol}`);
-      } catch (error) {
-        Logger.error(`Failed to subscribe to market data for ${position.symbol}:`, error);
-      }
-    }
-
-    // Set up market data handler (only once)
-    if (!this.ibApi.listenerCount('tickPrice' as any)) {
-      this.ibApi.on('tickPrice' as any, (reqId: number, tickType: number, price: number) => {
-        const symbol = this.reqIdToSymbol.get(reqId) || `reqId ${reqId}`;
-        
-        if (price <= 0) return;
-
-        const existing = this.tempStore.marketData.get(reqId) || { lastPrice: 0, closePrice: 0, timestamp: 0 };
-
-        // Last Price (Current Price)
-        // Priority: 4 (Last) > 68 (Delayed Last)
-        if (tickType === 4) {
-          existing.lastPrice = price;
-          existing.timestamp = Date.now();
-        } 
-        else if (tickType === 68 && existing.lastPrice === 0) {
-          // Use delayed last only if we don't have real-time last
-          existing.lastPrice = price;
-          existing.timestamp = Date.now();
-        }
-        // Close Price (Previous Day Close)
-        // Priority: 9 (Close) > 69 (Delayed Close)
-        else if (tickType === 9) {
-          existing.closePrice = price;
-          existing.timestamp = Date.now();
-        }
-        else if (tickType === 69 && existing.closePrice === 0) {
-          // Use delayed close only if we don't have real-time close
-          existing.closePrice = price;
-          existing.timestamp = Date.now();
-        }
-
-        this.tempStore.marketData.set(reqId, existing);
-      });
-    }
-
-    Logger.debug('Market data subscriptions active');
-  }
 
   /**
-   * Fetch close prices for stocks using cached values from database
-   * Bonds and crypto get close price from ticks
-   * Historical data requests are skipped to avoid startup delays
+   * Fetch close prices from Yahoo Finance for all positions
+   * Uses database cache when available, fetches from Yahoo Finance for missing ones
    */
-  private static async fetchClosePrices(positions: PortfolioPosition[]): Promise<void> {
+  private static async fetchClosePricesFromYahoo(positions: PortfolioPosition[], mainAccountId: number): Promise<void> {
     const { dbAll } = await import('../database/connection.js');
     
     Logger.debug(`Loading cached close prices from database...`);
@@ -465,9 +357,10 @@ export class IBServiceOptimized {
       `SELECT con_id, close_price 
        FROM portfolios 
        WHERE source = 'IB' 
+       AND main_account_id = ?
        AND close_price IS NOT NULL 
        AND close_price > 0`,
-      []
+      [mainAccountId]
     );
     
     const closeCache = new Map<number, number>();
@@ -477,119 +370,80 @@ export class IBServiceOptimized {
     
     Logger.debug(`Found ${closeCache.size} cached close prices`);
     
+    // Apply cached close prices and collect symbols that need fetching
+    const { YahooFinanceService } = await import('./yahooFinanceService.js');
+    const symbolsToFetch: string[] = [];
+    const symbolToPosition = new Map<string, PortfolioPosition>();
+    
     for (const position of positions) {
       if (!position.conId || position.conId <= 0) {
         continue;
       }
       
-      // Skip bonds and crypto - they get close price from ticks
-      if (position.secType === 'BOND' || position.secType === 'CRYPTO') {
-        continue;
-      }
-      
-      // Check if we already have close price from market data tick
-      const marketData = this.tempStore.marketData.get(position.conId);
-      if (marketData && marketData.closePrice > 0) {
-        continue;
-      }
-      
-      // Use cached close price from database
+      // Use cached close price if available
       if (closeCache.has(position.conId)) {
-        const cachedClose = closeCache.get(position.conId)!;
-        const existing = this.tempStore.marketData.get(position.conId) || { lastPrice: 0, closePrice: 0, timestamp: 0 };
-        existing.closePrice = cachedClose;
-        existing.timestamp = Date.now();
-        this.tempStore.marketData.set(position.conId, existing);
-        Logger.debug(`${position.symbol} - Using cached close price`);
+        position.closePrice = closeCache.get(position.conId)!;
+        Logger.debug(`${position.symbol} - Using cached close price: ${position.closePrice}`);
+      } else {
+        // Need to fetch from Yahoo Finance
+        const yahooSymbol = this.convertToYahooSymbol(position.symbol, position.exchange || position.primaryExchange, position.secType);
+        symbolsToFetch.push(yahooSymbol);
+        symbolToPosition.set(yahooSymbol, position);
       }
     }
     
-    Logger.debug('Close price loading complete');
-  }
-
-  /**
-   * Fetch close prices from Yahoo Finance in background (non-blocking)
-   * This runs after startup completes to avoid delaying the initial response
-   */
-  private static fetchHistoricalClosePricesInBackground(positions: PortfolioPosition[], mainAccountId: number): void {
-    // Run in background after a short delay
-    setTimeout(async () => {
-      Logger.debug('Starting background close price fetch from Yahoo Finance...');
-      
-      const { YahooFinanceService } = await import('./yahooFinanceService.js');
-      
-      // Collect symbols that need close prices
-      const symbolsToFetch: string[] = [];
-      const symbolToConId = new Map<string, number>();
-      const yahooSymbolToOriginal = new Map<string, string>();
-      
-      for (const position of positions) {
-        if (!position.conId || position.conId <= 0) {
-          continue;
-        }
-        
-        // Skip bonds and crypto - they get close price from ticks
-        if (position.secType === 'BOND' || position.secType === 'CRYPTO') {
-          continue;
-        }
-        
-        // Skip if we already have close price
-        const marketData = this.tempStore.marketData.get(position.conId);
-        if (marketData && marketData.closePrice > 0) {
-          continue;
-        }
-        
-        // Convert symbol to Yahoo Finance format
-        const yahooSymbol = this.convertToYahooSymbol(position.symbol, position.exchange || position.primaryExchange);
-        symbolsToFetch.push(yahooSymbol);
-        symbolToConId.set(yahooSymbol, position.conId);
-        yahooSymbolToOriginal.set(yahooSymbol, position.symbol);
+    if (symbolsToFetch.length === 0) {
+      Logger.debug('All positions have cached close prices');
+      return;
+    }
+    
+    // Fetch missing close prices from Yahoo Finance
+    Logger.debug(`Fetching close prices for ${symbolsToFetch.length} symbols from Yahoo Finance...`);
+    const marketDataResults = await YahooFinanceService.getMultipleMarketData(symbolsToFetch);
+    
+    // Update positions with fetched close prices
+    let fetchedCount = 0;
+    for (const [yahooSymbol, marketData] of marketDataResults.entries()) {
+      const position = symbolToPosition.get(yahooSymbol);
+      if (position && marketData.closePrice > 0) {
+        position.closePrice = marketData.closePrice;
+        fetchedCount++;
+        Logger.debug(`${position.symbol} (${yahooSymbol}): close price = ${marketData.closePrice} (from Yahoo Finance)`);
       }
-      
-      if (symbolsToFetch.length === 0) {
-        Logger.debug('No symbols need close prices');
-        return;
-      }
-      
-      // Fetch close prices from Yahoo Finance
-      Logger.debug(`Fetching close prices for ${symbolsToFetch.length} symbols from Yahoo Finance...`);
-      const marketDataResults = await YahooFinanceService.getMultipleMarketData(symbolsToFetch);
-      
-      // Update market data with fetched close prices
-      let fetchedCount = 0;
-      for (const [yahooSymbol, marketData] of marketDataResults.entries()) {
-        const conId = symbolToConId.get(yahooSymbol);
-        const originalSymbol = yahooSymbolToOriginal.get(yahooSymbol);
-        if (conId && marketData.closePrice > 0) {
-          const existing = this.tempStore.marketData.get(conId) || { lastPrice: 0, closePrice: 0, timestamp: 0 };
-          existing.closePrice = marketData.closePrice;
-          existing.timestamp = Date.now();
-          this.tempStore.marketData.set(conId, existing);
-          fetchedCount++;
-          Logger.debug(`${originalSymbol} (${yahooSymbol}): close price = ${marketData.closePrice}`);
-        }
-      }
-      
-      // Sync to database if we fetched any close prices
-      if (fetchedCount > 0) {
-        Logger.debug(`Background fetch complete: ${fetchedCount} close prices fetched from Yahoo Finance`);
-        await this.syncToDatabase(mainAccountId);
-      } else {
-        Logger.debug('Background fetch complete: no new close prices');
-      }
-    }, 5000); // Start after 5 seconds
+    }
+    
+    Logger.debug(`Close price fetch complete: ${fetchedCount} from Yahoo Finance, ${closeCache.size} from cache`);
   }
 
   /**
    * Convert IB symbol to Yahoo Finance symbol format
-   * Adds exchange suffixes for non-US stocks
+   * Adds exchange suffixes for non-US stocks and crypto
    */
-  private static convertToYahooSymbol(symbol: string, exchange?: string): string {
+  private static convertToYahooSymbol(symbol: string, exchange?: string, secType?: string): string {
+    // Crypto: Add -USD suffix
+    // e.g. ETH -> ETH-USD, BTC -> BTC-USD
+    if (secType === 'CRYPTO') {
+      return `${symbol}-USD`;
+    }
+    
     if (!exchange) {
       return symbol;
     }
 
     const exchangeUpper = exchange.toUpperCase();
+    
+    // Canadian stocks need .TO suffix
+    // Special handling for symbols ending with .UN -> convert to -UN.TO
+    // e.g. REI.UN -> REI-UN.TO
+    if (exchangeUpper === 'TSE' || exchangeUpper === 'VENTURE' || exchangeUpper === 'TSXV') {
+      if (symbol.endsWith('.UN')) {
+        // Remove .UN and add -UN.TO
+        const baseSymbol = symbol.substring(0, symbol.length - 3);
+        return `${baseSymbol}-UN.TO`;
+      }
+      // Regular Canadian stocks: VDY -> VDY.TO
+      return `${symbol}.TO`;
+    }
     
     // Singapore stocks need .SI suffix
     if (exchangeUpper === 'SGX' || exchangeUpper === 'SGXCENT') {
@@ -616,7 +470,7 @@ export class IBServiceOptimized {
       return `${symbol}.DE`;
     }
     
-    // US and Canadian stocks don't need suffix
+    // US stocks don't need suffix
     return symbol;
   }
 
@@ -834,8 +688,7 @@ export class IBServiceOptimized {
   }
 
   /**
-   * Sync temporary storage to database
-   * Called every minute and on-demand
+   * Sync account data to database
    */
   private static async syncToDatabase(mainAccountId: number): Promise<void> {
     Logger.debug('Syncing data to database...');
@@ -851,7 +704,6 @@ export class IBServiceOptimized {
       // Sync cash balances
       await this.syncCashBalances(mainAccountId);
 
-      this.tempStore.lastDbSync = Date.now();
       const syncDuration = Date.now() - syncStart;
       Logger.debug(`Database sync complete in ${syncDuration}ms`);
     } catch (error) {
@@ -860,8 +712,8 @@ export class IBServiceOptimized {
   }
 
   private static async syncAccountBalance(mainAccountId: number): Promise<void> {
-    const netLiq = this.tempStore.accountValues.get('NetLiquidation');
-    const currency = this.tempStore.accountValues.get('Currency');
+    const netLiq = this.accountData.accountValues.get('NetLiquidation');
+    const currency = this.accountData.accountValues.get('Currency');
 
     if (!netLiq) {
       Logger.warn('No NetLiquidation value to sync');
@@ -878,38 +730,83 @@ export class IBServiceOptimized {
     Logger.debug(`💾 Synced account balance: ${netLiq.value} ${currency?.value || 'USD'}`);
   }
 
+  /**
+   * Sync a single position to database (for real-time updates)
+   */
+  private static async syncSinglePosition(position: PortfolioPosition, mainAccountId: number): Promise<void> {
+    try {
+      const { dbRun, dbGet } = await import('../database/connection.js');
+      
+      // Get close price from database if not in position
+      if (!position.closePrice) {
+        const cached = await dbGet(
+          'SELECT close_price FROM portfolios WHERE con_id = ? AND source = ? AND main_account_id = ?',
+          [position.conId, 'IB', mainAccountId]
+        );
+        if (cached && cached.close_price) {
+          position.closePrice = cached.close_price;
+        }
+      }
+      
+      // Calculate day change
+      const closePrice = position.closePrice;
+      const lastPrice = position.marketPrice;
+      let dayChange = null;
+      let dayChangePercent = null;
+      
+      if (closePrice && lastPrice && closePrice > 0 && lastPrice !== closePrice) {
+        if (position.secType === 'BOND') {
+          dayChange = (lastPrice - closePrice) * position.position * 10;
+          dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
+        } else {
+          dayChange = (lastPrice - closePrice) * position.position;
+          dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
+        }
+      }
+      
+      // Update existing position in database
+      await dbRun(`
+        UPDATE portfolios 
+        SET 
+          quantity = ?,
+          average_cost = ?,
+          market_price = ?,
+          market_value = ?,
+          day_change = ?,
+          day_change_percent = ?,
+          unrealized_pnl = ?,
+          realized_pnl = ?,
+          last_price_update = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE con_id = ? AND source = ? AND main_account_id = ?
+      `, [
+        position.position, position.averageCost, position.marketPrice, position.marketValue,
+        dayChange, dayChangePercent, position.unrealizedPNL, position.realizedPNL,
+        position.conId, 'IB', mainAccountId
+      ]);
+      
+      Logger.debug(`💾 Updated ${position.symbol}: price=${position.marketPrice}`);
+    } catch (error) {
+      Logger.error(`Failed to sync position ${position.symbol}:`, error);
+    }
+  }
+
   private static async syncPortfolio(mainAccountId: number): Promise<void> {
-    const positions = Array.from(this.tempStore.portfolioUpdates.values());
+    const positions = Array.from(this.accountData.portfolioPositions.values());
     
     if (positions.length === 0) {
       Logger.debug('No positions to sync');
       return;
     }
 
-    Logger.debug(`📊 Syncing ${positions.length} positions with market data`);
+    Logger.debug(`📊 Syncing ${positions.length} positions`);
 
-    // Enrich positions with market data
+    // Calculate day change for each position
     const enrichedPositions = positions.map(pos => {
-      const marketData = this.tempStore.marketData.get(pos.conId || 0);
+      const closePrice = pos.closePrice;
+      const lastPrice = pos.marketPrice;
       
-      // Determine close price and last price
-      let closePrice = null;
-      let lastPrice = pos.marketPrice;
-      
-      if (marketData) {
-        // Use market data if available
-        if (marketData.closePrice > 0) {
-          closePrice = marketData.closePrice;
-        }
-        if (marketData.lastPrice > 0) {
-          lastPrice = marketData.lastPrice;
-        }
-      }
-      
-      // If we don't have close price from market data, try to get it from database
-      if (!closePrice && pos.closePrice && pos.closePrice > 0) {
-        closePrice = pos.closePrice;
-      }
+      Logger.debug(`${pos.symbol}: marketPrice=${lastPrice}, closePrice=${closePrice}`);
       
       // Calculate day change only if we have both close and last price
       let dayChange = null;
@@ -926,13 +823,11 @@ export class IBServiceOptimized {
           dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
         }
         
-        Logger.debug(`Day change for ${pos.symbol}: ${dayChange?.toFixed(2)} (${dayChangePercent?.toFixed(2)}%)`);
+        Logger.debug(`  Day change: ${dayChange?.toFixed(2)} (${dayChangePercent?.toFixed(2)}%)`);
       }
       
       return {
         ...pos,
-        closePrice,
-        marketPrice: lastPrice,
         dayChange,
         dayChangePercent
       };
@@ -976,11 +871,11 @@ export class IBServiceOptimized {
     const cashBalances: CashBalance[] = [];
     
     // Account values received
-    Logger.debug(`Received ${this.tempStore.accountValues.size} account values`);
+    Logger.debug(`Received ${this.accountData.accountValues.size} account values`);
     
     // Extract cash balances from account values
     // Keys are now in format "CashBalance_USD", "CashBalance_HKD", etc.
-    for (const [key, data] of this.tempStore.accountValues.entries()) {
+    for (const [key, data] of this.accountData.accountValues.entries()) {
       // Check for CashBalance_* or TotalCashBalance_* keys
       if (key.startsWith('CashBalance_') || key.startsWith('TotalCashBalance_')) {
         // Skip BASE currency (it's a summary)
@@ -1052,36 +947,7 @@ export class IBServiceOptimized {
     return enrichedBalances;
   }
 
-  /**
-   * Start periodic sync timer (every 1 minute)
-   */
-  private static startSyncTimer(mainAccountId: number): void {
-    if (this.syncTimer) {
-      Logger.debug('Sync timer already running');
-      return;
-    }
 
-    Logger.debug('Starting periodic database sync (every 1 minute)');
-    
-    this.syncTimer = setInterval(async () => {
-      try {
-        await this.syncToDatabase(mainAccountId);
-      } catch (error) {
-        Logger.error('Periodic sync failed:', error);
-      }
-    }, this.DB_SYNC_INTERVAL);
-  }
-
-  /**
-   * Stop periodic sync timer
-   */
-  private static stopSyncTimer(): void {
-    if (this.syncTimer) {
-      clearInterval(this.syncTimer);
-      this.syncTimer = null;
-      Logger.debug('Stopped periodic database sync');
-    }
-  }
 
   /**
    * Stop all active subscriptions
@@ -1099,17 +965,6 @@ export class IBServiceOptimized {
         Logger.error('Error unsubscribing from account updates:', error);
       }
     }
-
-    // Cancel all market data subscriptions
-    for (const reqId of this.activeSubscriptions.marketDataReqIds) {
-      try {
-        this.ibApi.cancelMktData(reqId);
-      } catch (error) {
-        Logger.error(`Error canceling market data for reqId ${reqId}:`, error);
-      }
-    }
-    this.activeSubscriptions.marketDataReqIds.clear();
-    Logger.debug('Canceled all market data subscriptions');
   }
 
   /**
@@ -1177,7 +1032,6 @@ export class IBServiceOptimized {
   static async stopRefresh(): Promise<void> {
     Logger.debug('Stopping portfolio refresh...');
     this.stopAllSubscriptions();
-    this.stopSyncTimer();
     Logger.debug('Portfolio refresh stopped');
   }
 
@@ -1186,18 +1040,14 @@ export class IBServiceOptimized {
    */
   static getRefreshStatus(): {
     isActive: boolean;
-    lastSync: number;
     subscriptions: {
       accountUpdates: boolean;
-      marketDataCount: number;
     };
   } {
     return {
-      isActive: this.activeSubscriptions.accountUpdates || this.activeSubscriptions.marketDataReqIds.size > 0,
-      lastSync: this.tempStore.lastDbSync,
+      isActive: this.activeSubscriptions.accountUpdates,
       subscriptions: {
-        accountUpdates: this.activeSubscriptions.accountUpdates,
-        marketDataCount: this.activeSubscriptions.marketDataReqIds.size
+        accountUpdates: this.activeSubscriptions.accountUpdates
       }
     };
   }

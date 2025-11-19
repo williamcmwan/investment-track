@@ -41,11 +41,6 @@ export class SchedulerService {
       await this.refreshAllData();
     });
 
-    // Update IB close prices from Yahoo Finance every hour
-    cron.schedule('0 * * * *', async () => {
-      await this.updateIBClosePrices();
-    });
-
     // Also schedule a test task that runs every minute (for development/testing)
     // Remove this in production
     if (process.env.NODE_ENV === 'development') {
@@ -58,17 +53,14 @@ export class SchedulerService {
     Logger.info('✅ Scheduler service initialized');
     Logger.info('📅 Daily performance snapshots will be calculated at 11:59 PM Dublin time');
     Logger.info('🔄 Data refresh (Currency -> Manual Investments) will run every 30 minutes');
-    Logger.info('📊 IB close prices will be updated from Yahoo Finance every hour');
     Logger.info('📊 IB Portfolio updates are handled automatically by IBServiceOptimized');
+    Logger.info('📊 IB close prices are fetched from Yahoo Finance only at startup when not available from IB');
     
     // Calculate today's snapshot immediately if it doesn't exist (uses cached data only)
     this.calculateTodayIfMissing();
     
     // Check and refresh missing exchange rates in the background
     this.refreshMissingExchangeRates();
-    
-    // Update IB close prices from Yahoo Finance on startup (in background)
-    this.updateIBClosePricesOnStartup();
     
     // Don't run initial data refresh on startup - let scheduled job handle it
     Logger.info('📅 Initial data refresh skipped - will run on first scheduled interval');
@@ -315,118 +307,7 @@ export class SchedulerService {
     }
   }
 
-  /**
-   * Update IB close prices from Yahoo Finance on startup (non-blocking)
-   */
-  private static updateIBClosePricesOnStartup() {
-    // Run in background after a short delay to not block startup
-    setTimeout(async () => {
-      Logger.info('🔄 Starting initial IB close price update from Yahoo Finance...');
-      await this.updateIBClosePrices();
-    }, 3000); // Start after 3 seconds
-  }
 
-  /**
-   * Update IB close prices from Yahoo Finance
-   */
-  private static async updateIBClosePrices() {
-    try {
-      Logger.debug('Updating IB close prices from Yahoo Finance...');
-      
-      const { YahooFinanceService } = await import('./yahooFinanceService.js');
-      
-      // Get all IB positions with exchange info
-      const positions = await dbAll(
-        `SELECT DISTINCT symbol, con_id, exchange, primary_exchange 
-         FROM portfolios 
-         WHERE source = 'IB' 
-         AND sec_type NOT IN ('BOND', 'CRYPTO')
-         AND symbol IS NOT NULL`,
-        []
-      );
-      
-      if (positions.length === 0) {
-        Logger.debug('No IB stock positions to update');
-        return;
-      }
-      
-      // Convert symbols to Yahoo Finance format
-      const symbolMap = new Map<string, any>();
-      const yahooSymbols: string[] = [];
-      
-      for (const position of positions) {
-        const yahooSymbol = this.convertToYahooSymbol(
-          position.symbol, 
-          position.exchange || position.primary_exchange
-        );
-        yahooSymbols.push(yahooSymbol);
-        symbolMap.set(yahooSymbol, position);
-      }
-      
-      Logger.debug(`Fetching close prices for ${yahooSymbols.length} symbols from Yahoo Finance...`);
-      
-      const marketDataResults = await YahooFinanceService.getMultipleMarketData(yahooSymbols);
-      
-      // Update database
-      let updatedCount = 0;
-      for (const [yahooSymbol, marketData] of marketDataResults.entries()) {
-        const position = symbolMap.get(yahooSymbol);
-        if (position && marketData.closePrice > 0) {
-          await dbRun(
-            `UPDATE portfolios 
-             SET close_price = ?, updated_at = CURRENT_TIMESTAMP 
-             WHERE con_id = ? AND source = 'IB'`,
-            [marketData.closePrice, position.con_id]
-          );
-          updatedCount++;
-        }
-      }
-      
-      Logger.info(`✅ Updated ${updatedCount}/${yahooSymbols.length} IB close prices from Yahoo Finance`);
-    } catch (error) {
-      Logger.error('❌ Error updating IB close prices:', error);
-    }
-  }
-
-  /**
-   * Convert IB symbol to Yahoo Finance symbol format
-   * Adds exchange suffixes for non-US stocks
-   */
-  private static convertToYahooSymbol(symbol: string, exchange?: string): string {
-    if (!exchange) {
-      return symbol;
-    }
-
-    const exchangeUpper = exchange.toUpperCase();
-    
-    // Singapore stocks need .SI suffix
-    if (exchangeUpper === 'SGX' || exchangeUpper === 'SGXCENT') {
-      return `${symbol}.SI`;
-    }
-    
-    // Hong Kong stocks need .HK suffix
-    if (exchangeUpper === 'SEHK' || exchangeUpper === 'HKFE') {
-      return `${symbol}.HK`;
-    }
-    
-    // London stocks need .L suffix
-    if (exchangeUpper === 'LSE') {
-      return `${symbol}.L`;
-    }
-    
-    // Australian stocks need .AX suffix
-    if (exchangeUpper === 'ASX') {
-      return `${symbol}.AX`;
-    }
-    
-    // German stocks need .DE suffix (Frankfurt)
-    if (exchangeUpper === 'FWB' || exchangeUpper === 'IBIS') {
-      return `${symbol}.DE`;
-    }
-    
-    // US and Canadian stocks don't need suffix
-    return symbol;
-  }
 
   /**
    * Get scheduler status
