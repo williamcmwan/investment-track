@@ -138,13 +138,8 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // Initialize services and start server
 async function startServer() {
   try {
-    // Configure logger based on environment
-    if (process.env.NODE_ENV === 'development' && process.env.LOG_LEVEL === 'debug') {
-      Logger.setLogLevel(LogLevel.DEBUG);
-    }
-    
-    // Temporarily enable debug logging for IB troubleshooting
-    Logger.setLogLevel(LogLevel.DEBUG);
+    // Logger is already configured from .env file via lazy initialization
+    // No need to set it here unless overriding for specific debugging
     
     // Initialize services
     await SchedulerService.initialize();
