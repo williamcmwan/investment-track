@@ -96,15 +96,15 @@ if (closePrice && lastPrice && closePrice > 0 && lastPrice !== closePrice) {
 |-----------|-------------|-----------|
 | 1 | Bid | Real-time bid price |
 | 2 | Ask | Real-time ask price |
-| 4 | Last | Real-time last trade price |
+| **4** | **Last** | **Real-time last trade price** |
 | 6 | High | Day high |
 | 7 | Low | Day low |
-| 9 | Close | Previous day close |
+| **9** | **Close** | **Previous day close** |
 | 14 | Open | Day open |
 | 66 | Delayed Bid | Delayed bid (free data) |
 | 67 | Delayed Ask | Delayed ask (free data) |
-| **68** | **Delayed Last** | **Delayed last trade (stocks)** |
-| **75** | **Delayed Close** | **Delayed previous close (stocks)** |
+| **68** | **Delayed Last** | **Delayed last trade (free data)** |
+| **69** | **Delayed Close** | **Delayed previous close (free data)** |
 
 ### Market Data Types
 
@@ -129,11 +129,19 @@ Our code uses type 3 (delayed/free), which is why we need to handle tick types 6
 
 After refresh, you should see:
 
-**For Stocks:**
+**For Stocks (Delayed Data):**
 ```
 📡 Subscribed to market data for AAPL (reqId: 265598)
-💹 Last price update (tick 68) for reqId 265598: 150.25
-💹 Close price update (tick 75) for reqId 265598: 149.50
+💹 Delayed last price (tick 68) for reqId 265598: 150.25
+💹 Delayed close price (tick 69) for reqId 265598: 149.50
+📊 Day change for AAPL (STK): 75.00 (0.50%) [close: 149.50, last: 150.25]
+```
+
+**For Stocks (Real-time Data):**
+```
+📡 Subscribed to market data for AAPL (reqId: 265598)
+💹 Last price (tick 4) for reqId 265598: 150.25
+💹 Close price (tick 9) for reqId 265598: 149.50
 📊 Day change for AAPL (STK): 75.00 (0.50%) [close: 149.50, last: 150.25]
 ```
 
@@ -186,15 +194,16 @@ US-T  | BOND   | 98.50  | 98.25  | 250.00 | 0.25
 ### Security Type Differences
 
 **Stocks (STK):**
-- Usually delayed data → Tick 68, 75
+- Free/delayed data → Tick 68 (last), 69 (close)
+- Paid/real-time data → Tick 4 (last), 9 (close)
 - Requires market data subscription for real-time
 
 **Crypto (CRYPTO):**
-- Often real-time → Tick 4, 9
+- Often real-time → Tick 4 (last), 9 (close)
 - Crypto exchanges provide free real-time data
 
 **Bonds (BOND):**
-- Often real-time → Tick 4, 9
+- Often real-time → Tick 4 (last), 9 (close)
 - Bond market data typically available
 
 ---

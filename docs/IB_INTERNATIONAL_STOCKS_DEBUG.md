@@ -28,8 +28,8 @@ Look for what tick types each stock receives:
 
 **US Stocks (Working):**
 ```
-💹 AAPL (STK, NASDAQ) - Last price (tick 68): 150.25
-💹 AAPL (STK, NASDAQ) - Close price (tick 75): 149.50
+💹 AAPL (STK, NASDAQ) - Delayed last price (tick 68): 150.25
+💹 AAPL (STK, NASDAQ) - Delayed close price (tick 69): 149.50
 ```
 
 **HK Stocks (Need to check):**
@@ -68,26 +68,22 @@ Look for what tick types each stock receives:
 | 66 | DELAYED_BID | Delayed bid |
 | 67 | DELAYED_ASK | Delayed ask |
 | 68 | DELAYED_LAST | Delayed last |
+| 69 | DELAYED_CLOSE | Delayed close |
 | 72 | DELAYED_HIGH | Delayed high |
 | 73 | DELAYED_LOW | Delayed low |
-| 75 | DELAYED_CLOSE | Delayed close |
 | 79 | DELAYED_OPEN | Delayed open |
 
 ### Currently Handled
 
 The code currently handles these tick types:
 
-**For Last Price:**
-- Tick 4 (Last)
-- Tick 68 (Delayed Last)
-- Tick 66 (Delayed Bid)
-- Tick 1 (Bid)
-- Tick 2 (Ask) - as fallback
-- Tick 67 (Delayed Ask) - as fallback
+**For Last Price (Current Price):**
+- Tick 4 (Last) - Real-time, preferred
+- Tick 68 (Delayed Last) - Delayed, fallback if tick 4 not available
 
-**For Close Price:**
-- Tick 9 (Close)
-- Tick 75 (Delayed Close)
+**For Close Price (Previous Day Close):**
+- Tick 9 (Close) - Real-time, preferred
+- Tick 69 (Delayed Close) - Delayed, fallback if tick 9 not available
 
 ---
 
@@ -269,8 +265,8 @@ When reporting the issue, include logs like:
 
 === Canada Stock: SHOP.TO ===
 📡 Subscribed to market data for SHOP.TO (STK) on TSE - reqId: 345678
-💹 SHOP.TO (STK, TSE) - Last price (tick 68): 75.25
-💹 SHOP.TO (STK, TSE) - Close price (tick 75): 74.50
+💹 SHOP.TO (STK, TSE) - Delayed last price (tick 68): 75.25
+💹 SHOP.TO (STK, TSE) - Delayed close price (tick 69): 74.50
 📊 Day change for SHOP.TO (STK): 75.00 (1.01%) [close: 74.50, last: 75.25]
 ```
 

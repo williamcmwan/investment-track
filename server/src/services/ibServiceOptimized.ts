@@ -395,30 +395,35 @@ export class IBServiceOptimized {
         const symbol = this.reqIdToSymbol.get(reqId) || `reqId ${reqId}`;
         const existing = this.tempStore.marketData.get(reqId) || { lastPrice: 0, closePrice: 0, timestamp: 0 };
 
-        // Tick types for last price (current price)
-        // 1 = Bid, 2 = Ask, 4 = Last, 6 = High, 7 = Low, 14 = Open
-        // 66 = Delayed Bid, 67 = Delayed Ask, 68 = Delayed Last, 72 = Delayed High, 73 = Delayed Low, 79 = Delayed Open
-        if (tickType === 4 || tickType === 68 || tickType === 66 || tickType === 1) {
+        // Last Price (Current Price)
+        // Priority: 4 (Last) > 68 (Delayed Last)
+        if (tickType === 4) {
           existing.lastPrice = price;
           existing.timestamp = Date.now();
-          Logger.info(`💹 ${symbol} - Last price (tick ${tickType}): ${price}`);
+          Logger.info(`💹 ${symbol} - Last price (tick 4): ${price}`);
         } 
-        // Tick types for close price (previous close)
-        // 9 = Close, 75 = Delayed Close
-        else if (tickType === 9 || tickType === 75) {
+        else if (tickType === 68 && existing.lastPrice === 0) {
+          // Use delayed last only if we don't have real-time last
+          existing.lastPrice = price;
+          existing.timestamp = Date.now();
+          Logger.info(`💹 ${symbol} - Delayed last price (tick 68): ${price}`);
+        }
+        // Close Price (Previous Day Close)
+        // Priority: 9 (Close) > 69 (Delayed Close)
+        else if (tickType === 9) {
           existing.closePrice = price;
           existing.timestamp = Date.now();
-          Logger.info(`💹 ${symbol} - Close price (tick ${tickType}): ${price}`);
+          Logger.info(`💹 ${symbol} - Close price (tick 9): ${price}`);
         }
-        // If we get ask but no last price yet, use ask as approximation
-        else if ((tickType === 2 || tickType === 67) && existing.lastPrice === 0) {
-          existing.lastPrice = price;
+        else if (tickType === 69 && existing.closePrice === 0) {
+          // Use delayed close only if we don't have real-time close
+          existing.closePrice = price;
           existing.timestamp = Date.now();
-          Logger.info(`💹 ${symbol} - Using Ask as last price (tick ${tickType}): ${price}`);
+          Logger.info(`💹 ${symbol} - Delayed close price (tick 69): ${price}`);
         }
-        // Log ALL other tick types to understand what we're receiving
+        // Log other tick types for debugging
         else {
-          Logger.info(`💹 ${symbol} - Received tick type ${tickType}: ${price}`);
+          Logger.debug(`💹 ${symbol} - Other tick type ${tickType}: ${price}`);
         }
 
         this.tempStore.marketData.set(reqId, existing);
