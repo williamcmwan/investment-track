@@ -1,11 +1,28 @@
+// Load environment variables FIRST before any other imports
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get current directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env from the server root directory (parent of src)
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
+// Debug: Check if LOG_LEVEL is loaded
+console.log('=== ENV CHECK ===');
+console.log('CWD:', process.cwd());
+console.log('ENV file path:', path.join(__dirname, '..', '.env'));
+console.log('LOG_LEVEL from env:', process.env.LOG_LEVEL);
+console.log('NODE_ENV from env:', process.env.NODE_ENV);
+console.log('================');
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -22,15 +39,10 @@ import { IBServiceOptimized } from './services/ibServiceOptimized.js';
 import { OtherPortfolioService } from './services/otherPortfolioService.js';
 import { Logger, LogLevel } from './utils/logger.js';
 
-// Load environment variables
-dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-// Get current directory for serving static files
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// __dirname and __filename already defined at the top for .env loading
 
 // Security middleware with CSP configuration
 app.use(helmet({

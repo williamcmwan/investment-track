@@ -204,11 +204,8 @@ router.get('/refresh-status', authenticateToken, async (_req, res) => {
     return res.json({
       success: true,
       isActive: status.isActive,
-      lastSync: status.lastSync > 0 ? new Date(status.lastSync).toISOString() : null,
-      lastSyncAge: status.lastSync > 0 ? Math.round((Date.now() - status.lastSync) / 1000) : null,
       subscriptions: {
-        accountUpdates: status.subscriptions.accountUpdates,
-        marketDataCount: status.subscriptions.marketDataCount
+        accountUpdates: status.subscriptions.accountUpdates
       }
     });
   } catch (error) {
