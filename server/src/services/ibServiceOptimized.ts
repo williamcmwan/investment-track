@@ -71,6 +71,9 @@ export class IBServiceOptimized {
   
   // Track contract details already fetched to avoid redundant calls
   private static contractDetailsCache = new Map<number, any>();
+  
+  // Track reqId to symbol mapping for better logging
+  private static reqIdToSymbol = new Map<number, string>();
 
   static getUserConnectionSettings(userSettings?: { host: string; port: number; client_id: number }): { host: string; port: number; clientId: number } {
     if (!userSettings) {
@@ -265,12 +268,18 @@ export class IBServiceOptimized {
 
       // Handle account value updates (cash balances, net liquidation, etc.)
       const accountValueHandler = (key: string, value: string, currency: string, accountName: string) => {
-        this.tempStore.accountValues.set(key, {
+        // Use composite key for cash balances to handle multiple currencies
+        // IB sends "CashBalance" multiple times with different currencies
+        const mapKey = (key === 'CashBalance' || key === 'TotalCashBalance') 
+          ? `${key}_${currency}` 
+          : key;
+        
+        this.tempStore.accountValues.set(mapKey, {
           value,
           currency,
           timestamp: Date.now()
         });
-        Logger.debug(`💰 Account value: ${key} = ${value} ${currency}`);
+        Logger.debug(`💰 Account value: ${key} = ${value} ${currency} (stored as: ${mapKey})`);
       };
 
       // Handle portfolio position updates
@@ -368,7 +377,11 @@ export class IBServiceOptimized {
         // Subscribe to market data (this stays active)
         this.ibApi.reqMktData(reqId, contract, '', false, false);
         this.activeSubscriptions.marketDataReqIds.add(reqId);
-        Logger.debug(`📡 Subscribed to market data for ${position.symbol} (reqId: ${reqId})`);
+        
+        // Store symbol mapping for better logging
+        this.reqIdToSymbol.set(reqId, `${position.symbol} (${position.secType}, ${position.exchange || position.primaryExchange})`);
+        
+        Logger.info(`📡 Subscribed to market data for ${position.symbol} (${position.secType}) on ${position.exchange || position.primaryExchange} - reqId: ${reqId}`);
       } catch (error) {
         Logger.error(`Failed to subscribe to market data for ${position.symbol}:`, error);
       }
@@ -379,16 +392,33 @@ export class IBServiceOptimized {
       this.ibApi.on('tickPrice' as any, (reqId: number, tickType: number, price: number) => {
         if (price <= 0) return;
 
+        const symbol = this.reqIdToSymbol.get(reqId) || `reqId ${reqId}`;
         const existing = this.tempStore.marketData.get(reqId) || { lastPrice: 0, closePrice: 0, timestamp: 0 };
 
-        if (tickType === 4) { // Last price
+        // Tick types for last price (current price)
+        // 1 = Bid, 2 = Ask, 4 = Last, 6 = High, 7 = Low, 14 = Open
+        // 66 = Delayed Bid, 67 = Delayed Ask, 68 = Delayed Last, 72 = Delayed High, 73 = Delayed Low, 79 = Delayed Open
+        if (tickType === 4 || tickType === 68 || tickType === 66 || tickType === 1) {
           existing.lastPrice = price;
           existing.timestamp = Date.now();
-          Logger.debug(`💹 Last price update for reqId ${reqId}: ${price}`);
-        } else if (tickType === 9) { // Close price
+          Logger.info(`💹 ${symbol} - Last price (tick ${tickType}): ${price}`);
+        } 
+        // Tick types for close price (previous close)
+        // 9 = Close, 75 = Delayed Close
+        else if (tickType === 9 || tickType === 75) {
           existing.closePrice = price;
           existing.timestamp = Date.now();
-          Logger.debug(`💹 Close price update for reqId ${reqId}: ${price}`);
+          Logger.info(`💹 ${symbol} - Close price (tick ${tickType}): ${price}`);
+        }
+        // If we get ask but no last price yet, use ask as approximation
+        else if ((tickType === 2 || tickType === 67) && existing.lastPrice === 0) {
+          existing.lastPrice = price;
+          existing.timestamp = Date.now();
+          Logger.info(`💹 ${symbol} - Using Ask as last price (tick ${tickType}): ${price}`);
+        }
+        // Log ALL other tick types to understand what we're receiving
+        else {
+          Logger.info(`💹 ${symbol} - Received tick type ${tickType}: ${price}`);
         }
 
         this.tempStore.marketData.set(reqId, existing);
@@ -588,14 +618,30 @@ export class IBServiceOptimized {
     const enrichedPositions = positions.map(pos => {
       const marketData = this.tempStore.marketData.get(pos.conId || 0);
       
-      if (marketData && marketData.closePrice > 0 && marketData.lastPrice > 0) {
-        const closePrice = marketData.closePrice;
-        const lastPrice = marketData.lastPrice;
-        
-        // Calculate day change
-        let dayChange = 0;
-        let dayChangePercent = 0;
-        
+      // Determine close price and last price
+      let closePrice = null;
+      let lastPrice = pos.marketPrice;
+      
+      if (marketData) {
+        // Use market data if available
+        if (marketData.closePrice > 0) {
+          closePrice = marketData.closePrice;
+        }
+        if (marketData.lastPrice > 0) {
+          lastPrice = marketData.lastPrice;
+        }
+      }
+      
+      // If we don't have close price from market data, try to get it from database
+      if (!closePrice && pos.closePrice && pos.closePrice > 0) {
+        closePrice = pos.closePrice;
+      }
+      
+      // Calculate day change only if we have both close and last price
+      let dayChange = null;
+      let dayChangePercent = null;
+      
+      if (closePrice && lastPrice && closePrice > 0 && lastPrice !== closePrice) {
         if (pos.secType === 'BOND') {
           // Bond formula: (lastPrice - closePrice) * qty * 10
           dayChange = (lastPrice - closePrice) * pos.position * 10;
@@ -606,16 +652,18 @@ export class IBServiceOptimized {
           dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
         }
         
-        return {
-          ...pos,
-          closePrice,
-          marketPrice: lastPrice, // Update with latest price
-          dayChange,
-          dayChangePercent
-        };
+        Logger.debug(`📊 Day change for ${pos.symbol} (${pos.secType}): ${dayChange?.toFixed(2)} (${dayChangePercent?.toFixed(2)}%) [close: ${closePrice}, last: ${lastPrice}]`);
+      } else {
+        Logger.debug(`⚠️  Cannot calculate day change for ${pos.symbol} (${pos.secType}): closePrice=${closePrice}, lastPrice=${lastPrice}`);
       }
       
-      return pos;
+      return {
+        ...pos,
+        closePrice,
+        marketPrice: lastPrice,
+        dayChange,
+        dayChangePercent
+      };
     });
 
     // Batch save to database
@@ -655,22 +703,41 @@ export class IBServiceOptimized {
   private static async syncCashBalances(mainAccountId: number): Promise<void> {
     const cashBalances: CashBalance[] = [];
     
-    // Extract cash balances from account values
+    // Log all account values for debugging
+    Logger.info('💰 All account values received:');
     for (const [key, data] of this.tempStore.accountValues.entries()) {
-      if (key === 'CashBalance' && data.currency !== 'BASE') {
+      Logger.info(`   ${key}: ${data.value} ${data.currency}`);
+    }
+    
+    // Extract cash balances from account values
+    // Keys are now in format "CashBalance_USD", "CashBalance_HKD", etc.
+    for (const [key, data] of this.tempStore.accountValues.entries()) {
+      // Check for CashBalance_* or TotalCashBalance_* keys
+      if (key.startsWith('CashBalance_') || key.startsWith('TotalCashBalance_')) {
+        // Skip BASE currency (it's a summary)
+        if (data.currency === 'BASE') {
+          Logger.debug(`   Skipping BASE currency summary`);
+          continue;
+        }
+        
         const amount = parseFloat(data.value);
-        if (amount !== 0) {
+        
+        // Check if we already have this currency (avoid duplicates from both CashBalance and TotalCashBalance)
+        const exists = cashBalances.find(cb => cb.currency === data.currency);
+        if (!exists) {
           cashBalances.push({
             currency: data.currency,
             amount,
             marketValueHKD: amount
           });
+          
+          Logger.info(`💰 Found cash balance: ${amount} ${data.currency}`);
         }
       }
     }
 
     if (cashBalances.length === 0) {
-      Logger.debug('No cash balances to sync');
+      Logger.warn('⚠️  No cash balances found in account values');
       return;
     }
 
