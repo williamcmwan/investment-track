@@ -258,6 +258,37 @@ export class AccountModel {
     }
   }
 
+  /**
+   * Update account balance and add balance history in one call
+   * Only adds history if balance has changed significantly (> 0.01 difference)
+   */
+  static async updateBalanceWithHistory(
+    accountId: number, 
+    userId: number, 
+    balance: number, 
+    note: string,
+    date?: string
+  ): Promise<Account | null> {
+    // Get current balance to check if it changed
+    const currentAccount = await this.findById(accountId, userId);
+    
+    if (!currentAccount) {
+      throw new Error('Account not found');
+    }
+    
+    const hasBalanceChanged = Math.abs(currentAccount.currentBalance - balance) > 0.01;
+    
+    // Update account balance
+    await this.update(accountId, userId, { currentBalance: balance });
+    
+    // Add balance history only if balance changed
+    if (hasBalanceChanged) {
+      await this.addBalanceHistory(accountId, balance, note, date);
+    }
+    
+    return await this.findById(accountId, userId);
+  }
+
   static async updateBalanceHistory(historyId: number, accountId: number, balance: number, note: string, date: string): Promise<void> {
     await dbRun(
       'UPDATE account_balance_history SET balance = ?, note = ?, date = ?, created_at = CURRENT_TIMESTAMP WHERE id = ? AND account_id = ?',

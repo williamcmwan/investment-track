@@ -520,14 +520,10 @@ export class SchwabService {
       const result = await this.getAccountBalanceForAccount(accountId, userId, schwabConfig.accountHash);
       
       if (result && result.currentBalance) {
-        // Update account balance
-        await AccountModel.update(accountId, userId, {
-          currentBalance: result.currentBalance
-        });
-
-        // Add balance history (same as manual refresh)
-        await AccountModel.addBalanceHistory(
+        // Use AccountModel helper to update balance and add history
+        await AccountModel.updateBalanceWithHistory(
           accountId,
+          userId,
           result.currentBalance,
           'Schwab scheduled refresh'
         );

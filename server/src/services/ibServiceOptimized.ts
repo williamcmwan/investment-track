@@ -720,14 +720,28 @@ export class IBServiceOptimized {
       return;
     }
 
-    const { dbRun } = await import('../database/connection.js');
-    await dbRun(`
-      UPDATE accounts 
-      SET current_balance = ?, currency = ?, last_updated = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [parseFloat(netLiq.value), currency?.value || 'USD', mainAccountId]);
+    const balance = parseFloat(netLiq.value);
+    const currencyCode = currency?.value || 'USD';
 
-    Logger.debug(`💾 Synced account balance: ${netLiq.value} ${currency?.value || 'USD'}`);
+    // Get user ID from account
+    const { dbGet } = await import('../database/connection.js');
+    const account = await dbGet('SELECT user_id FROM accounts WHERE id = ?', [mainAccountId]);
+    
+    if (!account) {
+      Logger.error('Account not found for balance sync');
+      return;
+    }
+
+    // Use AccountModel helper to update balance and add history
+    const { AccountModel } = await import('../models/Account.js');
+    await AccountModel.updateBalanceWithHistory(
+      mainAccountId,
+      account.user_id,
+      balance,
+      'IB auto-refresh'
+    );
+
+    Logger.debug(`💾 Synced account balance: ${balance} ${currencyCode}`);
   }
 
   /**
