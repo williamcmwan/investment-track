@@ -128,7 +128,21 @@ export class IBServiceOptimized {
       });
 
       this.ibApi!.on(EventName.error, (err: Error, code: ErrorCode, reqId: number) => {
-        Logger.error(`❌ IB API Error [${code}]:`, err.message);
+        // Filter out informational/expected errors
+        const numCode = Number(code);
+        if (numCode === 10167) {
+          // Delayed market data notification
+          Logger.debug(`IB API Info [${code}]: ${err.message}`);
+        } else if (numCode === 321) {
+          // Historical data validation errors (expected for some securities)
+          Logger.debug(`IB API Info [${code}]: ${err.message}`);
+        } else if (numCode === 200) {
+          // No security definition found (expected for some securities)
+          Logger.debug(`IB API Info [${code}]: ${err.message}`);
+        } else {
+          Logger.error(`❌ IB API Error [${code}]:`, err.message);
+        }
+        
         if (!this.isConnected && this.isConnecting) {
           clearTimeout(timeout);
           this.cleanupConnection();
@@ -199,7 +213,7 @@ export class IBServiceOptimized {
     portfolio: PortfolioPosition[];
     cashBalances: CashBalance[];
   }> {
-    Logger.info('🔄 Starting optimized portfolio refresh...');
+    Logger.debug('Starting optimized portfolio refresh...');
     const mainAccountId = userSettings.target_account_id;
     
     if (!mainAccountId) {
@@ -225,21 +239,27 @@ export class IBServiceOptimized {
 
     // Step 3: Get positions and subscribe to market data for each
     const positions = Array.from(this.tempStore.portfolioUpdates.values());
-    Logger.info(`📊 Found ${positions.length} positions, subscribing to market data...`);
+    Logger.debug(`Found ${positions.length} positions, subscribing to market data...`);
 
     // Step 4: Subscribe to market data (reqMktData) for all positions
     await this.subscribeToMarketData(positions);
 
-    // Step 5: Fetch contract details only for positions missing industry/category
+    // Step 5: Fetch close prices for positions (using historical data as fallback)
+    await this.fetchClosePrices(positions);
+
+    // Step 6: Fetch contract details only for positions missing industry/category
     await this.fetchMissingContractDetails(positions);
 
-    // Step 6: Sync to database immediately
+    // Step 7: Sync to database immediately
     await this.syncToDatabase(mainAccountId);
 
-    // Step 7: Start periodic sync timer (every 1 minute)
+    // Step 8: Start periodic sync timer (every 1 minute)
     this.startSyncTimer(mainAccountId);
 
-    // Step 8: Return current data
+    // Step 9: Fetch historical close prices in background (after startup completes)
+    this.fetchHistoricalClosePricesInBackground(positions, mainAccountId);
+
+    // Step 10: Return current data
     return this.getCurrentData(mainAccountId);
   }
 
@@ -257,7 +277,7 @@ export class IBServiceOptimized {
       return;
     }
 
-    Logger.info('📡 Subscribing to account updates (account values + positions)...');
+    Logger.debug('Subscribing to account updates...');
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -323,7 +343,7 @@ export class IBServiceOptimized {
         if (!downloadComplete) {
           downloadComplete = true;
           clearTimeout(timeout);
-          Logger.info('✅ Initial account data download complete');
+          Logger.debug('Initial account data download complete');
           this.activeSubscriptions.accountUpdates = true;
           resolve();
         }
@@ -348,7 +368,7 @@ export class IBServiceOptimized {
       throw new Error('Not connected to IB');
     }
 
-    Logger.info(`📡 Subscribing to market data for ${positions.length} positions...`);
+    Logger.debug(`Subscribing to market data for ${positions.length} positions...`);
 
     // Set market data type to delayed (free)
     this.ibApi.reqMarketDataType(3);
@@ -385,7 +405,7 @@ export class IBServiceOptimized {
         // Store symbol mapping for better logging
         this.reqIdToSymbol.set(reqId, `${position.symbol} (${position.secType}, ${position.exchange || position.primaryExchange})`);
         
-        Logger.info(`📡 Subscribed to market data for ${position.symbol} (${position.secType}) on ${position.exchange || position.primaryExchange} - reqId: ${reqId}`);
+        Logger.debug(`Subscribed to market data for ${position.symbol}`);
       } catch (error) {
         Logger.error(`Failed to subscribe to market data for ${position.symbol}:`, error);
       }
@@ -394,9 +414,10 @@ export class IBServiceOptimized {
     // Set up market data handler (only once)
     if (!this.ibApi.listenerCount('tickPrice' as any)) {
       this.ibApi.on('tickPrice' as any, (reqId: number, tickType: number, price: number) => {
+        const symbol = this.reqIdToSymbol.get(reqId) || `reqId ${reqId}`;
+        
         if (price <= 0) return;
 
-        const symbol = this.reqIdToSymbol.get(reqId) || `reqId ${reqId}`;
         const existing = this.tempStore.marketData.get(reqId) || { lastPrice: 0, closePrice: 0, timestamp: 0 };
 
         // Last Price (Current Price)
@@ -404,37 +425,284 @@ export class IBServiceOptimized {
         if (tickType === 4) {
           existing.lastPrice = price;
           existing.timestamp = Date.now();
-          Logger.info(`💹 ${symbol} - Last price (tick 4): ${price}`);
         } 
         else if (tickType === 68 && existing.lastPrice === 0) {
           // Use delayed last only if we don't have real-time last
           existing.lastPrice = price;
           existing.timestamp = Date.now();
-          Logger.info(`💹 ${symbol} - Delayed last price (tick 68): ${price}`);
         }
         // Close Price (Previous Day Close)
         // Priority: 9 (Close) > 69 (Delayed Close)
         else if (tickType === 9) {
           existing.closePrice = price;
           existing.timestamp = Date.now();
-          Logger.info(`💹 ${symbol} - Close price (tick 9): ${price}`);
         }
         else if (tickType === 69 && existing.closePrice === 0) {
           // Use delayed close only if we don't have real-time close
           existing.closePrice = price;
           existing.timestamp = Date.now();
-          Logger.info(`💹 ${symbol} - Delayed close price (tick 69): ${price}`);
-        }
-        // Log other tick types for debugging
-        else {
-          Logger.debug(`💹 ${symbol} - Other tick type ${tickType}: ${price}`);
         }
 
         this.tempStore.marketData.set(reqId, existing);
       });
     }
 
-    Logger.info('✅ Market data subscriptions active');
+    Logger.debug('Market data subscriptions active');
+  }
+
+  /**
+   * Fetch close prices for stocks using cached values from database
+   * Bonds and crypto get close price from ticks
+   * Historical data requests are skipped to avoid startup delays
+   */
+  private static async fetchClosePrices(positions: PortfolioPosition[]): Promise<void> {
+    const { dbAll } = await import('../database/connection.js');
+    
+    Logger.debug(`Loading cached close prices from database...`);
+    
+    // Get cached close prices from database (from previous sync)
+    const cachedCloses = await dbAll(
+      `SELECT con_id, close_price 
+       FROM portfolios 
+       WHERE source = 'IB' 
+       AND close_price IS NOT NULL 
+       AND close_price > 0`,
+      []
+    );
+    
+    const closeCache = new Map<number, number>();
+    for (const row of cachedCloses) {
+      closeCache.set(row.con_id, row.close_price);
+    }
+    
+    Logger.debug(`Found ${closeCache.size} cached close prices`);
+    
+    for (const position of positions) {
+      if (!position.conId || position.conId <= 0) {
+        continue;
+      }
+      
+      // Skip bonds and crypto - they get close price from ticks
+      if (position.secType === 'BOND' || position.secType === 'CRYPTO') {
+        continue;
+      }
+      
+      // Check if we already have close price from market data tick
+      const marketData = this.tempStore.marketData.get(position.conId);
+      if (marketData && marketData.closePrice > 0) {
+        continue;
+      }
+      
+      // Use cached close price from database
+      if (closeCache.has(position.conId)) {
+        const cachedClose = closeCache.get(position.conId)!;
+        const existing = this.tempStore.marketData.get(position.conId) || { lastPrice: 0, closePrice: 0, timestamp: 0 };
+        existing.closePrice = cachedClose;
+        existing.timestamp = Date.now();
+        this.tempStore.marketData.set(position.conId, existing);
+        Logger.debug(`${position.symbol} - Using cached close price`);
+      }
+    }
+    
+    Logger.debug('Close price loading complete');
+  }
+
+  /**
+   * Fetch close prices from Yahoo Finance in background (non-blocking)
+   * This runs after startup completes to avoid delaying the initial response
+   */
+  private static fetchHistoricalClosePricesInBackground(positions: PortfolioPosition[], mainAccountId: number): void {
+    // Run in background after a short delay
+    setTimeout(async () => {
+      Logger.debug('Starting background close price fetch from Yahoo Finance...');
+      
+      const { YahooFinanceService } = await import('./yahooFinanceService.js');
+      
+      // Collect symbols that need close prices
+      const symbolsToFetch: string[] = [];
+      const symbolToConId = new Map<string, number>();
+      const yahooSymbolToOriginal = new Map<string, string>();
+      
+      for (const position of positions) {
+        if (!position.conId || position.conId <= 0) {
+          continue;
+        }
+        
+        // Skip bonds and crypto - they get close price from ticks
+        if (position.secType === 'BOND' || position.secType === 'CRYPTO') {
+          continue;
+        }
+        
+        // Skip if we already have close price
+        const marketData = this.tempStore.marketData.get(position.conId);
+        if (marketData && marketData.closePrice > 0) {
+          continue;
+        }
+        
+        // Convert symbol to Yahoo Finance format
+        const yahooSymbol = this.convertToYahooSymbol(position.symbol, position.exchange || position.primaryExchange);
+        symbolsToFetch.push(yahooSymbol);
+        symbolToConId.set(yahooSymbol, position.conId);
+        yahooSymbolToOriginal.set(yahooSymbol, position.symbol);
+      }
+      
+      if (symbolsToFetch.length === 0) {
+        Logger.debug('No symbols need close prices');
+        return;
+      }
+      
+      // Fetch close prices from Yahoo Finance
+      Logger.debug(`Fetching close prices for ${symbolsToFetch.length} symbols from Yahoo Finance...`);
+      const marketDataResults = await YahooFinanceService.getMultipleMarketData(symbolsToFetch);
+      
+      // Update market data with fetched close prices
+      let fetchedCount = 0;
+      for (const [yahooSymbol, marketData] of marketDataResults.entries()) {
+        const conId = symbolToConId.get(yahooSymbol);
+        const originalSymbol = yahooSymbolToOriginal.get(yahooSymbol);
+        if (conId && marketData.closePrice > 0) {
+          const existing = this.tempStore.marketData.get(conId) || { lastPrice: 0, closePrice: 0, timestamp: 0 };
+          existing.closePrice = marketData.closePrice;
+          existing.timestamp = Date.now();
+          this.tempStore.marketData.set(conId, existing);
+          fetchedCount++;
+          Logger.debug(`${originalSymbol} (${yahooSymbol}): close price = ${marketData.closePrice}`);
+        }
+      }
+      
+      // Sync to database if we fetched any close prices
+      if (fetchedCount > 0) {
+        Logger.debug(`Background fetch complete: ${fetchedCount} close prices fetched from Yahoo Finance`);
+        await this.syncToDatabase(mainAccountId);
+      } else {
+        Logger.debug('Background fetch complete: no new close prices');
+      }
+    }, 5000); // Start after 5 seconds
+  }
+
+  /**
+   * Convert IB symbol to Yahoo Finance symbol format
+   * Adds exchange suffixes for non-US stocks
+   */
+  private static convertToYahooSymbol(symbol: string, exchange?: string): string {
+    if (!exchange) {
+      return symbol;
+    }
+
+    const exchangeUpper = exchange.toUpperCase();
+    
+    // Singapore stocks need .SI suffix
+    if (exchangeUpper === 'SGX' || exchangeUpper === 'SGXCENT') {
+      return `${symbol}.SI`;
+    }
+    
+    // Hong Kong stocks need .HK suffix
+    if (exchangeUpper === 'SEHK' || exchangeUpper === 'HKFE') {
+      return `${symbol}.HK`;
+    }
+    
+    // London stocks need .L suffix
+    if (exchangeUpper === 'LSE') {
+      return `${symbol}.L`;
+    }
+    
+    // Toronto stocks need .TO suffix
+    if (exchangeUpper === 'TSE') {
+      return `${symbol}.TO`;
+    }
+    
+    // Australian stocks need .AX suffix
+    if (exchangeUpper === 'ASX') {
+      return `${symbol}.AX`;
+    }
+    
+    // German stocks need .DE suffix (Frankfurt)
+    if (exchangeUpper === 'FWB' || exchangeUpper === 'IBIS') {
+      return `${symbol}.DE`;
+    }
+    
+    // US stocks don't need suffix
+    return symbol;
+  }
+
+  /**
+   * Get yesterday's close price using historical data
+   */
+  private static async getHistoricalClose(position: PortfolioPosition): Promise<number> {
+    if (!this.ibApi) {
+      throw new Error('IB API not initialized');
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.ibApi!.off(EventName.historicalData, historicalDataHandler);
+        this.ibApi!.off('historicalDataEnd' as any, historicalDataEndHandler);
+        this.ibApi!.off(EventName.error, errorHandler);
+        reject(new Error(`Timeout`));
+      }, 15000); // Increased to 15 seconds
+
+      const reqId = Math.floor(Math.random() * 10000) + 20000;
+      let closePrice = 0;
+
+      const historicalDataHandler = (reqId_: number, bar: any) => {
+        if (reqId_ === reqId && bar && bar.close) {
+          closePrice = bar.close;
+          Logger.debug(`Historical data for ${position.symbol}: close=${bar.close}`);
+        }
+      };
+
+      const historicalDataEndHandler = (reqId_: number) => {
+        if (reqId_ === reqId) {
+          clearTimeout(timeout);
+          this.ibApi!.off(EventName.historicalData, historicalDataHandler);
+          this.ibApi!.off('historicalDataEnd' as any, historicalDataEndHandler);
+          resolve(closePrice);
+        }
+      };
+
+      const errorHandler = (err: Error, code: ErrorCode, reqId_: number) => {
+        if (reqId_ === reqId) {
+          clearTimeout(timeout);
+          this.ibApi!.off(EventName.historicalData, historicalDataHandler);
+          this.ibApi!.off('historicalDataEnd' as any, historicalDataEndHandler);
+          this.ibApi!.off(EventName.error, errorHandler);
+          reject(new Error(`IB Error ${code}: ${err.message}`));
+        }
+      };
+
+      this.ibApi!.on(EventName.historicalData, historicalDataHandler);
+      this.ibApi!.on('historicalDataEnd' as any, historicalDataEndHandler);
+      this.ibApi!.on(EventName.error, errorHandler);
+
+      // Build contract with all available details
+      const contract: any = {
+        conId: position.conId,
+        symbol: position.symbol,
+        secType: position.secType,
+        currency: position.currency,
+        exchange: 'SMART' // Use SMART as default exchange for routing
+      };
+      
+      // Add primary exchange if available (for stocks)
+      if (position.primaryExchange) {
+        contract.primaryExch = position.primaryExchange;
+      } else if (position.exchange && position.exchange !== 'SMART') {
+        contract.primaryExch = position.exchange;
+      }
+
+      // Request 1 day of historical data to get yesterday's close
+      this.ibApi!.reqHistoricalData(
+        reqId,
+        contract,
+        '', // endDateTime - empty means current time
+        '1 D', // duration - 1 day
+        '1 day' as any, // barSize - daily bars
+        'TRADES', // whatToShow
+        1, // useRTH - regular trading hours only
+        1, // formatDate
+        false // keepUpToDate
+      );
+    });
   }
 
   /**
@@ -486,11 +754,11 @@ export class IBServiceOptimized {
     });
 
     if (positionsNeedingDetails.length === 0) {
-      Logger.info('✅ All positions have contract details (from cache/DB)');
+      Logger.debug('All positions have contract details');
       return;
     }
 
-    Logger.info(`📋 Fetching contract details for ${positionsNeedingDetails.length} positions...`);
+    Logger.debug(`Fetching contract details for ${positionsNeedingDetails.length} positions...`);
 
     for (const position of positionsNeedingDetails) {
       try {
@@ -515,7 +783,7 @@ export class IBServiceOptimized {
       }
     }
 
-    Logger.info('✅ Contract details fetch complete');
+    Logger.debug('Contract details fetch complete');
   }
 
 
@@ -575,7 +843,7 @@ export class IBServiceOptimized {
    * Called every minute and on-demand
    */
   private static async syncToDatabase(mainAccountId: number): Promise<void> {
-    Logger.info('💾 Syncing data to database...');
+    Logger.debug('Syncing data to database...');
     const syncStart = Date.now();
 
     try {
@@ -590,7 +858,7 @@ export class IBServiceOptimized {
 
       this.tempStore.lastDbSync = Date.now();
       const syncDuration = Date.now() - syncStart;
-      Logger.info(`✅ Database sync complete in ${syncDuration}ms`);
+      Logger.debug(`Database sync complete in ${syncDuration}ms`);
     } catch (error) {
       Logger.error('❌ Database sync failed:', error);
     }
@@ -622,6 +890,8 @@ export class IBServiceOptimized {
       Logger.debug('No positions to sync');
       return;
     }
+
+    Logger.debug(`📊 Syncing ${positions.length} positions with market data`);
 
     // Enrich positions with market data
     const enrichedPositions = positions.map(pos => {
@@ -661,9 +931,7 @@ export class IBServiceOptimized {
           dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
         }
         
-        Logger.debug(`📊 Day change for ${pos.symbol} (${pos.secType}): ${dayChange?.toFixed(2)} (${dayChangePercent?.toFixed(2)}%) [close: ${closePrice}, last: ${lastPrice}]`);
-      } else {
-        Logger.debug(`⚠️  Cannot calculate day change for ${pos.symbol} (${pos.secType}): closePrice=${closePrice}, lastPrice=${lastPrice}`);
+        Logger.debug(`Day change for ${pos.symbol}: ${dayChange?.toFixed(2)} (${dayChangePercent?.toFixed(2)}%)`);
       }
       
       return {
@@ -712,11 +980,8 @@ export class IBServiceOptimized {
   private static async syncCashBalances(mainAccountId: number): Promise<void> {
     const cashBalances: CashBalance[] = [];
     
-    // Log all account values for debugging
-    Logger.info('💰 All account values received:');
-    for (const [key, data] of this.tempStore.accountValues.entries()) {
-      Logger.info(`   ${key}: ${data.value} ${data.currency}`);
-    }
+    // Account values received
+    Logger.debug(`Received ${this.tempStore.accountValues.size} account values`);
     
     // Extract cash balances from account values
     // Keys are now in format "CashBalance_USD", "CashBalance_HKD", etc.
@@ -740,7 +1005,7 @@ export class IBServiceOptimized {
             marketValueHKD: amount
           });
           
-          Logger.info(`💰 Found cash balance: ${amount} ${data.currency}`);
+          Logger.debug(`Found cash balance: ${data.currency}`);
         }
       }
     }
@@ -801,7 +1066,7 @@ export class IBServiceOptimized {
       return;
     }
 
-    Logger.info('⏰ Starting periodic database sync (every 1 minute)');
+    Logger.debug('Starting periodic database sync (every 1 minute)');
     
     this.syncTimer = setInterval(async () => {
       try {
@@ -819,7 +1084,7 @@ export class IBServiceOptimized {
     if (this.syncTimer) {
       clearInterval(this.syncTimer);
       this.syncTimer = null;
-      Logger.info('⏰ Stopped periodic database sync');
+      Logger.debug('Stopped periodic database sync');
     }
   }
 
@@ -915,10 +1180,10 @@ export class IBServiceOptimized {
    * Stop refresh and clean up
    */
   static async stopRefresh(): Promise<void> {
-    Logger.info('🛑 Stopping portfolio refresh...');
+    Logger.debug('Stopping portfolio refresh...');
     this.stopAllSubscriptions();
     this.stopSyncTimer();
-    Logger.info('✅ Portfolio refresh stopped');
+    Logger.debug('Portfolio refresh stopped');
   }
 
   /**
