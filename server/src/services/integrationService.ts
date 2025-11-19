@@ -1,5 +1,5 @@
 import { AccountModel, IBIntegrationConfig, SchwabIntegrationConfig } from '../models/Account.js';
-import { IBService } from './ibService.js';
+import { IBServiceOptimized } from './ibServiceOptimized.js';
 import { SchwabService } from './schwabService.js';
 import { Logger } from '../utils/logger.js';
 
@@ -87,7 +87,7 @@ export class IntegrationService {
   }
 
   /**
-   * Refresh IB account
+   * Refresh IB account using optimized service
    */
   private static async refreshIBAccount(
     accountId: number,
@@ -95,7 +95,7 @@ export class IntegrationService {
     config: IBIntegrationConfig
   ): Promise<IntegrationRefreshResult> {
     try {
-      const result = await IBService.forceRefreshAccountBalance({
+      const result = await IBServiceOptimized.refreshPortfolio({
         host: config.host,
         port: config.port,
         client_id: config.clientId,
@@ -105,22 +105,22 @@ export class IntegrationService {
       if (result && result.balance) {
         // Update account balance
         await AccountModel.update(accountId, userId, {
-          currentBalance: result.balance
+          currentBalance: result.balance.balance
         });
 
         // Add balance history
         await AccountModel.addBalanceHistory(
           accountId,
-          result.balance,
+          result.balance.balance,
           'IB integration auto-refresh'
         );
 
-        Logger.info(`✅ IB: Refreshed account ${accountId} - ${result.balance} ${result.currency}`);
+        Logger.info(`✅ IB: Refreshed account ${accountId} - ${result.balance.balance} ${result.balance.currency}`);
 
         return {
           success: true,
-          balance: result.balance,
-          currency: result.currency
+          balance: result.balance.balance,
+          currency: result.balance.currency
         };
       }
 
@@ -193,7 +193,7 @@ export class IntegrationService {
       if (config.type === 'IB') {
         const ibConfig = config as any;
         try {
-          const result = await IBService.getAccountBalance({
+          const result = await IBServiceOptimized.refreshPortfolio({
             host: ibConfig.host,
             port: ibConfig.port,
             client_id: ibConfig.clientId,
@@ -203,7 +203,7 @@ export class IntegrationService {
           return {
             success: true,
             message: 'IB connection successful',
-            details: { balance: result?.balance, currency: result?.currency }
+            details: { balance: result?.balance?.balance, currency: result?.balance?.currency }
           };
         } catch (error: any) {
           return { success: false, message: `IB connection failed: ${error.message}` };

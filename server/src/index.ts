@@ -13,12 +13,12 @@ import accountRoutes from './routes/accounts.js';
 import currencyRoutes from './routes/currencies.js';
 import performanceRoutes from './routes/performance.js';
 import twoFactorRoutes from './routes/twoFactor.js';
-import integrationRoutes from './routes/integration.js';
+import ibRoutes from './routes/ib.js';
 import manualInvestmentRoutes from './routes/manualInvestments.js';
 import otherAssetsRoutes from './routes/otherAssets.js';
 import schwabRoutes from './routes/schwab.js';
 import { SchedulerService } from './services/schedulerService.js';
-import { IBService } from './services/ibService.js';
+import { IBServiceOptimized } from './services/ibServiceOptimized.js';
 import { OtherPortfolioService } from './services/otherPortfolioService.js';
 import { Logger, LogLevel } from './utils/logger.js';
 
@@ -90,7 +90,7 @@ app.use('/api/accounts', accountRoutes);
 app.use('/api/currencies', currencyRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/2fa', twoFactorRoutes);
-app.use('/api/integration', integrationRoutes);
+app.use('/api/ib', ibRoutes);
 app.use('/api/manual-investments', manualInvestmentRoutes);
 app.use('/api/other-assets', otherAssetsRoutes);
 app.use('/api/schwab', schwabRoutes);
@@ -133,9 +133,46 @@ async function startServer() {
     
     // Initialize services
     await SchedulerService.initialize();
-    await IBService.initialize();
     // Ensure unified portfolios table is initialized at startup
     await OtherPortfolioService.initializeDatabase();
+    
+    // Initialize IB optimized service and start auto-refresh for all IB accounts
+    Logger.info('🔄 Initializing IB optimized service...');
+    try {
+      const { IBConnectionService } = await import('./services/ibConnectionService.js');
+      const { dbAll } = await import('./database/connection.js');
+      
+      // Get all IB accounts
+      const ibAccounts = await dbAll(
+        `SELECT DISTINCT u.id as user_id, ic.target_account_id, ic.host, ic.port, ic.client_id
+         FROM ib_connections ic
+         JOIN users u ON ic.user_id = u.id
+         WHERE ic.target_account_id IS NOT NULL`
+      );
+      
+      if (ibAccounts && ibAccounts.length > 0) {
+        Logger.info(`📊 Found ${ibAccounts.length} IB account(s) to initialize`);
+        
+        for (const account of ibAccounts) {
+          try {
+            Logger.info(`🔌 Starting refresh for IB account ${account.target_account_id}...`);
+            await IBServiceOptimized.refreshPortfolio({
+              host: account.host,
+              port: account.port,
+              client_id: account.client_id,
+              target_account_id: account.target_account_id
+            });
+            Logger.info(`✅ IB account ${account.target_account_id} refresh started successfully`);
+          } catch (error) {
+            Logger.error(`❌ Failed to start refresh for IB account ${account.target_account_id}:`, error);
+          }
+        }
+      } else {
+        Logger.info('ℹ️  No IB accounts configured for auto-refresh');
+      }
+    } catch (error) {
+      Logger.error('❌ Failed to initialize IB optimized service:', error);
+    }
 
     // Start server
     const server = app.listen(PORT, () => {
@@ -165,7 +202,8 @@ const gracefulShutdown = async (signal: string) => {
     
     // Shutdown services
     try {
-      await IBService.shutdown();
+      await IBServiceOptimized.stopRefresh();
+      await IBServiceOptimized.disconnect();
       Logger.info('✅ All services shut down successfully');
       process.exit(0);
     } catch (error) {

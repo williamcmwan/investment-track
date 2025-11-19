@@ -433,20 +433,15 @@ router.post('/:id/integration/test', async (req: AuthenticatedRequest, res) => {
     }
 
     if (config.type === 'IB') {
-      // Test IB connection
-      const { IBService } = await import('../services/ibService.js');
+      // Test IB connection using optimized service
+      const { IBServiceOptimized } = await import('../services/ibServiceOptimized.js');
       const ibConfig = config as any;
       
       try {
-        // Disconnect any existing connection to force a fresh connection test
         Logger.info(`🧪 Testing IB connection to ${ibConfig.host}:${ibConfig.port}...`);
-        await IBService.disconnect();
         
-        // Wait a bit for cleanup
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Force refresh to actually test the connection to IB Gateway
-        const result = await IBService.forceRefreshAccountBalance({
+        // Test connection by refreshing portfolio
+        const result = await IBServiceOptimized.refreshPortfolio({
           host: ibConfig.host,
           port: ibConfig.port,
           client_id: ibConfig.clientId,
@@ -456,8 +451,8 @@ router.post('/:id/integration/test', async (req: AuthenticatedRequest, res) => {
         return res.json({ 
           success: true, 
           message: 'IB connection successful',
-          balance: result?.balance,
-          currency: result?.currency
+          balance: result?.balance?.balance,
+          currency: result?.balance?.currency
         });
       } catch (error: any) {
         Logger.error('IB connection test failed:', error);
@@ -520,15 +515,34 @@ router.get('/:id/integration/portfolio', async (req: AuthenticatedRequest, res) 
     }
 
     if (config.type === 'IB') {
-      const { IBService } = await import('../services/ibService.js');
-      const ibConfig = config as any;
-      
-      const portfolio = await IBService.getPortfolio({
-        host: ibConfig.host,
-        port: ibConfig.port,
-        client_id: ibConfig.clientId,
-        target_account_id: accountId
-      });
+      // Get portfolio from database (updated by IBServiceOptimized)
+      const { dbAll } = await import('../database/connection.js');
+      const rows = await dbAll(
+        'SELECT * FROM portfolios WHERE source = ? AND main_account_id = ? ORDER BY symbol',
+        ['IB', accountId]
+      );
+
+      // Map database columns to camelCase for frontend
+      const portfolio = rows.map((row: any) => ({
+        symbol: row.symbol,
+        secType: row.sec_type,
+        currency: row.currency,
+        position: row.quantity,
+        averageCost: row.average_cost,
+        marketPrice: row.market_price || 0,
+        marketValue: row.market_value || 0,
+        unrealizedPnL: row.unrealized_pnl || 0,
+        realizedPnL: row.realized_pnl || 0,
+        exchange: row.exchange,
+        primaryExchange: row.primary_exchange,
+        conId: row.con_id,
+        industry: row.industry,
+        category: row.category,
+        country: row.country,
+        closePrice: row.close_price,
+        dayChange: row.day_change,
+        dayChangePercent: row.day_change_percent
+      }));
 
       return res.json({ success: true, portfolio: portfolio || [] });
     } else if (config.type === 'SCHWAB') {
@@ -536,7 +550,8 @@ router.get('/:id/integration/portfolio', async (req: AuthenticatedRequest, res) 
       const schwabConfig = config as any;
 
       if (!schwabConfig.accountHash) {
-        return res.status(400).json({ error: 'Schwab account hash not configured' });
+        Logger.warn(`Schwab account ${accountId} missing accountHash, returning empty portfolio`);
+        return res.json({ success: true, portfolio: [] });
       }
 
       const positions = await SchwabService.getPositionsForAccount(
@@ -573,15 +588,20 @@ router.get('/:id/integration/cash', async (req: AuthenticatedRequest, res) => {
     }
 
     if (config.type === 'IB') {
-      const { IBService } = await import('../services/ibService.js');
-      const ibConfig = config as any;
-      
-      const cash = await IBService.getCashBalances({
-        host: ibConfig.host,
-        port: ibConfig.port,
-        client_id: ibConfig.clientId,
-        target_account_id: accountId
-      });
+      // Get cash balances from database (updated by IBServiceOptimized)
+      const { dbAll } = await import('../database/connection.js');
+      const rows = await dbAll(
+        'SELECT * FROM cash_balances WHERE main_account_id = ? AND source = ? ORDER BY currency',
+        [accountId, 'IB']
+      );
+
+      // Map database columns to camelCase for frontend
+      const cash = rows.map((row: any) => ({
+        currency: row.currency,
+        balance: row.amount,
+        marketValueHKD: row.market_value_hkd,
+        marketValueUSD: row.market_value_usd
+      }));
 
       return res.json({ success: true, cash: cash || [] });
     } else if (config.type === 'SCHWAB') {
@@ -590,7 +610,16 @@ router.get('/:id/integration/cash', async (req: AuthenticatedRequest, res) => {
       const schwabConfig = config as any;
 
       if (!schwabConfig.accountHash) {
-        return res.status(400).json({ error: 'Schwab account hash not configured' });
+        Logger.warn(`Schwab account ${accountId} missing accountHash, returning account balance as cash`);
+        // Fallback to account balance if accountHash not configured
+        const account = await AccountModel.findById(accountId, req.user?.id || 0);
+        if (account) {
+          return res.json({ 
+            success: true, 
+            cash: [{ currency: account.currency, balance: account.currentBalance }] 
+          });
+        }
+        return res.json({ success: true, cash: [] });
       }
 
       try {
@@ -647,11 +676,11 @@ router.post('/:id/integration/refresh', async (req: AuthenticatedRequest, res) =
     }
 
     if (config.type === 'IB') {
-      // Refresh from IB
-      const { IBService } = await import('../services/ibService.js');
+      // Refresh from IB using optimized service
+      const { IBServiceOptimized } = await import('../services/ibServiceOptimized.js');
       const ibConfig = config as any;
       
-      const result = await IBService.forceRefreshAccountBalance({
+      const result = await IBServiceOptimized.refreshPortfolio({
         host: ibConfig.host,
         port: ibConfig.port,
         client_id: ibConfig.clientId,
@@ -661,24 +690,24 @@ router.post('/:id/integration/refresh', async (req: AuthenticatedRequest, res) =
       if (result && result.balance) {
         // Update account balance
         await AccountModel.update(accountId, req.user?.id || 0, {
-          currentBalance: result.balance
+          currentBalance: result.balance.balance
         });
 
         // Add balance history
         await AccountModel.addBalanceHistory(
           accountId,
-          result.balance,
+          result.balance.balance,
           'IB integration refresh'
         );
 
         // Recalculate performance
         await PerformanceHistoryService.calculateTodaySnapshot(req.user?.id || 0);
 
-        Logger.info(`✅ Refreshed IB balance for account ${accountId}: ${result.balance}`);
+        Logger.info(`✅ Refreshed IB balance for account ${accountId}: ${result.balance.balance}`);
         return res.json({ 
           success: true, 
-          balance: result.balance,
-          currency: result.currency,
+          balance: result.balance.balance,
+          currency: result.balance.currency,
           timestamp: new Date().toISOString()
         });
       }

@@ -3,9 +3,7 @@ import { PerformanceHistoryService } from './performanceHistoryService.js';
 import { dbAll, dbRun } from '../database/connection.js';
 import { ExchangeRateService } from './exchangeRateService.js';
 import { OtherPortfolioService } from './otherPortfolioService.js';
-import { IBService } from './ibService.js';
 import { LastUpdateService } from './lastUpdateService.js';
-import { IBConnectionService } from './ibConnectionService.js';
 import { Logger } from '../utils/logger.js';
 
 export class SchedulerService {
@@ -37,7 +35,8 @@ export class SchedulerService {
     });
 
     // Schedule automatic data refresh every 30 minutes
-    // Sequence: Currency -> IB Portfolio -> Other Portfolio (Manual Investments)
+    // Sequence: Currency -> Manual Investments
+    // Note: IB Portfolio is handled automatically by IBServiceOptimized with real-time updates
     this.dataRefreshTask = cron.schedule('*/30 * * * *', async () => {
       await this.refreshAllData();
     });
@@ -53,7 +52,8 @@ export class SchedulerService {
     this.isRunning = true;
     Logger.info('✅ Scheduler service initialized');
     Logger.info('📅 Daily performance snapshots will be calculated at 11:59 PM Dublin time');
-    Logger.info('🔄 Data refresh (Currency -> IB -> Manual) will run every 30 minutes');
+    Logger.info('🔄 Data refresh (Currency -> Manual Investments) will run every 30 minutes');
+    Logger.info('📊 IB Portfolio updates are handled automatically by IBServiceOptimized');
     
     // Calculate today's snapshot immediately if it doesn't exist (uses cached data only)
     this.calculateTodayIfMissing();
@@ -181,7 +181,8 @@ export class SchedulerService {
   }
 
   /**
-   * Refresh all data in sequence: Currency -> IB Portfolio -> Manual Investments
+   * Refresh all data in sequence: Currency -> Manual Investments
+   * Note: IB Portfolio is handled automatically by IBServiceOptimized
    */
   private static async refreshAllData() {
     try {
@@ -189,7 +190,7 @@ export class SchedulerService {
       const refreshStartTime = Date.now();
       
       // Step 1: Refresh Currency Exchange Rates
-      Logger.info('📈 Step 1/3: Refreshing currency exchange rates...');
+      Logger.info('📈 Step 1/2: Refreshing currency exchange rates...');
       try {
         // Get all users to refresh their currency pairs
         const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
@@ -210,82 +211,9 @@ export class SchedulerService {
         Logger.error('❌ Failed to refresh currency exchange rates:', error);
       }
 
-      // Step 2: Refresh IB Portfolio Data
-      Logger.info('📊 Step 2/3: Refreshing IB portfolio data...');
-      try {
-        // Get all users and check if they have IB settings configured
-        const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
-        let ibRefreshCount = 0;
-        let ibSkippedCount = 0;
-        
-        for (const user of users) {
-          try {
-            // Check if user has IB settings configured
-            const userIBSettings = await IBConnectionService.getUserIBSettings(user.id);
-            
-            if (userIBSettings) {
-              Logger.debug(`🔄 Refreshing IB data (balance, portfolio, cash) for user: ${user.name} (${user.email})`);
-              
-              // Refresh balance, portfolio, and cash balances for this user
-              const accountBalance = await IBService.forceRefreshAccountBalance(userIBSettings);
-              await IBService.forceRefreshPortfolio(userIBSettings);
-              await IBService.forceRefreshCashBalances(userIBSettings);
-              
-              // Update the main account balance and balance history
-              if (userIBSettings.target_account_id && accountBalance) {
-                try {
-                  const { AccountModel } = await import('../models/Account.js');
-                  
-                  // Update the account's current balance
-                  await AccountModel.update(userIBSettings.target_account_id, user.id, {
-                    currentBalance: accountBalance.balance
-                  });
-                  
-                  // Add balance history entry for the scheduled update
-                  await AccountModel.addBalanceHistory(
-                    userIBSettings.target_account_id, 
-                    accountBalance.balance, 
-                    'Scheduled IB data refresh'
-                  );
-                  
-                  Logger.debug(`💰 Updated account balance: ${accountBalance.balance} ${accountBalance.currency}`);
-                } catch (accountError) {
-                  Logger.error(`❌ Failed to update account balance for user ${user.name}:`, accountError);
-                }
-              }
-              
-              // Recalculate today's performance snapshot after IB data update
-              try {
-                await PerformanceHistoryService.calculateTodaySnapshot(user.id);
-                Logger.debug(`📈 Updated performance snapshot for user: ${user.name}`);
-              } catch (performanceError) {
-                Logger.error(`❌ Failed to update performance snapshot for user ${user.name}:`, performanceError);
-              }
-              
-              ibRefreshCount++;
-              Logger.debug(`✅ IB data refreshed for user: ${user.name}`);
-            } else {
-              ibSkippedCount++;
-              Logger.debug(`⏭️ Skipping IB refresh for ${user.name} (no IB settings configured)`);
-            }
-          } catch (userError) {
-            Logger.error(`❌ Failed to refresh IB data for user ${user.name}:`, userError);
-            ibSkippedCount++;
-          }
-        }
-        
-        if (ibRefreshCount > 0) {
-          // Note: IB portfolio update times are now tracked per-account in IBService.forceRefreshPortfolio()
-          Logger.info(`✅ IB portfolio data refreshed for ${ibRefreshCount} users, ${ibSkippedCount} skipped`);
-        } else {
-          Logger.info(`⚠️ No users have IB settings configured - IB refresh skipped for all ${ibSkippedCount} users`);
-        }
-      } catch (error) {
-        Logger.error('❌ Failed to refresh IB portfolio data:', error);
-      }
-
-      // Step 3: Refresh Manual Investment Market Data
-      Logger.info('💼 Step 3/3: Refreshing manual investment market data...');
+      // Step 2: Refresh Manual Investment Market Data
+      // Note: IB Portfolio is handled automatically by IBServiceOptimized with real-time updates
+      Logger.info('💼 Step 2/2: Refreshing manual investment market data...');
       try {
         await OtherPortfolioService.updateAllMarketData('default');
         

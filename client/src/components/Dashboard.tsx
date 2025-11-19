@@ -28,9 +28,7 @@ import {
 import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
 import CurrencyView from "./CurrencyView";
-import IBPortfolioView from "./IBPortfolioView";
 import ConsolidatedPortfolioView from "./ConsolidatedPortfolioView";
-import OtherPortfolioView from "./OtherPortfolioView";
 import OtherAssetsView from "./OtherAssetsView";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/services/api";
@@ -1986,8 +1984,6 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               {currentView === "accounts" && "Accounts"}
               {currentView === "currency" && "Currency Exchange"}
               {currentView === "portfolio" && "Portfolio"}
-              {currentView === "integration" && "IB Portfolio"}
-              {currentView === "manual-investments" && "Other Portfolios"}
               {currentView === "other-assets" && "Other Assets"}
             </h1>
             <p className="text-muted-foreground">
@@ -1995,8 +1991,6 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               {currentView === "accounts" && "Manage your investment & bank accounts"}
               {currentView === "currency" && "Track currency exchange rates"}
               {currentView === "portfolio" && "View all integrated account portfolios in one place"}
-              {currentView === "integration" && "Interactive Brokers portfolio and positions"}
-              {currentView === "manual-investments" && "Add and manage other investment accounts manually"}
               {currentView === "other-assets" && "Track real estate, collectibles, and other investments"}
             </p>
               </div>
@@ -2118,9 +2112,6 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               }}
             />
           )}
-          {currentView === "manual-investments" && (
-            <OtherPortfolioView accounts={accounts} />
-          )}
           {currentView === "currency" && (
             <CurrencyView 
               baseCurrency={baseCurrency}
@@ -2132,17 +2123,6 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               onAccountUpdate={async () => {
                 await loadAccounts();
                 await handlePostAccountUpdate();
-                updateTodaysPerformanceData();
-              }}
-            />
-          )}
-          {currentView === "integration" && (
-            <IBPortfolioView 
-              baseCurrency={baseCurrency}
-              onAccountUpdate={async () => {
-                await loadAccounts();
-                await handlePostAccountUpdate();
-                // Update today's performance data only when accounts are actually updated
                 updateTodaysPerformanceData();
               }}
             />

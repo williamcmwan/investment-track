@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Shield,
   ShieldCheck,
-  PiggyBank,
   Building
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -47,8 +46,6 @@ const Sidebar = ({ currentView, onViewChange, onLogout, isOpen, onToggle, isColl
     { id: "accounts", label: "Accounts", icon: Wallet },
     { id: "currency", label: "Currency", icon: DollarSign },
     { id: "portfolio", label: "Portfolio", icon: BarChart3 },
-    { id: "integration", label: "IB Portfolio", icon: PiggyBank },
-    { id: "manual-investments", label: "Other Portfolios", icon: PiggyBank },
     { id: "other-assets", label: "Other Assets", icon: Building },
   ];
 

@@ -302,11 +302,11 @@ class ApiClient {
 
   // Interactive Brokers Integration endpoints
   async getIBSettings() {
-    return this.request<{ host: string; port: number; client_id: number; target_account_id?: number }>('/integration/ib/settings');
+    return this.request<{ host: string; port: number; client_id: number; target_account_id?: number }>('/ib/settings');
   }
 
   async saveIBSettings(settings: { host: string; port: number; client_id: number; target_account_id?: number }) {
-    return this.request<{ success: boolean; message: string }>('/integration/ib/settings', {
+    return this.request<{ success: boolean; message: string }>('/ib/settings', {
       method: 'POST',
       body: JSON.stringify(settings),
     });
@@ -319,8 +319,8 @@ class ApiClient {
       netLiquidation?: number;
       totalCashValue?: number;
       timestamp?: number;
-    }>('/integration/ib/balance', {
-      method: 'POST',
+    }>('/ib/balance', {
+      method: 'GET',
     });
   }
 
@@ -341,8 +341,8 @@ class ApiClient {
       industry?: string;
       category?: string;
       country?: string;
-    }>>('/integration/ib/portfolio', {
-      method: 'POST',
+    }>>('/ib/portfolio', {
+      method: 'GET',
     });
   }
 
@@ -353,55 +353,71 @@ class ApiClient {
       netLiquidation?: number;
       totalCashValue?: number;
       timestamp?: number;
-    }>('/integration/ib/balance/refresh', {
+    }>('/ib/portfolio/refresh', {
       method: 'POST',
     });
   }
 
   async forceRefreshIBPortfolio() {
-    return this.request<Array<{
-      symbol: string;
-      secType: string;
-      currency: string;
-      position: number;
-      averageCost: number;
-      marketPrice: number;
-      marketValue: number;
-      unrealizedPNL: number;
-      realizedPNL: number;
-      exchange?: string;
-      primaryExchange?: string;
-      conId?: number;
-      industry?: string;
-      category?: string;
-      country?: string;
-    }>>('/integration/ib/portfolio/refresh', {
+    return this.request<{
+      balance: {
+        balance: number;
+        currency: string;
+        netLiquidation?: number;
+      };
+      portfolio: Array<{
+        symbol: string;
+        secType: string;
+        currency: string;
+        position: number;
+        averageCost: number;
+        marketPrice: number;
+        marketValue: number;
+        unrealizedPNL: number;
+        realizedPNL: number;
+        exchange?: string;
+        primaryExchange?: string;
+        conId?: number;
+        industry?: string;
+        category?: string;
+        country?: string;
+      }>;
+      cashBalances: Array<{
+        currency: string;
+        amount: number;
+        marketValueHKD: number;
+        marketValueUSD?: number;
+      }>;
+    }>('/ib/portfolio/refresh', {
       method: 'POST',
     });
   }
 
   async getIBCashBalances() {
-    return this.request<{
-      data: Array<{
-        currency: string;
-        amount: number;
-        marketValue: number;
-      }>;
-      timestamp?: number;
-    }>('/integration/ib/cash', {
-      method: 'POST',
+    return this.request<Array<{
+      currency: string;
+      amount: number;
+      marketValueHKD: number;
+      marketValueUSD?: number;
+    }>>('/ib/cash', {
+      method: 'GET',
     });
   }
 
   async forceRefreshIBCashBalances() {
     return this.request<{
-      data: Array<{
+      balance: {
+        balance: number;
+        currency: string;
+      };
+      portfolio: Array<any>;
+      cashBalances: Array<{
         currency: string;
         amount: number;
-        marketValue: number;
+        marketValueHKD: number;
+        marketValueUSD?: number;
       }>;
-      timestamp?: number;
-    }>('/integration/ib/cash/refresh', {
+    }>('/ib/portfolio/refresh', {
       method: 'POST',
     });
   }

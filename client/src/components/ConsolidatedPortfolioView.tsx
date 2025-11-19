@@ -324,7 +324,7 @@ export default function ConsolidatedPortfolioView({
                               <tr key={`${account.id}-${position.symbol}-${position.conId || index}`} className="border-b hover:bg-muted/50">
                                 <td className="p-2 font-medium">{position.symbol}</td>
                                 <td className={`text-right p-2 ${isDayChangePositive ? 'text-green-600' : 'text-red-600'}`}>
-                                  {position.dayChange !== undefined && position.dayChangePercent !== undefined ? (
+                                  {position.dayChange !== undefined && position.dayChange !== null && position.dayChangePercent !== undefined && position.dayChangePercent !== null ? (
                                     <div className="flex flex-col items-end">
                                       <div className="flex items-center gap-1">
                                         {isDayChangePositive ? (
