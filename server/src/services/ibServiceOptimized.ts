@@ -375,6 +375,10 @@ export class IBServiceOptimized {
 
       try {
         // Subscribe to market data (this stays active)
+        // Generic tick list: empty string '' gets default ticks (bid, ask, last, close, volume, etc.)
+        // For delayed data, IB automatically sends tick 68 (delayed last) and 69 (delayed close)
+        // For real-time data, IB sends tick 4 (last) and 9 (close)
+        // No need to specify tick types explicitly - IB sends appropriate ticks based on subscription level
         this.ibApi.reqMktData(reqId, contract, '', false, false);
         this.activeSubscriptions.marketDataReqIds.add(reqId);
         

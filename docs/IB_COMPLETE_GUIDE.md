@@ -724,6 +724,39 @@ cp investment-tracker.db.backup investment-tracker.db
 
 ## Troubleshooting
 
+### Recent Fixes (Nov 19, 2025)
+
+#### Multi-Currency Cash Balances ✅ Fixed
+
+**Issue:** Only USD cash balance showing, other currencies missing.
+
+**Root Cause:** IB sends multiple `CashBalance` updates with same key but different currencies. Map was overwriting previous values.
+
+**Solution:** Use composite keys (`CashBalance_USD`, `CashBalance_HKD`, etc.) to store all currencies.
+
+**Verification:**
+```bash
+GET /api/ib/cash
+# Should show all currencies: USD, HKD, EUR, etc.
+```
+
+#### Day Change for Stocks ✅ Fixed
+
+**Issue:** Day change showing N/A for stocks (crypto and bonds worked).
+
+**Root Cause:** Code was looking for wrong tick types (tick 75 instead of 69).
+
+**Solution:** Updated to use correct IB tick types:
+- Tick 4 (Last) with fallback to Tick 68 (Delayed Last)
+- Tick 9 (Close) with fallback to Tick 69 (Delayed Close)
+
+**Verification:**
+```sql
+SELECT symbol, day_change, day_change_percent 
+FROM portfolios 
+WHERE source = 'IB' AND day_change IS NOT NULL;
+```
+
 ### Connection Issues
 
 **Problem:** Connection timeout
