@@ -651,17 +651,17 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
 
   // Removed generatePerformanceHistoryOnTheFly function to prevent data override on refresh
 
-  // Comprehensive refresh function that updates all data sources
+  // Refresh function for currency and manual investments
   const handleComprehensiveRefresh = async () => {
     try {
       setIsLoadingPerformance(true);
       
       toast({
         title: "Refreshing Data",
-        description: "Updating all portfolio data sources...",
+        description: "Updating currency rates and manual investments...",
       });
 
-      // 1. Refresh Currency Exchange rates and pairs
+      // 1. Update Currency Exchange Rates and reload currency pair data
       try {
         await apiClient.updateEnhancedExchangeRates();
         await loadCurrencies();
@@ -669,63 +669,29 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         console.warn('Failed to refresh currency data:', error);
       }
 
-      // 2. Refresh IB Portfolio data
-      try {
-        await apiClient.forceRefreshIBBalance();
-        await apiClient.forceRefreshIBPortfolio();
-        await apiClient.forceRefreshIBCashBalances();
-        await loadIBPortfolio();
-        await loadIBCashBalances();
-      } catch (error) {
-        console.warn('Failed to refresh IB data:', error);
-      }
-
-      // 3. Refresh Other Portfolio data
+      // 2. Update Other Portfolio market Data (Manual Investments)
       try {
         await apiClient.refreshManualMarketData('default');
         await loadOtherPortfolio();
         await loadOtherCashBalances();
       } catch (error) {
-        console.warn('Failed to refresh other portfolio data:', error);
+        console.warn('Failed to refresh manual investment data:', error);
       }
 
-      // 4. Refresh Other Assets data
-      try {
-        await loadOtherAssets();
-      } catch (error) {
-        console.warn('Failed to refresh other assets data:', error);
-      }
-
-      // 5. Refresh all integrated accounts (IB and Schwab)
-      try {
-        await refreshIntegratedAccounts();
-      } catch (error) {
-        console.warn('Failed to refresh integrated accounts:', error);
-      }
-
-      // 6. Refresh Accounts data (including IB account balance updates)
-      try {
-        await loadAccounts();
-      } catch (error) {
-        console.warn('Failed to refresh accounts data:', error);
-      }
-
-      // 7. Update exchange rates for currency conversion
-      await fetchExchangeRates();
-
-      // 8. Force server to compute today's snapshot and reload performance history
+      // 3. Recalculate today's performance snapshot
+      // 4. Reload the entire performance history chart
       await handlePostAccountUpdate();
 
       toast({
         title: "Success",
-        description: "All portfolio data has been refreshed successfully",
+        description: "Currency rates and manual investments refreshed successfully",
       });
 
     } catch (error) {
-      console.error('Comprehensive refresh error:', error);
+      console.error('Refresh error:', error);
       toast({
         title: "Refresh Warning",
-        description: "Some data sources may not have updated completely. Please check individual sections if needed.",
+        description: "Some data may not have updated completely. Please try again if needed.",
         variant: "destructive",
       });
     } finally {
