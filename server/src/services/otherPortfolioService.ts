@@ -49,8 +49,6 @@ export interface EnrichedManualPosition extends ManualPosition {
 export class OtherPortfolioService {
   private static db: Database.Database | null = null;
   private static lastRefreshTime: number | null = null;
-  private static autoRefreshInterval: NodeJS.Timeout | null = null;
-  private static readonly AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
   /**
    * Convert database row (snake_case) to ManualPosition (camelCase)
@@ -202,9 +200,6 @@ export class OtherPortfolioService {
       db.exec("DROP TABLE IF EXISTS investment_accounts");
 
       Logger.info('✅ Portfolios table initialized');
-      
-      // Start auto-refresh timer
-      this.startAutoRefresh('default');
     } catch (error) {
       Logger.error('❌ Error initializing portfolios:', error);
     }
@@ -603,37 +598,7 @@ export class OtherPortfolioService {
     return this.lastRefreshTime;
   }
 
-  /**
-   * Start auto-refresh timer (30 minutes)
-   */
-  static startAutoRefresh(userId: string = 'default'): void {
-    // Clear existing timer
-    if (this.autoRefreshInterval) {
-      clearInterval(this.autoRefreshInterval);
-    }
 
-    Logger.info('📊 Starting auto-refresh for manual investments (30 minutes interval)');
-    
-    this.autoRefreshInterval = setInterval(async () => {
-      try {
-        Logger.info('📊 Auto-refreshing manual investment market data...');
-        await this.updateAllMarketData(userId);
-      } catch (error) {
-        Logger.error('❌ Auto-refresh failed:', error);
-      }
-    }, this.AUTO_REFRESH_INTERVAL_MS);
-  }
-
-  /**
-   * Stop auto-refresh timer
-   */
-  static stopAutoRefresh(): void {
-    if (this.autoRefreshInterval) {
-      clearInterval(this.autoRefreshInterval);
-      this.autoRefreshInterval = null;
-      Logger.info('📊 Stopped auto-refresh for manual investments');
-    }
-  }
 
   /**
    * Get portfolio summary for manual positions

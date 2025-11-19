@@ -495,4 +495,94 @@ export class SchwabService {
       throw error;
     }
   }
+
+  /**
+   * Refresh portfolio data for a Schwab account
+   * Fetches balance and updates the account (reuses same logic as manual refresh)
+   */
+  static async refreshPortfolio(accountId: number, userId: number): Promise<void> {
+    try {
+      Logger.debug(`🔄 Refreshing Schwab portfolio for account ${accountId}...`);
+      
+      const { AccountModel } = await import('../models/Account.js');
+      const config = await AccountModel.getIntegration(accountId, userId);
+      
+      if (!config || config.type !== 'SCHWAB') {
+        throw new Error('Schwab integration not configured.');
+      }
+
+      const schwabConfig = config as any;
+      if (!schwabConfig.accountHash) {
+        throw new Error('Account hash not configured.');
+      }
+
+      // Fetch balance using the same method as manual refresh
+      const result = await this.getAccountBalanceForAccount(accountId, userId, schwabConfig.accountHash);
+      
+      if (result && result.currentBalance) {
+        // Update account balance
+        await AccountModel.update(accountId, userId, {
+          currentBalance: result.currentBalance
+        });
+
+        // Add balance history (same as manual refresh)
+        await AccountModel.addBalanceHistory(
+          accountId,
+          result.currentBalance,
+          'Schwab scheduled refresh'
+        );
+
+        Logger.info(`✅ Refreshed Schwab portfolio for account ${accountId}: $${result.currentBalance.toFixed(2)}`);
+      } else {
+        throw new Error('Failed to get balance from Schwab API');
+      }
+    } catch (error: any) {
+      Logger.error(`❌ Failed to refresh Schwab portfolio for account ${accountId}:`, error.message);
+      throw error;
+    }
+  }
+  /**
+   * Refresh all Schwab accounts for all users
+   */
+  static async refreshAllAccounts(): Promise<void> {
+    try {
+      Logger.debug('🔄 Refreshing all Schwab accounts...');
+      
+      const { AccountModel } = await import('../models/Account.js');
+      const { dbAll } = await import('../database/connection.js');
+      
+      // Get all accounts with Schwab integration
+      const accounts = await dbAll(
+        `SELECT id, user_id as userId, name, integration_config as integrationConfig
+         FROM accounts 
+         WHERE integration_type = 'SCHWAB'
+         AND integration_config IS NOT NULL`
+      ) as Array<{ id: number; userId: number; name: string; integrationConfig: string }>;
+      
+      if (accounts.length === 0) {
+        Logger.debug('ℹ️  No Schwab accounts found to refresh');
+        return;
+      }
+
+      Logger.info(`📊 Found ${accounts.length} Schwab account(s) to refresh`);
+      
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const account of accounts) {
+        try {
+          await this.refreshPortfolio(account.id, account.userId);
+          successCount++;
+        } catch (error: any) {
+          Logger.error(`❌ Failed to refresh Schwab account ${account.name} (ID: ${account.id}):`, error.message);
+          errorCount++;
+        }
+      }
+
+      Logger.info(`✅ Schwab refresh completed: ${successCount} successful, ${errorCount} failed`);
+    } catch (error: any) {
+      Logger.error('❌ Error refreshing Schwab accounts:', error);
+      throw error;
+    }
+  }
 }

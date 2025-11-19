@@ -4,11 +4,13 @@ import { dbAll, dbRun } from '../database/connection.js';
 import { ExchangeRateService } from './exchangeRateService.js';
 import { OtherPortfolioService } from './otherPortfolioService.js';
 import { LastUpdateService } from './lastUpdateService.js';
+import { SchwabService } from './schwabService.js';
 import { Logger } from '../utils/logger.js';
 
 export class SchedulerService {
   private static isRunning = false;
   private static dataRefreshTask: ReturnType<typeof cron.schedule> | null = null;
+  private static schwabRefreshTask: ReturnType<typeof cron.schedule> | null = null;
 
   /**
    * Initialize the scheduler service
@@ -41,11 +43,16 @@ export class SchedulerService {
       await this.refreshAllData();
     });
 
+    // Schedule Schwab portfolio refresh every minute
+    this.schwabRefreshTask = cron.schedule('* * * * *', async () => {
+      await this.refreshSchwabPortfolios();
+    });
+
     // Also schedule a test task that runs every minute (for development/testing)
     // Remove this in production
     if (process.env.NODE_ENV === 'development') {
       cron.schedule('* * * * *', () => {
-        Logger.debug(`[${new Date().toISOString()}] Scheduler is running... Next daily calculation: 11:59 PM Dublin time, Next data refresh: every 30 minutes`);
+        Logger.debug(`[${new Date().toISOString()}] Scheduler is running... Next daily calculation: 11:59 PM Dublin time, Next data refresh: every 30 minutes, Schwab refresh: every minute`);
       });
     }
 
@@ -53,6 +60,7 @@ export class SchedulerService {
     Logger.info('✅ Scheduler service initialized');
     Logger.info('📅 Daily performance snapshots will be calculated at 11:59 PM Dublin time');
     Logger.info('🔄 Data refresh (Currency -> Manual Investments) will run every 30 minutes');
+    Logger.info('💼 Schwab portfolio refresh will run every minute');
     Logger.info('📊 IB Portfolio updates are handled automatically by IBServiceOptimized');
     Logger.info('📊 IB close prices are fetched from Yahoo Finance only at startup when not available from IB');
     
@@ -82,6 +90,11 @@ export class SchedulerService {
     if (this.dataRefreshTask) {
       this.dataRefreshTask.stop();
       this.dataRefreshTask = null;
+    }
+
+    if (this.schwabRefreshTask) {
+      this.schwabRefreshTask.stop();
+      this.schwabRefreshTask = null;
     }
 
     this.isRunning = false;
@@ -310,6 +323,51 @@ export class SchedulerService {
 
 
   /**
+   * Refresh all Schwab portfolios and update performance snapshots
+   */
+  private static async refreshSchwabPortfolios() {
+    try {
+      Logger.debug(`[${new Date().toISOString()}] 🔄 Starting Schwab portfolio refresh...`);
+      const refreshStartTime = Date.now();
+      
+      // Refresh all Schwab accounts
+      await SchwabService.refreshAllAccounts();
+      
+      // Get all users with Schwab accounts and update their performance snapshots
+      const users = await dbAll(
+        `SELECT DISTINCT u.id, u.email, u.name 
+         FROM users u
+         INNER JOIN accounts a ON u.id = a.user_id
+         WHERE a.integration_type = 'SCHWAB'`
+      ) as Array<{id: number, email: string, name: string}>;
+      
+      for (const user of users) {
+        try {
+          await PerformanceHistoryService.calculateTodaySnapshot(user.id);
+          Logger.debug(`📈 Updated performance snapshot after Schwab refresh for user: ${user.name}`);
+        } catch (performanceError) {
+          Logger.error(`❌ Failed to update performance snapshot after Schwab refresh for user ${user.name}:`, performanceError);
+        }
+      }
+      
+      const refreshEndTime = Date.now();
+      const totalDuration = refreshEndTime - refreshStartTime;
+      Logger.debug(`[${new Date().toISOString()}] ✅ Schwab portfolio refresh completed in ${totalDuration}ms`);
+      
+    } catch (error) {
+      Logger.error('❌ Error in Schwab portfolio refresh:', error);
+    }
+  }
+
+  /**
+   * Manually trigger Schwab portfolio refresh (for testing)
+   */
+  static async triggerSchwabRefresh() {
+    Logger.info('Manually triggering Schwab portfolio refresh...');
+    await this.refreshSchwabPortfolios();
+  }
+
+  /**
    * Get scheduler status
    */
   static getStatus() {
@@ -319,6 +377,7 @@ export class SchedulerService {
       tasks: Object.keys(tasks).length,
       nextRun: '11:59 PM Dublin time daily',
       dataRefreshInterval: '30 minutes',
+      schwabRefreshInterval: '1 minute',
       lastDataRefresh: new Date().toISOString()
     };
   }
