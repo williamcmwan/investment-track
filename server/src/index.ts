@@ -131,6 +131,9 @@ async function startServer() {
       Logger.setLogLevel(LogLevel.DEBUG);
     }
     
+    // Temporarily enable debug logging for IB troubleshooting
+    Logger.setLogLevel(LogLevel.DEBUG);
+    
     // Initialize services
     await SchedulerService.initialize();
     // Ensure unified portfolios table is initialized at startup
