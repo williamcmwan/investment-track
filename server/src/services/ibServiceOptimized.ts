@@ -606,11 +606,6 @@ export class IBServiceOptimized {
       return `${symbol}.L`;
     }
     
-    // Toronto stocks need .TO suffix
-    if (exchangeUpper === 'TSE') {
-      return `${symbol}.TO`;
-    }
-    
     // Australian stocks need .AX suffix
     if (exchangeUpper === 'ASX') {
       return `${symbol}.AX`;
@@ -621,7 +616,7 @@ export class IBServiceOptimized {
       return `${symbol}.DE`;
     }
     
-    // US stocks don't need suffix
+    // US and Canadian stocks don't need suffix
     return symbol;
   }
 
