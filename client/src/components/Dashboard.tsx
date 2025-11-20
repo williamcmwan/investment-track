@@ -1071,6 +1071,19 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       const industry = position.industry?.toUpperCase() || '';
       const exchange = position.exchange?.toUpperCase() || position.primaryExchange?.toUpperCase() || '';
       const currency = position.currency?.toUpperCase() || '';
+      const accountType = position.accountType?.toUpperCase() || '';
+
+      // Special handling for Charles Schwab positions
+      if (accountType === 'SCHWAB') {
+        // Schwab EQUITY positions are US Stocks
+        if (secType === 'EQUITY') {
+          return 'STOCK_USA';
+        }
+        // Schwab FIXED_INCOME positions are Bonds
+        if (secType === 'FIXED_INCOME') {
+          return 'BOND_USA';
+        }
+      }
 
       // If country is null/empty, use currency as fallback to determine region
       if (!country && currency) {
