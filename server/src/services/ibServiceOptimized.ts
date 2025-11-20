@@ -1216,4 +1216,58 @@ export class IBServiceOptimized {
       throw error;
     }
   }
+
+  /**
+   * Copy current bond prices to close prices for end-of-day snapshot
+   * This is needed because IB doesn't provide close prices for bonds via AccountUpdate
+   * Should be called at 23:59 before daily snapshot calculation
+   */
+  static async copyBondPricesToClose(): Promise<void> {
+    try {
+      const { dbAll, dbRun } = await import('../database/connection.js');
+      
+      Logger.info('📋 Copying current bond prices to close prices for IB portfolios...');
+      
+      // Get all bond positions from IB portfolios
+      const bonds = await dbAll(`
+        SELECT id, main_account_id, symbol, market_price, close_price, sec_type
+        FROM portfolios
+        WHERE source = 'IB' 
+        AND sec_type = 'BOND'
+        AND market_price IS NOT NULL
+        AND market_price > 0
+      `);
+      
+      if (bonds.length === 0) {
+        Logger.info('No IB bond positions found');
+        return;
+      }
+      
+      Logger.info(`Found ${bonds.length} IB bond position(s) to update`);
+      
+      let updatedCount = 0;
+      for (const bond of bonds) {
+        try {
+          // Copy market_price to close_price
+          await dbRun(`
+            UPDATE portfolios
+            SET close_price = market_price,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `, [bond.id]);
+          
+          updatedCount++;
+          Logger.debug(`Updated ${bond.symbol}: close_price = ${bond.market_price} (copied from market_price)`);
+        } catch (error) {
+          Logger.error(`Failed to update close price for bond ${bond.symbol}:`, error);
+        }
+      }
+      
+      Logger.info(`✅ Copied ${updatedCount} bond prices to close prices`);
+      
+    } catch (error) {
+      Logger.error('Error in copyBondPricesToClose:', error);
+      throw error;
+    }
+  }
 }

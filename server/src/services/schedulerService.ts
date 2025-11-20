@@ -111,6 +111,20 @@ export class SchedulerService {
     try {
       Logger.info(`[${new Date().toISOString()}] Starting daily performance snapshot calculation...`);
       
+      // Step 1: Copy current bond prices to close prices for IB portfolios
+      // This is needed because IB doesn't provide close prices for bonds
+      Logger.info('📋 Step 1: Copying IB bond prices to close prices...');
+      try {
+        const { IBServiceOptimized } = await import('./ibServiceOptimized.js');
+        await IBServiceOptimized.copyBondPricesToClose();
+        Logger.info('✅ IB bond prices copied to close prices');
+      } catch (error) {
+        Logger.error('❌ Failed to copy IB bond prices:', error);
+      }
+      
+      // Step 2: Calculate snapshots for all users
+      Logger.info('📊 Step 2: Calculating performance snapshots...');
+      
       // Get all users
       const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
       
