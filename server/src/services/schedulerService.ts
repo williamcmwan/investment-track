@@ -59,16 +59,19 @@ export class SchedulerService {
     this.isRunning = true;
     Logger.info('✅ Scheduler service initialized');
     Logger.info('📅 Daily performance snapshots will be calculated at 11:59 PM Dublin time');
-    Logger.info('🔄 Data refresh (Currency -> Manual Investments) will run every 30 minutes');
+    Logger.info('🔄 Data refresh (Currency -> Manual Investments -> IB Close Prices) will run every 30 minutes');
     Logger.info('💼 Schwab portfolio refresh will run every minute');
     Logger.info('📊 IB Portfolio updates are handled automatically by IBServiceOptimized');
-    Logger.info('📊 IB close prices are fetched from Yahoo Finance only at startup when not available from IB');
+    Logger.info('📊 IB close prices will be refreshed from Yahoo Finance every 30 minutes (no cache)');
     
     // Calculate today's snapshot immediately if it doesn't exist (uses cached data only)
     this.calculateTodayIfMissing();
     
     // Check and refresh missing exchange rates in the background
     this.refreshMissingExchangeRates();
+    
+    // Refresh IB close prices on startup (in background)
+    this.refreshIBClosePricesOnStartup();
     
     // Don't run initial data refresh on startup - let scheduled job handle it
     Logger.info('📅 Initial data refresh skipped - will run on first scheduled interval');
@@ -195,8 +198,7 @@ export class SchedulerService {
   }
 
   /**
-   * Refresh all data in sequence: Currency -> Manual Investments
-   * Note: IB Portfolio is handled automatically by IBServiceOptimized
+   * Refresh all data in sequence: Currency -> Manual Investments -> IB Close Prices
    */
   private static async refreshAllData() {
     try {
@@ -204,7 +206,7 @@ export class SchedulerService {
       const refreshStartTime = Date.now();
       
       // Step 1: Refresh Currency Exchange Rates
-      Logger.info('📈 Step 1/2: Refreshing currency exchange rates...');
+      Logger.info('📈 Step 1/3: Refreshing currency exchange rates...');
       try {
         // Get all users to refresh their currency pairs
         const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
@@ -226,8 +228,7 @@ export class SchedulerService {
       }
 
       // Step 2: Refresh Manual Investment Market Data
-      // Note: IB Portfolio is handled automatically by IBServiceOptimized with real-time updates
-      Logger.info('💼 Step 2/2: Refreshing manual investment market data...');
+      Logger.info('💼 Step 2/3: Refreshing manual investment market data...');
       try {
         await OtherPortfolioService.updateAllMarketData('default');
         
@@ -248,12 +249,48 @@ export class SchedulerService {
         Logger.error('❌ Failed to refresh manual investment market data:', error);
       }
 
+      // Step 3: Refresh IB Close Prices from Yahoo Finance
+      Logger.info('📊 Step 3/3: Refreshing IB close prices from Yahoo Finance...');
+      try {
+        const { IBServiceOptimized } = await import('./ibServiceOptimized.js');
+        await IBServiceOptimized.refreshAllClosePrices();
+        
+        // Recalculate today's performance snapshot after IB close price update
+        const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+        for (const user of users) {
+          try {
+            await PerformanceHistoryService.calculateTodaySnapshot(user.id);
+            Logger.debug(`📈 Updated performance snapshot after IB close price refresh for user: ${user.name}`);
+          } catch (performanceError) {
+            Logger.error(`❌ Failed to update performance snapshot after IB close price refresh for user ${user.name}:`, performanceError);
+          }
+        }
+        
+        Logger.info('✅ IB close prices refreshed successfully');
+      } catch (error) {
+        Logger.error('❌ Failed to refresh IB close prices:', error);
+      }
+
       const refreshEndTime = Date.now();
       const totalDuration = refreshEndTime - refreshStartTime;
       Logger.info(`[${new Date().toISOString()}] ✅ Automatic data refresh sequence completed in ${totalDuration}ms`);
       
     } catch (error) {
       Logger.error('❌ Error in automatic data refresh sequence:', error);
+    }
+  }
+
+  /**
+   * Refresh IB close prices on startup (in background)
+   */
+  private static async refreshIBClosePricesOnStartup() {
+    try {
+      Logger.info('🚀 Refreshing IB close prices on startup...');
+      const { IBServiceOptimized } = await import('./ibServiceOptimized.js');
+      await IBServiceOptimized.refreshAllClosePrices();
+      Logger.info('✅ IB close prices refreshed on startup');
+    } catch (error) {
+      Logger.error('❌ Failed to refresh IB close prices on startup:', error);
     }
   }
 

@@ -221,9 +221,9 @@ export class IBServiceOptimized {
     // Step 1: Subscribe to reqAccountUpdates() and wait for data
     await this.subscribeToAccountUpdates(mainAccountId);
 
-    // Step 2: Fetch close prices from Yahoo Finance for all positions
+    // Step 2: Fetch close prices from Yahoo Finance for all positions (always fresh, no cache)
     const positions = Array.from(this.accountData.portfolioPositions.values());
-    await this.fetchClosePricesFromYahoo(positions, mainAccountId);
+    await this.fetchClosePricesFromYahoo(positions, mainAccountId, false);
 
     // Step 3: Fetch contract details only for positions missing industry/category
     await this.fetchMissingContractDetails(positions);
@@ -345,47 +345,62 @@ export class IBServiceOptimized {
 
   /**
    * Fetch close prices from Yahoo Finance for all positions
-   * Uses database cache when available, fetches from Yahoo Finance for missing ones
+   * @param useCache - If true, uses database cache when available. If false, always fetches fresh from Yahoo Finance
    */
-  private static async fetchClosePricesFromYahoo(positions: PortfolioPosition[], mainAccountId: number): Promise<void> {
+  private static async fetchClosePricesFromYahoo(positions: PortfolioPosition[], mainAccountId: number, useCache: boolean = false): Promise<void> {
     const { dbAll } = await import('../database/connection.js');
-    
-    Logger.debug(`Loading cached close prices from database...`);
-    
-    // Get cached close prices from database (from previous sync)
-    const cachedCloses = await dbAll(
-      `SELECT con_id, close_price 
-       FROM portfolios 
-       WHERE source = 'IB' 
-       AND main_account_id = ?
-       AND close_price IS NOT NULL 
-       AND close_price > 0`,
-      [mainAccountId]
-    );
-    
-    const closeCache = new Map<number, number>();
-    for (const row of cachedCloses) {
-      closeCache.set(row.con_id, row.close_price);
-    }
-    
-    Logger.debug(`Found ${closeCache.size} cached close prices`);
-    
-    // Apply cached close prices and collect symbols that need fetching
     const { YahooFinanceService } = await import('./yahooFinanceService.js');
+    
+    Logger.info(`📊 Fetching close prices for ${positions.length} positions... (useCache: ${useCache})`);
+    
     const symbolsToFetch: string[] = [];
     const symbolToPosition = new Map<string, PortfolioPosition>();
     
-    for (const position of positions) {
-      if (!position.conId || position.conId <= 0) {
-        continue;
+    if (useCache) {
+      // Try to use cached close prices first
+      Logger.debug(`Loading cached close prices from database...`);
+      
+      const cachedCloses = await dbAll(
+        `SELECT con_id, close_price 
+         FROM portfolios 
+         WHERE source = 'IB' 
+         AND main_account_id = ?
+         AND close_price IS NOT NULL 
+         AND close_price > 0`,
+        [mainAccountId]
+      );
+      
+      const closeCache = new Map<number, number>();
+      for (const row of cachedCloses) {
+        closeCache.set(row.con_id, row.close_price);
       }
       
-      // Use cached close price if available
-      if (closeCache.has(position.conId)) {
-        position.closePrice = closeCache.get(position.conId)!;
-        Logger.debug(`${position.symbol} - Using cached close price: ${position.closePrice}`);
-      } else {
-        // Need to fetch from Yahoo Finance
+      Logger.debug(`Found ${closeCache.size} cached close prices`);
+      
+      // Apply cached close prices and collect symbols that need fetching
+      for (const position of positions) {
+        if (!position.conId || position.conId <= 0) {
+          continue;
+        }
+        
+        if (closeCache.has(position.conId)) {
+          position.closePrice = closeCache.get(position.conId)!;
+          Logger.debug(`${position.symbol} - Using cached close price: ${position.closePrice}`);
+        } else {
+          const yahooSymbol = this.convertToYahooSymbol(position.symbol, position.exchange || position.primaryExchange, position.secType);
+          symbolsToFetch.push(yahooSymbol);
+          symbolToPosition.set(yahooSymbol, position);
+        }
+      }
+    } else {
+      // Always fetch fresh from Yahoo Finance (no cache)
+      Logger.info(`🌐 Fetching fresh close prices from Yahoo Finance (ignoring cache)...`);
+      
+      for (const position of positions) {
+        if (!position.conId || position.conId <= 0) {
+          continue;
+        }
+        
         const yahooSymbol = this.convertToYahooSymbol(position.symbol, position.exchange || position.primaryExchange, position.secType);
         symbolsToFetch.push(yahooSymbol);
         symbolToPosition.set(yahooSymbol, position);
@@ -393,12 +408,12 @@ export class IBServiceOptimized {
     }
     
     if (symbolsToFetch.length === 0) {
-      Logger.debug('All positions have cached close prices');
+      Logger.info('✅ All positions have cached close prices');
       return;
     }
     
-    // Fetch missing close prices from Yahoo Finance
-    Logger.debug(`Fetching close prices for ${symbolsToFetch.length} symbols from Yahoo Finance...`);
+    // Fetch close prices from Yahoo Finance
+    Logger.info(`🌐 Fetching ${symbolsToFetch.length} close prices from Yahoo Finance...`);
     const marketDataResults = await YahooFinanceService.getMultipleMarketData(symbolsToFetch);
     
     // Update positions with fetched close prices
@@ -412,7 +427,7 @@ export class IBServiceOptimized {
       }
     }
     
-    Logger.debug(`Close price fetch complete: ${fetchedCount} from Yahoo Finance, ${closeCache.size} from cache`);
+    Logger.info(`✅ Fetched ${fetchedCount} fresh close prices from Yahoo Finance`);
   }
 
   /**
@@ -1064,5 +1079,141 @@ export class IBServiceOptimized {
         accountUpdates: this.activeSubscriptions.accountUpdates
       }
     };
+  }
+
+  /**
+   * Refresh close prices for all IB positions from Yahoo Finance
+   * This should be called periodically (e.g., every 30 minutes or after market close)
+   */
+  static async refreshClosePrices(mainAccountId: number): Promise<void> {
+    try {
+      const { dbAll, dbRun } = await import('../database/connection.js');
+      
+      Logger.info(`🔄 Refreshing close prices for IB account ${mainAccountId}...`);
+      
+      // Get all positions for this account
+      const rows = await dbAll(
+        'SELECT * FROM portfolios WHERE main_account_id = ? AND source = ? ORDER BY symbol',
+        [mainAccountId, 'IB']
+      );
+      
+      if (rows.length === 0) {
+        Logger.info('No IB positions found to refresh');
+        return;
+      }
+      
+      const positions: PortfolioPosition[] = rows.map((row: any) => ({
+        symbol: row.symbol,
+        secType: row.sec_type,
+        currency: row.currency,
+        position: row.quantity,
+        averageCost: row.average_cost,
+        marketPrice: row.market_price || 0,
+        marketValue: row.market_value || 0,
+        unrealizedPNL: row.unrealized_pnl || 0,
+        realizedPNL: row.realized_pnl || 0,
+        exchange: row.exchange,
+        primaryExchange: row.primary_exchange,
+        conId: row.con_id,
+        closePrice: row.close_price
+      }));
+      
+      // Fetch fresh close prices from Yahoo Finance (no cache)
+      await this.fetchClosePricesFromYahoo(positions, mainAccountId, false);
+      
+      // Update database with new close prices and recalculate day changes
+      let updatedCount = 0;
+      for (const position of positions) {
+        if (!position.closePrice || !position.conId) continue;
+        
+        // Calculate day change
+        const closePrice = position.closePrice;
+        const lastPrice = position.marketPrice;
+        let dayChange = null;
+        let dayChangePercent = null;
+        
+        if (closePrice && lastPrice && closePrice > 0 && lastPrice !== closePrice) {
+          if (position.secType === 'BOND') {
+            dayChange = (lastPrice - closePrice) * position.position * 10;
+            dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
+          } else {
+            dayChange = (lastPrice - closePrice) * position.position;
+            dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
+          }
+        }
+        
+        // Update database
+        await dbRun(`
+          UPDATE portfolios 
+          SET 
+            close_price = ?,
+            day_change = ?,
+            day_change_percent = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE con_id = ? AND source = ? AND main_account_id = ?
+        `, [
+          position.closePrice,
+          dayChange,
+          dayChangePercent,
+          position.conId,
+          'IB',
+          mainAccountId
+        ]);
+        
+        updatedCount++;
+        Logger.debug(`Updated ${position.symbol}: close=${position.closePrice}, dayChange=${dayChange?.toFixed(2)}`);
+      }
+      
+      Logger.info(`✅ Refreshed close prices for ${updatedCount} IB positions`);
+      
+    } catch (error) {
+      Logger.error('Error refreshing IB close prices:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Refresh close prices for all users' IB accounts
+   */
+  static async refreshAllClosePrices(): Promise<void> {
+    try {
+      const { dbAll } = await import('../database/connection.js');
+      
+      Logger.info('🔄 Refreshing close prices for all IB accounts...');
+      
+      // Get all accounts with IB integration
+      const accounts = await dbAll(`
+        SELECT DISTINCT a.id, a.user_id, a.name
+        FROM accounts a
+        INNER JOIN account_integrations ai ON a.id = ai.account_id
+        WHERE ai.type = 'IB'
+      `);
+      
+      if (accounts.length === 0) {
+        Logger.info('No IB accounts found');
+        return;
+      }
+      
+      Logger.info(`Found ${accounts.length} IB account(s) to refresh`);
+      
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (const account of accounts) {
+        try {
+          await this.refreshClosePrices(account.id);
+          successCount++;
+        } catch (error) {
+          Logger.error(`Failed to refresh close prices for account ${account.name}:`, error);
+          errorCount++;
+        }
+      }
+      
+      Logger.info(`✅ Close price refresh complete: ${successCount} successful, ${errorCount} failed`);
+      
+    } catch (error) {
+      Logger.error('Error in refreshAllClosePrices:', error);
+      throw error;
+    }
   }
 }
