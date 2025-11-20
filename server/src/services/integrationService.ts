@@ -103,14 +103,10 @@ export class IntegrationService {
       });
 
       if (result && result.balance) {
-        // Update account balance
-        await AccountModel.update(accountId, userId, {
-          currentBalance: result.balance.balance
-        });
-
-        // Add balance history
-        await AccountModel.addBalanceHistory(
+        // Use helper to update account balance and add history
+        await AccountModel.updateBalanceWithHistory(
           accountId,
+          userId,
           result.balance.balance,
           'IB integration auto-refresh'
         );
@@ -147,14 +143,10 @@ export class IntegrationService {
       const result = await SchwabService.getAccountBalance(userId, config.accountHash);
 
       if (result && result.currentBalance) {
-        // Update account balance
-        await AccountModel.update(accountId, userId, {
-          currentBalance: result.currentBalance
-        });
-
-        // Add balance history
-        await AccountModel.addBalanceHistory(
+        // Use helper to update account balance and add history
+        await AccountModel.updateBalanceWithHistory(
           accountId,
+          userId,
           result.currentBalance,
           'Schwab integration auto-refresh'
         );

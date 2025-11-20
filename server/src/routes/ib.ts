@@ -19,8 +19,7 @@ async function getUserSettings(userId: number) {
 async function updateAccountAndPerformance(userId: number, accountId: number, balance: number, currency: string, note: string) {
   try {
     const { AccountModel } = await import('../models/Account.js');
-    await AccountModel.update(accountId, userId, { currentBalance: balance });
-    await AccountModel.addBalanceHistory(accountId, balance, note);
+    await AccountModel.updateBalanceWithHistory(accountId, userId, balance, note);
     Logger.debug(`💰 Updated account balance: ${balance} ${currency}`);
   } catch (error) {
     Logger.error('❌ Failed to update account balance:', error);

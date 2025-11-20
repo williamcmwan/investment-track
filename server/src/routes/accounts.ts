@@ -688,14 +688,10 @@ router.post('/:id/integration/refresh', async (req: AuthenticatedRequest, res) =
       });
 
       if (result && result.balance) {
-        // Update account balance
-        await AccountModel.update(accountId, req.user?.id || 0, {
-          currentBalance: result.balance.balance
-        });
-
-        // Add balance history
-        await AccountModel.addBalanceHistory(
+        // Use helper to update account balance and add history
+        await AccountModel.updateBalanceWithHistory(
           accountId,
+          req.user?.id || 0,
           result.balance.balance,
           'IB integration refresh'
         );
@@ -729,14 +725,10 @@ router.post('/:id/integration/refresh', async (req: AuthenticatedRequest, res) =
       );
 
       if (result && result.currentBalance) {
-        // Update account balance
-        await AccountModel.update(accountId, req.user?.id || 0, {
-          currentBalance: result.currentBalance
-        });
-
-        // Add balance history
-        await AccountModel.addBalanceHistory(
+        // Use helper to update account balance and add history
+        await AccountModel.updateBalanceWithHistory(
           accountId,
+          req.user?.id || 0,
           result.currentBalance,
           'Schwab integration refresh'
         );

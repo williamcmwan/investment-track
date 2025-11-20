@@ -282,12 +282,10 @@ router.get('/accounts/:accountHash/balance', async (req: AuthenticatedRequest, r
       const linkedAccountId = parseInt(accountId as string);
       if (!isNaN(linkedAccountId)) {
         try {
-          await AccountModel.update(linkedAccountId, userId, {
-            currentBalance: balance.currentBalance
-          });
-          
-          await AccountModel.addBalanceHistory(
+          // Use helper to update account balance and add history
+          await AccountModel.updateBalanceWithHistory(
             linkedAccountId,
+            userId,
             balance.currentBalance,
             'Schwab API refresh'
           );
