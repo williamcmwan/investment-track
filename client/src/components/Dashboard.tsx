@@ -90,6 +90,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const [integratedAccountsPortfolio, setIntegratedAccountsPortfolio] = useState<any[]>([]);
   const [integratedAccountsCash, setIntegratedAccountsCash] = useState<any[]>([]);
   const [expandedCurrencies, setExpandedCurrencies] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [performanceHistory, setPerformanceHistory] = useState<any[]>([]);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
   const [showPerformanceDetails, setShowPerformanceDetails] = useState(true);
@@ -1154,50 +1155,61 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     };
 
     // Calculate Portfolio Distribution
-    const portfolioDistribution = new Map<string, { value: number, items: Array<{name: string, category: string, value: number, source: string}> }>();
+    const portfolioDistribution = new Map<string, { value: number, items: Array<{name: string, category: string, value: number, source: string, originalValue: number, originalCurrency: string}> }>();
 
     // Helper to add to distribution
-    const addToPortfolio = (category: string, value: number, itemName: string, source: string) => {
+    const addToPortfolio = (category: string, value: number, itemName: string, source: string, originalValue: number, originalCurrency: string) => {
       const current = portfolioDistribution.get(category) || { value: 0, items: [] };
       current.value += value;
-      current.items.push({ name: itemName, category, value, source });
+      current.items.push({ name: itemName, category, value, source, originalValue, originalCurrency });
       portfolioDistribution.set(category, current);
     };
 
-    // Add IB portfolio positions
-    ibPortfolio.forEach(position => {
+    // Add integrated accounts portfolio (IB and Schwab) - separate by account type
+    integratedAccountsPortfolio.forEach(position => {
       if (position.marketValue && position.marketValue > 0) {
         const category = categorizePosition(position);
         const valueInBase = convertToBaseCurrency(position.marketValue, position.currency);
+        const source = position.accountType === 'IB' ? 'IB Portfolio' : 
+                      position.accountType === 'SCHWAB' ? 'Schwab Portfolio' : 
+                      'Integrated Portfolio';
         addToPortfolio(category, valueInBase,
-          `${position.symbol} (${position.secType || 'Unknown'})`, 'IB Portfolio');
+          `${position.symbol} (${position.secType || 'Unknown'})`, source, 
+          position.marketValue, position.currency);
       }
     });
 
-    // Add other portfolio positions
+    // Add other portfolio positions (manual)
     otherPortfolio.forEach(position => {
       if (position.marketPrice && position.quantity) {
         const category = categorizePosition(position);
         const marketValue = position.marketPrice * position.quantity;
         const valueInBase = convertToBaseCurrency(marketValue, position.currency);
         addToPortfolio(category, valueInBase,
-          `${position.symbol} (${position.secType || 'Unknown'})`, 'Other Portfolio');
+          `${position.symbol} (${position.secType || 'Unknown'})`, 'Other Portfolio',
+          marketValue, position.currency);
       }
     });
 
-    // Add IB cash balances
-    ibCashBalances.forEach(cash => {
-      if (cash.amount && cash.amount > 0) {
-        const valueInBase = convertToBaseCurrency(cash.amount, cash.currency);
-        addToPortfolio('CASH', valueInBase, `Cash - ${cash.currency}`, 'IB Cash Balance');
+    // Add integrated accounts cash (IB and Schwab) - separate by account type
+    integratedAccountsCash.forEach(cash => {
+      const amount = cash.balance || cash.amount || 0;
+      if (amount && amount > 0) {
+        const valueInBase = convertToBaseCurrency(amount, cash.currency);
+        const source = cash.accountType === 'IB' ? 'IB Cash' : 
+                      cash.accountType === 'SCHWAB' ? 'Schwab Cash' : 
+                      'Integrated Cash';
+        addToPortfolio('CASH', valueInBase, `Cash - ${cash.currency}`, source,
+          amount, cash.currency);
       }
     });
 
-    // Add other cash balances
+    // Add other cash balances (manual)
     otherCashBalances.forEach(cash => {
       if (cash.amount && cash.amount > 0) {
         const valueInBase = convertToBaseCurrency(cash.amount, cash.currency);
-        addToPortfolio('CASH', valueInBase, `Cash - ${cash.currency}`, 'Other Cash Balance');
+        addToPortfolio('CASH', valueInBase, `Cash - ${cash.currency}`, 'Other Cash',
+          cash.amount, cash.currency);
       }
     });
 
@@ -1205,7 +1217,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     accounts.filter(acc => acc.accountType === 'BANK').forEach(acc => {
       if (acc.currentBalance && acc.currentBalance > 0) {
         const valueInBase = convertToBaseCurrency(acc.currentBalance, acc.currency);
-        addToPortfolio('CASH', valueInBase, `${acc.name} (Bank Account)`, 'Bank Account');
+        addToPortfolio('CASH', valueInBase, `${acc.name} (Bank Account)`, 'Bank Account',
+          acc.currentBalance, acc.currency);
       }
     });
 
@@ -1215,10 +1228,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       if (asset.assetType?.toLowerCase().includes('real estate') ||
           asset.assetType?.toLowerCase().includes('property')) {
         addToPortfolio('REAL_ESTATE', valueInBase,
-          `${asset.asset} (${asset.assetType})`, 'Other Assets');
+          `${asset.asset} (${asset.assetType})`, 'Other Assets',
+          asset.marketValue, asset.currency);
       } else {
         addToPortfolio('OTHER', valueInBase,
-          `${asset.asset} (${asset.assetType})`, 'Other Assets');
+          `${asset.asset} (${asset.assetType})`, 'Other Assets',
+          asset.marketValue, asset.currency);
       }
     });
 
@@ -2232,15 +2247,49 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const data = payload[0].payload;
+                        // Group items by source
+                        const itemsBySource = data.items.reduce((acc: any, item: any) => {
+                          if (!acc[item.source]) {
+                            acc[item.source] = [];
+                          }
+                          acc[item.source].push(item);
+                          return acc;
+                        }, {});
+                        
                         return (
-                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                            <p className="font-medium text-foreground">{data.label}</p>
-                            <p className="text-sm text-muted-foreground">
+                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg max-w-xs">
+                            <p className="font-medium text-foreground mb-1">{data.label}</p>
+                            <p className="text-sm text-muted-foreground mb-2">
                               {formatCurrency(data.value, baseCurrency)} ({data.percentage.toFixed(1)}%)
                             </p>
-                            <p className="text-xs text-muted-foreground mt-1">
+                            <p className="text-xs text-muted-foreground mb-1">
                               {data.items.length} position{data.items.length !== 1 ? 's' : ''}
                             </p>
+                            <div className="text-xs text-muted-foreground space-y-1 mt-2 pt-2 border-t border-border/50 max-h-48 overflow-y-auto">
+                              {Object.entries(itemsBySource).map(([source, items]: [string, any]) => (
+                                <div key={source}>
+                                  <p className="font-medium text-foreground">{source}:</p>
+                                  {items.slice(0, 5).map((item: any, idx: number) => (
+                                    <div key={idx} className="flex justify-between items-start gap-2 ml-2">
+                                      <span className="truncate max-w-[120px]">{item.name}</span>
+                                      <span className="text-right ml-2">
+                                        {item.originalCurrency !== baseCurrency ? (
+                                          <>
+                                            <span className="block">{formatCurrency(item.originalValue, item.originalCurrency)}</span>
+                                            <span className="block text-muted-foreground/70 text-[10px]">≈ {formatCurrency(item.value, baseCurrency)}</span>
+                                          </>
+                                        ) : (
+                                          <span>{formatCurrency(item.value, baseCurrency)}</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  {items.length > 5 && (
+                                    <p className="ml-2 text-muted-foreground">...and {items.length - 5} more</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         );
                       }
@@ -2253,36 +2302,104 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
 
             {/* Legend and Details */}
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-primary" />
-                <h3 className="font-semibold text-sm text-foreground">Category Breakdown</h3>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  <h3 className="font-semibold text-sm text-foreground">Category Breakdown</h3>
+                </div>
+                {portfolioChartData.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      if (expandedCategories.size === portfolioChartData.length) {
+                        setExpandedCategories(new Set());
+                      } else {
+                        setExpandedCategories(new Set(portfolioChartData.map(item => item.category)));
+                      }
+                    }}
+                  >
+                    {expandedCategories.size === portfolioChartData.length ? 'Collapse All' : 'Expand All'}
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-1.5">
-                {portfolioChartData.map((item, index) => (
-                  <div key={item.category} className="flex items-center justify-between p-2 bg-background/30 rounded-md">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: portfolioColors[index % portfolioColors.length] }}
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{item.label}</p>
+                {portfolioChartData.map((item, index) => {
+                  const isExpanded = expandedCategories.has(item.category);
+                  const toggleExpand = () => {
+                    setExpandedCategories(prev => {
+                      const newSet = new Set(prev);
+                      if (newSet.has(item.category)) {
+                        newSet.delete(item.category);
+                      } else {
+                        newSet.add(item.category);
+                      }
+                      return newSet;
+                    });
+                  };
+                  
+                  return (
+                  <div key={item.category} className="p-2 bg-background/30 rounded-md">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-1">
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: portfolioColors[index % portfolioColors.length] }}
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-foreground">{item.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.items.length} position{item.items.length !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right mr-2">
+                        <p className="text-sm font-semibold text-foreground">
+                          {formatCurrency(item.value, baseCurrency)}
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                          {item.items.length} position{item.items.length !== 1 ? 's' : ''}
+                          {item.percentage.toFixed(1)}%
                         </p>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 hover:bg-primary/10"
+                        onClick={toggleExpand}
+                        title={isExpanded ? "Collapse" : "Expand"}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-foreground">
-                        {formatCurrency(item.value, baseCurrency)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.percentage.toFixed(1)}%
-                      </p>
+                    {/* Breakdown details - only show when expanded */}
+                    {isExpanded && (
+                    <div className="ml-5 mt-2 space-y-0.5 text-xs text-muted-foreground">
+                      {item.items.map((position, idx) => (
+                        <div key={idx} className="flex justify-between items-start gap-2">
+                          <span className="flex-1">• {position.name} ({position.source}):</span>
+                          <span className="text-right">
+                            {position.originalCurrency !== baseCurrency ? (
+                              <>
+                                <span className="block">{formatCurrency(position.originalValue, position.originalCurrency)}</span>
+                                <span className="block text-muted-foreground/70">≈ {formatCurrency(position.value, baseCurrency)}</span>
+                              </>
+                            ) : (
+                              <span>{formatCurrency(position.value, baseCurrency)}</span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
                     </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
 
                 {portfolioChartData.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
