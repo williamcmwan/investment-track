@@ -1,6 +1,8 @@
 # Investment Tracker
 
-A modern, full-stack investment tracking application built with React, Node.js, and SQLite. Features secure authentication with 2FA support, multi-currency tracking, and comprehensive portfolio analytics.
+**Version 1.1** - Portfolio Synchronization Revamp & Charles Schwab Integration
+
+A modern, full-stack investment tracking application built with React, Node.js, and SQLite. Features secure authentication with 2FA support, multi-currency tracking, comprehensive portfolio analytics, and seamless integration with Interactive Brokers and Charles Schwab.
 
 ## 🚀 Quick Start
 
@@ -42,6 +44,24 @@ A modern, full-stack investment tracking application built with React, Node.js, 
    - **API**: http://localhost:3002/api
    - **Health check**: http://localhost:3002/health
 
+## 🎉 What's New in v1.1
+
+### Major Features
+- ✅ **Charles Schwab Integration**: Full OAuth 2.0 integration with automatic portfolio sync
+- ✅ **Portfolio Synchronization Revamp**: Complete overhaul of data sync mechanism
+- ✅ **Enhanced Analytics**: Dual currency display, expand/collapse, CSV export
+- ✅ **Real-time Updates**: IB close prices refreshed every 30 minutes + on startup
+- ✅ **Improved Categorization**: Automatic asset classification for better insights
+- ✅ **Bond Price Handling**: End-of-day snapshot for accurate next-day calculations
+
+### Technical Improvements
+- ✅ **Optimized IB Service**: Subscription-based updates with better error handling
+- ✅ **Account-Level Integration**: Per-account configuration for IB and Schwab
+- ✅ **No Cache Policy**: Always fetch fresh close prices from Yahoo Finance
+- ✅ **Separated Data Sources**: Clear distinction between IB, Schwab, and manual data
+- ✅ **Enhanced Performance**: Better data consistency and accuracy
+- ✅ **Improved UI/UX**: Cleaner displays with better space utilization
+
 ## 🏗️ Architecture
 
 ```
@@ -66,21 +86,77 @@ investment-track/
 - CORS protection and rate limiting
 
 ### 💰 **Multi-Portfolio Management**
-- **Interactive Brokers Integration**: Real-time portfolio data with user-configurable connections
-- **Charles Schwab Integration**: Automatic account balance refresh via Schwab API (OAuth 2.0)
-- **Manual Investment Tracking**: Add positions from any broker with Yahoo Finance market data
-- **Bank Account Management**: Simple balance tracking without P&L calculations
-- **Multi-Currency Support**: Track investments across different currencies
+- **Interactive Brokers Integration**: 
+  - Real-time portfolio updates with subscription-based synchronization
+  - Automatic close price refresh from Yahoo Finance
+  - Real-time day change calculations
+  - Bond price snapshot at end of day for accurate P&L
+  - User-configurable connection settings per account
+  
+- **Charles Schwab Integration** (NEW in v1.1):
+  - OAuth 2.0 authentication with account-level tokens
+  - Automatic portfolio and balance refresh
+  - Position categorization (Equity → US Stocks, Fixed Income → Bonds)
+  - Seamless integration with existing portfolio analytics
+  
+- **Manual Investment Tracking**: 
+  - Add positions from any broker
+  - Yahoo Finance market data integration
+  - Automatic price updates every 30 minutes
+  
+- **Bank Account Management**: 
+  - Simple balance tracking without P&L calculations
+  - Multi-currency support
+  
+- **Multi-Currency Support**: 
+  - Track investments across different currencies
+  - Automatic exchange rate updates
+  - Currency P&L tracking
 
-### 📊 **Comprehensive Analytics**
-- **Performance Tracking**: Daily snapshots with P&L calculations
-- **Currency Exchange**: Automatic rate updates with profit/loss tracking
-- **Real-time Data**: Live portfolio updates with timestamp tracking
-- **Responsive Dashboard**: Modern UI with mobile support
+### 📊 **Enhanced Analytics** (NEW in v1.1)
+- **Performance Tracking**: 
+  - Daily snapshots with Total P&L, Investment P&L, and Currency P&L
+  - Historical performance charts with customizable time ranges
+  - Last updated timestamps
+  
+- **Currency Analytics**:
+  - Portfolio distribution by currency with pie charts
+  - Detailed breakdown by source (IB, Schwab, Other Portfolio, Bank Accounts)
+  - Dual currency display (original + converted to base currency)
+  - Expand/collapse functionality for space efficiency
+  - CSV export for analysis
+  
+- **Portfolio Analytics**:
+  - Asset categorization (Stocks by region, REITs, Bonds, Crypto, Cash)
+  - Automatic Schwab position categorization
+  - Detailed position breakdown with dual currency display
+  - Expand/collapse functionality
+  - CSV export for analysis
+  
+- **Real-time Data**: 
+  - Live portfolio updates with timestamp tracking
+  - Responsive dashboard with mobile support
 
-### 🔄 **Automatic Data Refresh**
-- **30-minute refresh cycle**: Currency → IB Portfolio → Manual Investments
-- **Smart IB refresh**: Only for users with configured IB settings
+### 🔄 **Automatic Data Refresh** (Enhanced in v1.1)
+- **30-minute refresh cycle**: 
+  1. Currency exchange rates
+  2. Manual investment market data
+  3. **IB close prices from Yahoo Finance** (NEW - always fresh, no cache)
+  
+- **Daily at 23:59**: 
+  - Copy IB bond prices to close prices for next day baseline
+  - Calculate daily performance snapshots
+  
+- **Every minute**: 
+  - Schwab portfolio refresh
+  
+- **Real-time**: 
+  - IB portfolio updates via Gateway subscription
+  - Day change calculations on every price update
+  
+- **On Startup**: 
+  - Fresh IB close price fetch from Yahoo Finance
+  
 - **Background processing**: Runs automatically without user intervention
 - **Timestamp tracking**: Shows last update times in UI
 
@@ -151,14 +227,19 @@ VITE_API_URL=http://localhost:3002/api
 
 Comprehensive documentation is available in the `docs/` directory:
 
+### 🚀 Getting Started
 - **[Repository Guidelines](docs/AGENTS.md)** - Coding standards, project structure, and development workflow
 - **[Database Schema](docs/DB_SCHEMA.md)** - Complete database structure and relationships
-- **[Logging System](docs/LOGGING.md)** - Structured logging configuration and usage
-- **[Memory Optimization](docs/MEMORY_OPTIMIZATION.md)** - Performance optimization techniques
-- **[Refresh System](docs/REFRESH_SYSTEM.md)** - Automatic data refresh system details
+
+### 🔌 Integrations
 - **[Schwab Integration](docs/SCHWAB_INTEGRATION.md)** - Charles Schwab API integration guide
 - **[Schwab Quick Start](docs/SCHWAB_QUICK_START.md)** - Quick setup guide for Schwab API
 - **[Schwab UI Guide](docs/SCHWAB_UI_GUIDE.md)** - User interface guide for Schwab integration
+
+### ⚙️ System Configuration
+- **[Logging System](docs/LOGGING.md)** - Structured logging configuration and usage
+- **[Refresh System](docs/REFRESH_SYSTEM.md)** - Automatic data refresh system details
+- **[Memory Optimization](docs/MEMORY_OPTIMIZATION.md)** - Performance optimization techniques
 
 ## 🚀 Deployment
 
