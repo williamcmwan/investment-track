@@ -464,7 +464,12 @@ export class SchwabService {
       return positions.map((pos: any) => {
         const quantity = pos.longQuantity || pos.shortQuantity || 0;
         const marketPrice = quantity > 0 ? pos.marketValue / quantity : 0;
-        const costBasis = (pos.averagePrice || 0) * quantity;
+        const assetType = pos.instrument.assetType;
+        const isBond = assetType === 'BOND' || assetType === 'FIXED_INCOME';
+        
+        // For bonds, Schwab's averagePrice is in different scale (needs *10 to match marketPrice)
+        const adjustedAvgCost = isBond ? (pos.averagePrice || 0) * 10 : (pos.averagePrice || 0);
+        const costBasis = adjustedAvgCost * quantity;
         const unrealizedPNL = (pos.marketValue || 0) - costBasis;
         
         // Calculate day change from netChange (price change per share) * quantity
@@ -478,10 +483,11 @@ export class SchwabService {
         
         return {
           symbol: pos.instrument.symbol,
-          secType: pos.instrument.assetType,
+          secType: assetType,
           currency: 'USD',
           position: quantity,
-          averageCost: pos.averagePrice || 0,
+          averageCost: pos.averagePrice || 0, // Keep original for display
+          adjustedAvgCost: adjustedAvgCost, // Add adjusted cost for calculations
           marketPrice: marketPrice,
           marketValue: pos.marketValue || 0,
           unrealizedPNL: unrealizedPNL,
