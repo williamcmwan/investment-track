@@ -30,8 +30,13 @@ interface PortfolioPosition {
   marketValue: number;
   averageCost: number;
   unrealizedPnL: number;
+  unrealizedPNL?: number;
   realizedPnL: number;
   currency: string;
+  dayChange?: number;
+  dayChangePercent?: number;
+  secType?: string;
+  conId?: number;
 }
 
 interface CashBalance {
@@ -58,10 +63,47 @@ export default function ConsolidatedPortfolioView({
     totalValue: number;
     lastUpdated?: string;
   }>>({});
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadAccounts();
+    fetchExchangeRates();
   }, []);
+
+  const fetchExchangeRates = async () => {
+    try {
+      // Get unique currencies from portfolio data
+      const currencies = new Set<string>();
+      Object.values(portfolioData).forEach(data => {
+        data.portfolio.forEach(pos => currencies.add(pos.currency));
+        data.cash.forEach(cash => currencies.add(cash.currency));
+      });
+
+      const rates: Record<string, number> = {};
+      for (const currency of currencies) {
+        if (currency === baseCurrency) {
+          rates[currency] = 1;
+        } else {
+          try {
+            const response = await apiClient.getExchangeRate(`${currency}/${baseCurrency}`);
+            rates[currency] = response.data?.rate || 1;
+          } catch {
+            rates[currency] = 1;
+          }
+        }
+      }
+      setExchangeRates(rates);
+    } catch (error) {
+      console.error('Failed to fetch exchange rates:', error);
+    }
+  };
+
+  // Refetch exchange rates when portfolio data changes
+  useEffect(() => {
+    if (Object.keys(portfolioData).length > 0) {
+      fetchExchangeRates();
+    }
+  }, [portfolioData]);
 
   const loadAccounts = async () => {
     try {
@@ -185,6 +227,12 @@ export default function ConsolidatedPortfolioView({
     } finally {
       setRefreshing(prev => ({ ...prev, [accountId]: false }));
     }
+  };
+
+  const convertToBaseCurrency = (amount: number, fromCurrency: string): number => {
+    if (fromCurrency === baseCurrency) return amount;
+    const rate = exchangeRates[fromCurrency] || 1;
+    return amount * rate;
   };
 
   const formatCurrency = (amount: number, currency: string = baseCurrency) => {
@@ -367,6 +415,64 @@ export default function ConsolidatedPortfolioView({
                               </tr>
                             );
                           })}
+                          {/* Totals Row */}
+                          {data.portfolio.length > 0 && (
+                            <tr className="border-t-2 border-primary/20 bg-muted/30 font-bold">
+                              <td className="p-2" colSpan={1}>TOTAL</td>
+                              <td className="text-right p-2">
+                                {(() => {
+                                  const totalDayChange = data.portfolio.reduce((sum, pos) => {
+                                    const dayChange = pos.dayChange || 0;
+                                    return sum + convertToBaseCurrency(dayChange, pos.currency);
+                                  }, 0);
+                                  const isPositive = totalDayChange >= 0;
+                                  return (
+                                    <div className={`flex flex-col items-end ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                      <div className="flex items-center gap-1">
+                                        {isPositive ? (
+                                          <TrendingUp className="h-3 w-3" />
+                                        ) : (
+                                          <TrendingDown className="h-3 w-3" />
+                                        )}
+                                        {formatCurrency(totalDayChange, baseCurrency)}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </td>
+                              <td className="p-2" colSpan={3}></td>
+                              <td className="text-right p-2">
+                                {(() => {
+                                  const totalUnrealizedPnL = data.portfolio.reduce((sum, pos) => {
+                                    const pnl = pos.unrealizedPNL || pos.unrealizedPnL || 0;
+                                    return sum + convertToBaseCurrency(pnl, pos.currency);
+                                  }, 0);
+                                  const isPositive = totalUnrealizedPnL >= 0;
+                                  return (
+                                    <div className={`flex flex-col items-end ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                      <div className="flex items-center gap-1">
+                                        {isPositive ? (
+                                          <TrendingUp className="h-3 w-3" />
+                                        ) : (
+                                          <TrendingDown className="h-3 w-3" />
+                                        )}
+                                        {formatCurrency(totalUnrealizedPnL, baseCurrency)}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </td>
+                              <td className="text-right p-2">
+                                {(() => {
+                                  const totalMarketValue = data.portfolio.reduce((sum, pos) => {
+                                    return sum + convertToBaseCurrency(pos.marketValue, pos.currency);
+                                  }, 0);
+                                  return formatCurrency(totalMarketValue, baseCurrency);
+                                })()}
+                              </td>
+                              <td className="p-2"></td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
