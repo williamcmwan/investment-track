@@ -23,7 +23,9 @@ import {
   Landmark,
   Building,
   PieChart as PieChartIcon,
-  RefreshCw
+  RefreshCw,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import AccountsView from "./AccountsView";
@@ -85,6 +87,9 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const [ibCashBalances, setIbCashBalances] = useState<any[]>([]);
   const [otherPortfolio, setOtherPortfolio] = useState<any[]>([]);
   const [otherCashBalances, setOtherCashBalances] = useState<any[]>([]);
+  const [integratedAccountsPortfolio, setIntegratedAccountsPortfolio] = useState<any[]>([]);
+  const [integratedAccountsCash, setIntegratedAccountsCash] = useState<any[]>([]);
+  const [expandedCurrencies, setExpandedCurrencies] = useState<Set<string>>(new Set());
   const [performanceHistory, setPerformanceHistory] = useState<any[]>([]);
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
   const [showPerformanceDetails, setShowPerformanceDetails] = useState(true);
@@ -94,6 +99,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     const saved = localStorage.getItem('dashboard-performance-days');
     return saved ? parseInt(saved, 10) : 30;
   });
+  const [lastPerformanceUpdate, setLastPerformanceUpdate] = useState<Date | null>(null);
   
   // Pagination constants
   const ITEMS_PER_PAGE = 30;
@@ -161,10 +167,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       loadAccounts();
       loadCurrencies();
       loadOtherAssets();
-      loadIBPortfolio();
-      loadIBCashBalances();
+      // Note: IB portfolio and cash are now loaded via loadIntegratedAccountsData()
+      // loadIBPortfolio();
+      // loadIBCashBalances();
       loadOtherPortfolio();
       loadOtherCashBalances();
+      loadIntegratedAccountsData();
     }
   }, [user]);
 
@@ -176,10 +184,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         loadAccounts();
         loadCurrencies();
         loadOtherAssets();
-        loadIBPortfolio();
-        loadIBCashBalances();
+        // Note: IB portfolio and cash are now loaded via loadIntegratedAccountsData()
+        // loadIBPortfolio();
+        // loadIBCashBalances();
         loadOtherPortfolio();
         loadOtherCashBalances();
+        loadIntegratedAccountsData();
         loadPerformanceHistory();
       } else if (currentView === "accounts") {
         loadAccounts();
@@ -187,10 +197,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         loadCurrencies();
       } else if (currentView === "portfolio") {
         loadAccounts();
-        loadIBPortfolio();
-        loadIBCashBalances();
+        // Note: IB portfolio and cash are now loaded via loadIntegratedAccountsData()
+        // loadIBPortfolio();
+        // loadIBCashBalances();
         loadOtherPortfolio();
         loadOtherCashBalances();
+        loadIntegratedAccountsData();
       } else if (currentView === "other-assets") {
         loadOtherAssets();
       }
@@ -200,10 +212,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Fetch exchange rates when any data source changes and user is authenticated
   useEffect(() => {
     if (user && (accounts.length > 0 || ibPortfolio.length > 0 || ibCashBalances.length > 0 ||
-        otherPortfolio.length > 0 || otherCashBalances.length > 0 || otherAssets.length > 0)) {
+        otherPortfolio.length > 0 || otherCashBalances.length > 0 || otherAssets.length > 0 ||
+        integratedAccountsPortfolio.length > 0 || integratedAccountsCash.length > 0)) {
       fetchExchangeRates();
     }
-  }, [accounts, ibPortfolio, ibCashBalances, otherPortfolio, otherCashBalances, otherAssets, baseCurrency, user]);
+  }, [accounts, ibPortfolio, ibCashBalances, otherPortfolio, otherCashBalances, otherAssets, 
+      integratedAccountsPortfolio, integratedAccountsCash, baseCurrency, user]);
 
   // Removed auto-refresh functionality - users can manually refresh from Currency Exchange page
 
@@ -249,6 +263,9 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         });
         // Chart will use performanceDays filter, so store all data
         setPerformanceHistory(sortedAsc);
+        
+        // Update last refresh time
+        setLastPerformanceUpdate(new Date());
       }
     } catch (error) {
       console.error('Error loading performance history:', error);
@@ -461,8 +478,10 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       const response = await apiClient.getIBPortfolio();
       if (response.data) {
         setIbPortfolio(response.data);
+        console.log('IB Portfolio loaded:', response.data);
       } else {
         console.error('Failed to load IB portfolio:', response.error);
+        setIbPortfolio([]);
       }
     } catch (error) {
       console.error('Error loading IB portfolio:', error);
@@ -475,10 +494,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const loadIBCashBalances = async () => {
     try {
       const response = await apiClient.getIBCashBalances();
-      if (response.data && response.data.data) {
-        setIbCashBalances(response.data.data);
+      if (response.data) {
+        setIbCashBalances(response.data);
+        console.log('IB Cash Balances loaded:', response.data);
       } else {
         console.error('Failed to load IB cash balances:', response.error);
+        setIbCashBalances([]);
       }
     } catch (error) {
       console.error('Error loading IB cash balances:', error);
@@ -513,6 +534,61 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     } catch (error) {
       console.error('Error loading other cash balances:', error);
       setOtherCashBalances([]);
+    }
+  };
+
+  // Load integrated accounts (IB and Schwab) portfolio and cash data
+  const loadIntegratedAccountsData = async () => {
+    try {
+      const accountsResponse = await apiClient.getAccounts();
+      if (!accountsResponse.data) return;
+
+      // Filter accounts that have integrations (IB or Schwab)
+      const integratedAccounts = accountsResponse.data.filter(
+        (acc: any) => acc.integrationType && acc.integrationType !== null
+      );
+
+      const allPortfolio: any[] = [];
+      const allCash: any[] = [];
+
+      // Load portfolio and cash for each integrated account
+      for (const account of integratedAccounts) {
+        try {
+          const [portfolioResponse, cashResponse] = await Promise.all([
+            apiClient.getAccountPortfolio(account.id),
+            apiClient.getAccountCash(account.id)
+          ]);
+
+          if (portfolioResponse.data?.portfolio) {
+            // Tag each position with the account type (IB or SCHWAB)
+            const taggedPortfolio = portfolioResponse.data.portfolio.map((pos: any) => ({
+              ...pos,
+              accountType: account.integrationType // 'IB' or 'SCHWAB'
+            }));
+            allPortfolio.push(...taggedPortfolio);
+          }
+
+          if (cashResponse.data?.cash) {
+            // Tag each cash balance with the account type (IB or SCHWAB)
+            const taggedCash = cashResponse.data.cash.map((cash: any) => ({
+              ...cash,
+              accountType: account.integrationType // 'IB' or 'SCHWAB'
+            }));
+            allCash.push(...taggedCash);
+          }
+        } catch (error) {
+          console.warn(`Failed to load portfolio for account ${account.name}:`, error);
+        }
+      }
+
+      setIntegratedAccountsPortfolio(allPortfolio);
+      setIntegratedAccountsCash(allCash);
+      console.log('Integrated Accounts Portfolio loaded:', allPortfolio);
+      console.log('Integrated Accounts Cash loaded:', allCash);
+    } catch (error) {
+      console.error('Error loading integrated accounts data:', error);
+      setIntegratedAccountsPortfolio([]);
+      setIntegratedAccountsCash([]);
     }
   };
 
@@ -577,6 +653,16 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       // Add currencies from other assets
       otherAssets.forEach(asset => {
         if (asset.currency) currenciesSet.add(asset.currency);
+      });
+
+      // Add currencies from integrated accounts portfolio
+      integratedAccountsPortfolio.forEach(pos => {
+        if (pos.currency) currenciesSet.add(pos.currency);
+      });
+
+      // Add currencies from integrated accounts cash
+      integratedAccountsCash.forEach(cash => {
+        if (cash.currency) currenciesSet.add(cash.currency);
       });
 
       const currencies = Array.from(currenciesSet);
@@ -850,29 +936,31 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         });
       });
       
-      // Add IB portfolio positions
-      ibPortfolio.forEach(position => {
-        if (position.marketValue && position.currency) {
-          csvData.push({
-            currency: position.currency,
-            source: 'IB Portfolio',
-            itemName: `${position.symbol} (${position.secType})`,
-            amount: position.marketValue
-          });
-        }
-      });
-      
-      // Add IB cash balances
-      ibCashBalances.forEach(cash => {
-        if (cash.amount && cash.currency) {
-          csvData.push({
-            currency: cash.currency,
-            source: 'IB Cash Balance',
-            itemName: `Cash - ${cash.currency}`,
-            amount: cash.amount
-          });
-        }
-      });
+      // Note: Legacy IB portfolio and cash are now included in integratedAccountsPortfolio/Cash
+      // to avoid double counting. Keeping these commented out for reference.
+      // // Add IB portfolio positions
+      // ibPortfolio.forEach(position => {
+      //   if (position.marketValue && position.currency) {
+      //     csvData.push({
+      //       currency: position.currency,
+      //       source: 'IB Portfolio',
+      //       itemName: `${position.symbol} (${position.secType})`,
+      //       amount: position.marketValue
+      //     });
+      //   }
+      // });
+      // 
+      // // Add IB cash balances
+      // ibCashBalances.forEach(cash => {
+      //   if (cash.amount && cash.currency) {
+      //     csvData.push({
+      //       currency: cash.currency,
+      //       source: 'IB Cash Balance',
+      //       itemName: `Cash - ${cash.currency}`,
+      //       amount: cash.amount
+      //     });
+      //   }
+      // });
       
       // Add other portfolio positions
       otherPortfolio.forEach(position => {
@@ -906,6 +994,38 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           itemName: `${asset.asset} (${asset.assetType})`,
           amount: asset.marketValue
         });
+      });
+      
+      // Add integrated accounts portfolio - separate IB and Schwab
+      integratedAccountsPortfolio.forEach(position => {
+        if (position.marketValue && position.currency) {
+          const source = position.accountType === 'IB' ? 'IB Portfolio' : 
+                        position.accountType === 'SCHWAB' ? 'Schwab Portfolio' : 
+                        'Integrated Portfolio';
+          csvData.push({
+            currency: position.currency,
+            source: source,
+            itemName: `${position.symbol} (${position.secType || 'Unknown'})`,
+            amount: position.marketValue
+          });
+        }
+      });
+      
+      // Add integrated accounts cash - separate IB and Schwab
+      integratedAccountsCash.forEach(cash => {
+        const currency = cash.currency;
+        const amount = cash.balance || cash.amount || 0;
+        if (amount && currency) {
+          const source = cash.accountType === 'IB' ? 'IB Cash' : 
+                        cash.accountType === 'SCHWAB' ? 'Schwab Cash' : 
+                        'Integrated Cash';
+          csvData.push({
+            currency: currency,
+            source: source,
+            itemName: `Cash - ${currency}`,
+            amount: amount
+          });
+        }
       });
       
       // Sort by currency, then by source
@@ -1152,60 +1272,145 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       "#00ffff"
     ];
 
-    // Calculate Currency Distribution
-    const currencyDistribution = new Map<string, number>();
+    // Calculate Currency Distribution with detailed breakdown
+    const currencyDistribution = new Map<string, {
+      total: number;
+      bankAccounts: number;
+      ibPortfolio: number;
+      ibCash: number;
+      schwabPortfolio: number;
+      schwabCash: number;
+      otherPortfolio: number;
+      otherCash: number;
+      otherAssets: number;
+    }>();
+
+    const initCurrency = (currency: string) => {
+      if (!currencyDistribution.has(currency)) {
+        currencyDistribution.set(currency, {
+          total: 0,
+          bankAccounts: 0,
+          ibPortfolio: 0,
+          ibCash: 0,
+          schwabPortfolio: 0,
+          schwabCash: 0,
+          otherPortfolio: 0,
+          otherCash: 0,
+          otherAssets: 0
+        });
+      }
+      return currencyDistribution.get(currency)!;
+    };
 
     // Add bank accounts
     accounts.filter(acc => acc.accountType === 'BANK').forEach(acc => {
-      const current = currencyDistribution.get(acc.currency) || 0;
-      currencyDistribution.set(acc.currency, current + acc.currentBalance);
+      const data = initCurrency(acc.currency);
+      data.bankAccounts += acc.currentBalance;
+      data.total += acc.currentBalance;
     });
     
-    // Add IB portfolio positions
-    ibPortfolio.forEach(position => {
-      if (position.marketValue && position.currency) {
-        const current = currencyDistribution.get(position.currency) || 0;
-        currencyDistribution.set(position.currency, current + position.marketValue);
-      }
-    });
-    
-    // Add IB cash balances
-    ibCashBalances.forEach(cash => {
-      if (cash.amount && cash.currency) {
-        const current = currencyDistribution.get(cash.currency) || 0;
-        currencyDistribution.set(cash.currency, current + cash.amount);
-      }
-    });
+    // Note: Legacy IB portfolio and cash are now included in integratedAccountsPortfolio/Cash
+    // to avoid double counting. Keeping these commented out for reference.
+    // // Add IB portfolio positions
+    // ibPortfolio.forEach(position => {
+    //   if (position.marketValue && position.currency) {
+    //     const data = initCurrency(position.currency);
+    //     data.ibPortfolio += position.marketValue;
+    //     data.total += position.marketValue;
+    //   }
+    // });
+    // 
+    // // Add IB cash balances
+    // ibCashBalances.forEach(cash => {
+    //   if (cash.amount && cash.currency) {
+    //     const data = initCurrency(cash.currency);
+    //     data.ibCash += cash.amount;
+    //     data.total += cash.amount;
+    //   }
+    // });
     
     // Add other portfolio positions
     otherPortfolio.forEach(position => {
       if (position.marketPrice && position.quantity && position.currency) {
-        const current = currencyDistribution.get(position.currency) || 0;
-        currencyDistribution.set(position.currency, current + (position.marketPrice * position.quantity));
+        const marketValue = position.marketPrice * position.quantity;
+        const data = initCurrency(position.currency);
+        data.otherPortfolio += marketValue;
+        data.total += marketValue;
       }
     });
     
     // Add other portfolio cash balances
     otherCashBalances.forEach(cash => {
       if (cash.amount && cash.currency) {
-        const current = currencyDistribution.get(cash.currency) || 0;
-        currencyDistribution.set(cash.currency, current + cash.amount);
+        const data = initCurrency(cash.currency);
+        data.otherCash += cash.amount;
+        data.total += cash.amount;
       }
     });
     
     // Add other assets
     otherAssets.forEach(asset => {
-      const current = currencyDistribution.get(asset.currency) || 0;
-      currencyDistribution.set(asset.currency, current + asset.marketValue);
+      const data = initCurrency(asset.currency);
+      data.otherAssets += asset.marketValue;
+      data.total += asset.marketValue;
     });
     
-    // Convert to chart data with colors
+    // Add integrated accounts portfolio - separate IB and Schwab
+    integratedAccountsPortfolio.forEach(position => {
+      if (position.marketValue && position.currency) {
+        const data = initCurrency(position.currency);
+        if (position.accountType === 'IB') {
+          data.ibPortfolio += position.marketValue;
+        } else if (position.accountType === 'SCHWAB') {
+          data.schwabPortfolio += position.marketValue;
+        }
+        data.total += position.marketValue;
+      }
+    });
+    
+    // Add integrated accounts cash - separate IB and Schwab
+    integratedAccountsCash.forEach(cash => {
+      const currency = cash.currency;
+      const amount = cash.balance || cash.amount || 0;
+      if (amount && currency) {
+        const data = initCurrency(currency);
+        if (cash.accountType === 'IB') {
+          data.ibCash += amount;
+        } else if (cash.accountType === 'SCHWAB') {
+          data.schwabCash += amount;
+        }
+        data.total += amount;
+      }
+    });
+    
+    // Debug logging
+    console.log('Currency Distribution Debug:', {
+      bankAccountsCount: accounts.filter(acc => acc.accountType === 'BANK').length,
+      otherPortfolioCount: otherPortfolio.length,
+      otherCashBalancesCount: otherCashBalances.length,
+      integratedPortfolioCount: integratedAccountsPortfolio.length,
+      integratedCashCount: integratedAccountsCash.length,
+      otherAssetsCount: otherAssets.length,
+      currencyDistribution: Array.from(currencyDistribution.entries())
+    });
+    
+    // Convert to chart data with colors and breakdown
     const currencyChartData = Array.from(currencyDistribution.entries())
-      .map(([currency, value]) => ({
+      .map(([currency, data]) => ({
         currency,
-        value,
-        valueHKD: convertToBaseCurrency(value, currency),
-        percentage: 0 // Will be calculated below
+        value: data.total,
+        valueHKD: convertToBaseCurrency(data.total, currency),
+        percentage: 0, // Will be calculated below
+        breakdown: {
+          bankAccounts: data.bankAccounts,
+          ibPortfolio: data.ibPortfolio,
+          ibCash: data.ibCash,
+          schwabPortfolio: data.schwabPortfolio,
+          schwabCash: data.schwabCash,
+          otherPortfolio: data.otherPortfolio,
+          otherCash: data.otherCash,
+          otherAssets: data.otherAssets
+        }
       }))
       .filter(item => item.valueHKD > 0)
       .sort((a, b) => b.valueHKD - a.valueHKD);
@@ -1236,7 +1441,19 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         <Card className="bg-gradient-card border-border shadow-card">
           <CardHeader className="pb-2 md:pb-6 flex flex-col gap-3">
             <div className="flex flex-row items-start md:items-center justify-between gap-3">
-              <CardTitle className="text-sm md:text-base text-foreground">Performance Overview</CardTitle>
+              <div>
+                <CardTitle className="text-sm md:text-base text-foreground">Performance Overview</CardTitle>
+                {lastPerformanceUpdate && (
+                  <CardDescription className="text-xs text-muted-foreground mt-1">
+                    Last updated: {lastPerformanceUpdate.toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </CardDescription>
+                )}
+              </div>
               <div className="flex items-center gap-2 ml-auto">
                 <CardDescription className="text-xs md:text-sm hidden md:block">Profit & Loss trends over time</CardDescription>
                 <Button
@@ -1742,14 +1959,64 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                       if (active && payload && payload.length) {
                         const data = payload[0].payload;
                         return (
-                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-                            <p className="font-medium text-foreground">{data.currency}</p>
-                            <p className="text-sm text-muted-foreground">
+                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg max-w-xs">
+                            <p className="font-medium text-foreground mb-1">{data.currency}</p>
+                            <p className="text-sm text-muted-foreground mb-2">
                               {formatCurrency(data.valueHKD, baseCurrency)} ({data.percentage.toFixed(1)}%)
                             </p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-foreground mb-1">
                               Original: {formatCurrency(data.value, data.currency)}
                             </p>
+                            <div className="text-xs text-muted-foreground space-y-0.5 mt-2 pt-2 border-t border-border/50">
+                              {data.breakdown.bankAccounts > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Bank Accounts:</span>
+                                  <span>{formatCurrency(data.breakdown.bankAccounts, data.currency)}</span>
+                                </div>
+                              )}
+                              {data.breakdown.ibPortfolio > 0 && (
+                                <div className="flex justify-between">
+                                  <span>IB Portfolio:</span>
+                                  <span>{formatCurrency(data.breakdown.ibPortfolio, data.currency)}</span>
+                                </div>
+                              )}
+                              {data.breakdown.ibCash > 0 && (
+                                <div className="flex justify-between">
+                                  <span>IB Cash:</span>
+                                  <span>{formatCurrency(data.breakdown.ibCash, data.currency)}</span>
+                                </div>
+                              )}
+                              {data.breakdown.otherPortfolio > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Other Portfolio:</span>
+                                  <span>{formatCurrency(data.breakdown.otherPortfolio, data.currency)}</span>
+                                </div>
+                              )}
+                              {data.breakdown.otherCash > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Other Cash:</span>
+                                  <span>{formatCurrency(data.breakdown.otherCash, data.currency)}</span>
+                                </div>
+                              )}
+                              {data.breakdown.otherAssets > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Other Assets:</span>
+                                  <span>{formatCurrency(data.breakdown.otherAssets, data.currency)}</span>
+                                </div>
+                              )}
+                              {data.breakdown.schwabPortfolio > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Schwab Portfolio:</span>
+                                  <span>{formatCurrency(data.breakdown.schwabPortfolio, data.currency)}</span>
+                                </div>
+                              )}
+                              {data.breakdown.schwabCash > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Schwab Cash:</span>
+                                  <span>{formatCurrency(data.breakdown.schwabCash, data.currency)}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         );
                       }
@@ -1762,36 +2029,137 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
 
             {/* Legend and Details */}
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <PieChartIcon className="h-4 w-4 text-primary" />
-                <h3 className="font-semibold text-sm text-foreground">Currency Breakdown</h3>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <PieChartIcon className="h-4 w-4 text-primary" />
+                  <h3 className="font-semibold text-sm text-foreground">Currency Breakdown</h3>
+                </div>
+                {currencyChartData.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      if (expandedCurrencies.size === currencyChartData.length) {
+                        setExpandedCurrencies(new Set());
+                      } else {
+                        setExpandedCurrencies(new Set(currencyChartData.map(item => item.currency)));
+                      }
+                    }}
+                  >
+                    {expandedCurrencies.size === currencyChartData.length ? 'Collapse All' : 'Expand All'}
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-1.5">
-                {currencyChartData.map((item, index) => (
-                  <div key={item.currency} className="flex items-center justify-between p-2 bg-background/30 rounded-md">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: currencyColors[index % currencyColors.length] }}
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{item.currency}</p>
+                {currencyChartData.map((item, index) => {
+                  const isExpanded = expandedCurrencies.has(item.currency);
+                  const toggleExpand = () => {
+                    setExpandedCurrencies(prev => {
+                      const newSet = new Set(prev);
+                      if (newSet.has(item.currency)) {
+                        newSet.delete(item.currency);
+                      } else {
+                        newSet.add(item.currency);
+                      }
+                      return newSet;
+                    });
+                  };
+                  
+                  return (
+                  <div key={item.currency} className="p-2 bg-background/30 rounded-md">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-1">
+                        <div
+                          className="w-3 h-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: currencyColors[index % currencyColors.length] }}
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-foreground">{item.currency}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatCurrency(item.value, item.currency)} original
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right mr-2">
+                        <p className="text-sm font-semibold text-foreground">
+                          {formatCurrency(item.valueHKD, baseCurrency)}
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                          {formatCurrency(item.value, item.currency)} original
+                          {item.percentage.toFixed(1)}%
                         </p>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 hover:bg-primary/10"
+                        onClick={toggleExpand}
+                        title={isExpanded ? "Collapse" : "Expand"}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-foreground">
-                        {formatCurrency(item.valueHKD, baseCurrency)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.percentage.toFixed(1)}%
-                      </p>
+                    {/* Breakdown details - only show when expanded */}
+                    {isExpanded && (
+                    <div className="ml-5 mt-2 space-y-0.5 text-xs text-muted-foreground">
+                      {item.breakdown.bankAccounts > 0 && (
+                        <div className="flex justify-between">
+                          <span>• Bank Accounts:</span>
+                          <span>{formatCurrency(item.breakdown.bankAccounts, item.currency)}</span>
+                        </div>
+                      )}
+                      {item.breakdown.ibPortfolio > 0 && (
+                        <div className="flex justify-between">
+                          <span>• IB Portfolio:</span>
+                          <span>{formatCurrency(item.breakdown.ibPortfolio, item.currency)}</span>
+                        </div>
+                      )}
+                      {item.breakdown.ibCash > 0 && (
+                        <div className="flex justify-between">
+                          <span>• IB Cash:</span>
+                          <span>{formatCurrency(item.breakdown.ibCash, item.currency)}</span>
+                        </div>
+                      )}
+                      {item.breakdown.otherPortfolio > 0 && (
+                        <div className="flex justify-between">
+                          <span>• Other Portfolio:</span>
+                          <span>{formatCurrency(item.breakdown.otherPortfolio, item.currency)}</span>
+                        </div>
+                      )}
+                      {item.breakdown.otherCash > 0 && (
+                        <div className="flex justify-between">
+                          <span>• Other Cash:</span>
+                          <span>{formatCurrency(item.breakdown.otherCash, item.currency)}</span>
+                        </div>
+                      )}
+                      {item.breakdown.otherAssets > 0 && (
+                        <div className="flex justify-between">
+                          <span>• Other Assets:</span>
+                          <span>{formatCurrency(item.breakdown.otherAssets, item.currency)}</span>
+                        </div>
+                      )}
+                      {item.breakdown.schwabPortfolio > 0 && (
+                        <div className="flex justify-between">
+                          <span>• Schwab Portfolio:</span>
+                          <span>{formatCurrency(item.breakdown.schwabPortfolio, item.currency)}</span>
+                        </div>
+                      )}
+                      {item.breakdown.schwabCash > 0 && (
+                        <div className="flex justify-between">
+                          <span>• Schwab Cash:</span>
+                          <span>{formatCurrency(item.breakdown.schwabCash, item.currency)}</span>
+                        </div>
+                      )}
                     </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
                 
                 {currencyChartData.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
