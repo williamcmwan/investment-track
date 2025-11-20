@@ -12,6 +12,7 @@ interface Account {
   userId: number;
   name: string;
   currency: string;
+  accountType?: string;
   originalCapital: number;
   currentBalance: number;
   lastUpdated: string;
@@ -56,6 +57,7 @@ export default function ConsolidatedPortfolioView({
 }: ConsolidatedPortfolioViewProps) {
   const { toast } = useToast();
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]); // All accounts for Other Portfolio
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState<Record<number, boolean>>({});
   const [portfolioData, setPortfolioData] = useState<Record<number, {
@@ -115,7 +117,13 @@ export default function ConsolidatedPortfolioView({
       const response = await apiClient.getAccounts();
       
       if (response.data) {
-        // Filter accounts that have integrations configured
+        // Filter investment accounts only (exclude bank accounts) for Other Portfolio tab
+        const investmentAccounts = response.data.filter(
+          (acc: Account) => !acc.accountType || acc.accountType === 'INVESTMENT'
+        );
+        setAllAccounts(investmentAccounts);
+        
+        // Filter accounts that have integrations configured for IB/Schwab tabs
         const integratedAccounts = response.data.filter(
           (acc: Account) => acc.integrationType && acc.integrationType !== null
         );
@@ -565,7 +573,7 @@ export default function ConsolidatedPortfolioView({
         {/* Other Portfolio Tab */}
         <TabsContent value="other">
           <OtherPortfolioView 
-            accounts={accounts}
+            accounts={allAccounts}
           />
         </TabsContent>
       </Tabs>
