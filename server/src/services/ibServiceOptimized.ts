@@ -1183,10 +1183,9 @@ export class IBServiceOptimized {
       
       // Get all accounts with IB integration
       const accounts = await dbAll(`
-        SELECT DISTINCT a.id, a.user_id, a.name
-        FROM accounts a
-        INNER JOIN account_integrations ai ON a.id = ai.account_id
-        WHERE ai.type = 'IB'
+        SELECT DISTINCT id, user_id, name
+        FROM accounts
+        WHERE integration_type = 'IB'
       `);
       
       if (accounts.length === 0) {
