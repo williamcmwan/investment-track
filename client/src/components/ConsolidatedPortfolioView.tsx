@@ -41,7 +41,8 @@ interface PortfolioPosition {
 
 interface CashBalance {
   currency: string;
-  balance: number;
+  balance?: number;
+  amount?: number;
 }
 
 interface ConsolidatedPortfolioViewProps {
@@ -492,21 +493,63 @@ export default function ConsolidatedPortfolioView({
                         <thead>
                           <tr className="border-b">
                             <th className="text-left p-2 font-medium">Currency</th>
-                            <th className="text-right p-2 font-medium">Amount</th>
+                            <th className="text-right p-2 font-medium">Amount (Original)</th>
+                            <th className="text-right p-2 font-medium">Amount (USD)</th>
+                            <th className="text-right p-2 font-medium">Amount (HKD)</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {data.cash.map((cash: any, index: number) => (
-                            <tr key={`${account.id}-cash-${cash.currency}-${index}`} className="border-b hover:bg-muted/50">
-                              <td className="p-2 flex items-center gap-2">
-                                <DollarSign className="h-4 w-4 text-muted-foreground" />
-                                <span className="font-medium">{cash.currency}</span>
-                              </td>
-                              <td className="text-right p-2 font-medium">
-                                {formatCurrency(cash.balance || cash.amount, cash.currency)}
-                              </td>
-                            </tr>
-                          ))}
+                          {data.cash.map((cash: any, index: number) => {
+                            const amount = cash.balance || cash.amount;
+                            const amountInHKD = convertToBaseCurrency(amount, cash.currency);
+                            // Convert to USD: first to HKD, then HKD to USD
+                            const usdRate = exchangeRates['USD'] || 1;
+                            const amountInUSD = usdRate > 0 ? amountInHKD / usdRate : 0;
+                            
+                            return (
+                              <tr key={`${account.id}-cash-${cash.currency}-${index}`} className="border-b hover:bg-muted/50">
+                                <td className="p-2 flex items-center gap-2">
+                                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-medium">{cash.currency}</span>
+                                </td>
+                                <td className="text-right p-2 font-medium">
+                                  {formatCurrency(amount, cash.currency)}
+                                </td>
+                                <td className="text-right p-2">
+                                  {formatCurrency(amountInUSD, 'USD')}
+                                </td>
+                                <td className="text-right p-2">
+                                  {formatCurrency(amountInHKD, 'HKD')}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {/* Totals Row */}
+                          <tr className="border-t-2 border-primary/20 bg-muted/30 font-bold">
+                            <td className="p-2">TOTAL</td>
+                            <td className="p-2"></td>
+                            <td className="text-right p-2">
+                              {(() => {
+                                const totalUSD = data.cash.reduce((sum, cash) => {
+                                  const amount = cash.balance || cash.amount;
+                                  const amountInHKD = convertToBaseCurrency(amount, cash.currency);
+                                  const usdRate = exchangeRates['USD'] || 1;
+                                  const amountInUSD = usdRate > 0 ? amountInHKD / usdRate : 0;
+                                  return sum + amountInUSD;
+                                }, 0);
+                                return formatCurrency(totalUSD, 'USD');
+                              })()}
+                            </td>
+                            <td className="text-right p-2">
+                              {(() => {
+                                const totalHKD = data.cash.reduce((sum, cash) => {
+                                  const amount = cash.balance || cash.amount;
+                                  return sum + convertToBaseCurrency(amount, cash.currency);
+                                }, 0);
+                                return formatCurrency(totalHKD, 'HKD');
+                              })()}
+                            </td>
+                          </tr>
                         </tbody>
                       </table>
                     </div>
