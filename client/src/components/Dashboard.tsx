@@ -1217,7 +1217,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     accounts.filter(acc => acc.accountType === 'BANK').forEach(acc => {
       if (acc.currentBalance && acc.currentBalance > 0) {
         const valueInBase = convertToBaseCurrency(acc.currentBalance, acc.currency);
-        addToPortfolio('CASH', valueInBase, `${acc.name} (Bank Account)`, 'Bank Account',
+        addToPortfolio('CASH', valueInBase, acc.name, 'Bank Account',
           acc.currentBalance, acc.currency);
       }
     });
@@ -2123,51 +2123,91 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                     {isExpanded && (
                     <div className="ml-5 mt-2 space-y-0.5 text-xs text-muted-foreground">
                       {item.breakdown.bankAccounts > 0 && (
-                        <div className="flex justify-between">
-                          <span>• Bank Accounts:</span>
-                          <span>{formatCurrency(item.breakdown.bankAccounts, item.currency)}</span>
+                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                          <span>• Bank Accounts</span>
+                          <span className="text-right whitespace-nowrap">
+                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.bankAccounts, item.currency) : ''}
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            {formatCurrency(convertToBaseCurrency(item.breakdown.bankAccounts, item.currency), baseCurrency)}
+                          </span>
                         </div>
                       )}
                       {item.breakdown.ibPortfolio > 0 && (
-                        <div className="flex justify-between">
-                          <span>• IB Portfolio:</span>
-                          <span>{formatCurrency(item.breakdown.ibPortfolio, item.currency)}</span>
+                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                          <span>• IB Portfolio</span>
+                          <span className="text-right whitespace-nowrap">
+                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.ibPortfolio, item.currency) : ''}
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            {formatCurrency(convertToBaseCurrency(item.breakdown.ibPortfolio, item.currency), baseCurrency)}
+                          </span>
                         </div>
                       )}
                       {item.breakdown.ibCash > 0 && (
-                        <div className="flex justify-between">
-                          <span>• IB Cash:</span>
-                          <span>{formatCurrency(item.breakdown.ibCash, item.currency)}</span>
+                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                          <span>• IB Cash</span>
+                          <span className="text-right whitespace-nowrap">
+                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.ibCash, item.currency) : ''}
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            {formatCurrency(convertToBaseCurrency(item.breakdown.ibCash, item.currency), baseCurrency)}
+                          </span>
                         </div>
                       )}
                       {item.breakdown.otherPortfolio > 0 && (
-                        <div className="flex justify-between">
-                          <span>• Other Portfolio:</span>
-                          <span>{formatCurrency(item.breakdown.otherPortfolio, item.currency)}</span>
+                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                          <span>• Other Portfolio</span>
+                          <span className="text-right whitespace-nowrap">
+                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.otherPortfolio, item.currency) : ''}
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            {formatCurrency(convertToBaseCurrency(item.breakdown.otherPortfolio, item.currency), baseCurrency)}
+                          </span>
                         </div>
                       )}
                       {item.breakdown.otherCash > 0 && (
-                        <div className="flex justify-between">
-                          <span>• Other Cash:</span>
-                          <span>{formatCurrency(item.breakdown.otherCash, item.currency)}</span>
+                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                          <span>• Other Cash</span>
+                          <span className="text-right whitespace-nowrap">
+                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.otherCash, item.currency) : ''}
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            {formatCurrency(convertToBaseCurrency(item.breakdown.otherCash, item.currency), baseCurrency)}
+                          </span>
                         </div>
                       )}
                       {item.breakdown.otherAssets > 0 && (
-                        <div className="flex justify-between">
-                          <span>• Other Assets:</span>
-                          <span>{formatCurrency(item.breakdown.otherAssets, item.currency)}</span>
+                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                          <span>• Other Assets</span>
+                          <span className="text-right whitespace-nowrap">
+                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.otherAssets, item.currency) : ''}
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            {formatCurrency(convertToBaseCurrency(item.breakdown.otherAssets, item.currency), baseCurrency)}
+                          </span>
                         </div>
                       )}
                       {item.breakdown.schwabPortfolio > 0 && (
-                        <div className="flex justify-between">
-                          <span>• Schwab Portfolio:</span>
-                          <span>{formatCurrency(item.breakdown.schwabPortfolio, item.currency)}</span>
+                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                          <span>• Schwab Portfolio</span>
+                          <span className="text-right whitespace-nowrap">
+                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.schwabPortfolio, item.currency) : ''}
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            {formatCurrency(convertToBaseCurrency(item.breakdown.schwabPortfolio, item.currency), baseCurrency)}
+                          </span>
                         </div>
                       )}
                       {item.breakdown.schwabCash > 0 && (
-                        <div className="flex justify-between">
-                          <span>• Schwab Cash:</span>
-                          <span>{formatCurrency(item.breakdown.schwabCash, item.currency)}</span>
+                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                          <span>• Schwab Cash</span>
+                          <span className="text-right whitespace-nowrap">
+                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.schwabCash, item.currency) : ''}
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            {formatCurrency(convertToBaseCurrency(item.breakdown.schwabCash, item.currency), baseCurrency)}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -2380,21 +2420,30 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                     {/* Breakdown details - only show when expanded */}
                     {isExpanded && (
                     <div className="ml-5 mt-2 space-y-0.5 text-xs text-muted-foreground">
-                      {item.items.map((position, idx) => (
-                        <div key={idx} className="flex justify-between items-start gap-2">
-                          <span className="flex-1">• {position.name} ({position.source}):</span>
-                          <span className="text-right">
-                            {position.originalCurrency !== baseCurrency ? (
-                              <>
-                                <span className="block">{formatCurrency(position.originalValue, position.originalCurrency)}</span>
-                                <span className="block text-muted-foreground/70">≈ {formatCurrency(position.value, baseCurrency)}</span>
-                              </>
-                            ) : (
-                              <span>{formatCurrency(position.value, baseCurrency)}</span>
-                            )}
+                      {item.items.map((position, idx) => {
+                        // Simplify source labels
+                        let simplifiedSource = position.source;
+                        if (position.source === 'Schwab Cash') simplifiedSource = 'Schwab';
+                        else if (position.source === 'IB Cash') simplifiedSource = 'IB';
+                        else if (position.source === 'Other Cash') simplifiedSource = 'Other';
+                        else if (position.source === 'Bank Account') simplifiedSource = '';
+                        else if (position.source === 'Other Assets') simplifiedSource = '';
+                        else if (position.source === 'Schwab Portfolio') simplifiedSource = 'Schwab';
+                        else if (position.source === 'IB Portfolio') simplifiedSource = 'IB';
+                        else if (position.source === 'Other Portfolio') simplifiedSource = 'Other';
+                        
+                        return (
+                        <div key={idx} className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                          <span className="truncate">• {position.name}{simplifiedSource && ` (${simplifiedSource})`}</span>
+                          <span className="text-right whitespace-nowrap">
+                            {position.originalCurrency !== baseCurrency ? formatCurrency(position.originalValue, position.originalCurrency) : ''}
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            {formatCurrency(position.value, baseCurrency)}
                           </span>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     )}
                   </div>
