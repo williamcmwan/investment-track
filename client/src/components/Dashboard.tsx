@@ -168,6 +168,35 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     }
   }, [user]);
 
+  // Reload data when view changes to ensure fresh data
+  useEffect(() => {
+    if (user) {
+      // Reload data based on current view
+      if (currentView === "overview") {
+        loadAccounts();
+        loadCurrencies();
+        loadOtherAssets();
+        loadIBPortfolio();
+        loadIBCashBalances();
+        loadOtherPortfolio();
+        loadOtherCashBalances();
+        loadPerformanceHistory();
+      } else if (currentView === "accounts") {
+        loadAccounts();
+      } else if (currentView === "currency") {
+        loadCurrencies();
+      } else if (currentView === "portfolio") {
+        loadAccounts();
+        loadIBPortfolio();
+        loadIBCashBalances();
+        loadOtherPortfolio();
+        loadOtherCashBalances();
+      } else if (currentView === "other-assets") {
+        loadOtherAssets();
+      }
+    }
+  }, [currentView, user]);
+
   // Fetch exchange rates when any data source changes and user is authenticated
   useEffect(() => {
     if (user && (accounts.length > 0 || ibPortfolio.length > 0 || ibCashBalances.length > 0 ||
