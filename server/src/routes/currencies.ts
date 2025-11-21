@@ -85,14 +85,7 @@ router.post('/update-rates-enhanced', authenticateToken, async (req: Authenticat
     const userId = req.user?.id || 0;
     await ExchangeRateService.updateAllCurrencyPairs(userId, true); // Force refresh for manual updates
     
-    // Recalculate today's performance snapshot after currency update
-    try {
-      const { PerformanceHistoryService } = await import('../services/performanceHistoryService.js');
-      await PerformanceHistoryService.calculateTodaySnapshot(userId);
-      Logger.info(`📈 Updated performance snapshot after enhanced currency refresh`);
-    } catch (performanceError) {
-      Logger.error(`❌ Failed to update performance snapshot:`, performanceError);
-    }
+    // Note: Performance snapshot calculation removed - will be triggered after Schwab balance update
     
     // Return updated pairs for the authenticated user
     const pairs = await CurrencyPairModel.findByUserId(userId);

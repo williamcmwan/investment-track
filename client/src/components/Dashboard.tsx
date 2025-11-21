@@ -179,7 +179,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     if (!user) return;
     
     try {
-      // Update currency exchange rates (server automatically calculates performance snapshot)
+      // Update currency exchange rates (no snapshot calculation on server)
       try {
         await apiClient.updateEnhancedExchangeRates();
       } catch (error) {
@@ -196,8 +196,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         loadIntegratedAccountsData()
       ]);
       
-      // Reload performance history (snapshot already calculated by server)
-      await loadPerformanceHistory();
+      // Calculate performance snapshot after all data is loaded
+      await handlePostAccountUpdate();
     } catch (error) {
       console.error('Error during comprehensive refresh:', error);
     }
@@ -790,7 +790,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         description: "Updating currency rates and market data...",
       });
 
-      // 1. Update Currency Exchange Rates (server automatically calculates performance snapshot)
+      // 1. Update Currency Exchange Rates (no snapshot calculation on server)
       try {
         await apiClient.updateEnhancedExchangeRates();
         await loadCurrencies();
@@ -814,8 +814,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         loadIntegratedAccountsData()
       ]);
 
-      // 4. Reload performance history (snapshot already calculated by server)
-      await loadPerformanceHistory();
+      // 4. Calculate performance snapshot after all data is loaded
+      await handlePostAccountUpdate();
 
       toast({
         title: "Success",
