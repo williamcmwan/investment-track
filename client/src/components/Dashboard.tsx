@@ -162,11 +162,15 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     localStorage.setItem('dashboard-performance-days', performanceDays.toString());
   }, [performanceDays]);
 
+  // Track if initial load is complete to prevent duplicate refreshes
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
   // Load accounts when component mounts and user is authenticated
   useEffect(() => {
-    if (user) {
+    if (user && isInitialLoad) {
       // Comprehensive refresh on mount
       handleComprehensiveDataRefresh();
+      setIsInitialLoad(false);
     }
   }, [user]);
 
@@ -199,9 +203,9 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     }
   };
 
-  // Reload data when view changes to ensure fresh data
+  // Reload data when view changes to ensure fresh data (skip on initial load)
   useEffect(() => {
-    if (user) {
+    if (user && !isInitialLoad) {
       // Reload data based on current view
       if (currentView === "overview") {
         // Full refresh for overview
@@ -297,12 +301,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     return;
   };
 
-  // Load performance history when component mounts or when user changes
-  useEffect(() => {
-    if (user) {
-      loadPerformanceHistory();
-    }
-  }, [user]);
+  // Note: loadPerformanceHistory() is now called via handlePostAccountUpdate()
+  // to avoid duplicate performance snapshot calculations
 
   // Note: updateTodaysPerformanceData() is now only called manually when needed
   // to avoid overriding correct performance data on refresh
