@@ -165,45 +165,52 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Load accounts when component mounts and user is authenticated
   useEffect(() => {
     if (user) {
-      loadAccounts();
-      loadCurrencies();
-      loadOtherAssets();
-      // Note: IB portfolio and cash are now loaded via loadIntegratedAccountsData()
-      // loadIBPortfolio();
-      // loadIBCashBalances();
-      loadOtherPortfolio();
-      loadOtherCashBalances();
-      loadIntegratedAccountsData();
+      // Comprehensive refresh on mount
+      handleComprehensiveDataRefresh();
     }
   }, [user]);
+
+  // Comprehensive data refresh function
+  const handleComprehensiveDataRefresh = async () => {
+    if (!user) return;
+    
+    try {
+      // Refresh integrated accounts (IB and Schwab) first
+      await refreshIntegratedAccounts();
+      
+      // Load all data in parallel for better performance
+      await Promise.all([
+        loadAccounts(),
+        loadCurrencies(),
+        loadOtherAssets(),
+        loadOtherPortfolio(),
+        loadOtherCashBalances(),
+        loadIntegratedAccountsData(),
+        loadPerformanceHistory()
+      ]);
+    } catch (error) {
+      console.error('Error during comprehensive refresh:', error);
+    }
+  };
 
   // Reload data when view changes to ensure fresh data
   useEffect(() => {
     if (user) {
       // Reload data based on current view
       if (currentView === "overview") {
-        loadAccounts();
-        loadCurrencies();
-        loadOtherAssets();
-        // Note: IB portfolio and cash are now loaded via loadIntegratedAccountsData()
-        // loadIBPortfolio();
-        // loadIBCashBalances();
-        loadOtherPortfolio();
-        loadOtherCashBalances();
-        loadIntegratedAccountsData();
-        loadPerformanceHistory();
+        // Full refresh for overview
+        handleComprehensiveDataRefresh();
       } else if (currentView === "accounts") {
         loadAccounts();
       } else if (currentView === "currency") {
         loadCurrencies();
       } else if (currentView === "portfolio") {
-        loadAccounts();
-        // Note: IB portfolio and cash are now loaded via loadIntegratedAccountsData()
-        // loadIBPortfolio();
-        // loadIBCashBalances();
-        loadOtherPortfolio();
-        loadOtherCashBalances();
-        loadIntegratedAccountsData();
+        Promise.all([
+          loadAccounts(),
+          loadOtherPortfolio(),
+          loadOtherCashBalances(),
+          loadIntegratedAccountsData()
+        ]);
       } else if (currentView === "other-assets") {
         loadOtherAssets();
       }
@@ -774,10 +781,17 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       
       toast({
         title: "Refreshing Data",
-        description: "Updating currency rates and manual investments...",
+        description: "Updating all data sources...",
       });
 
-      // 1. Update Currency Exchange Rates and reload currency pair data
+      // 1. Refresh integrated accounts (IB and Schwab)
+      try {
+        await refreshIntegratedAccounts();
+      } catch (error) {
+        console.warn('Failed to refresh integrated accounts:', error);
+      }
+
+      // 2. Update Currency Exchange Rates and reload currency pair data
       try {
         await apiClient.updateEnhancedExchangeRates();
         await loadCurrencies();
@@ -785,7 +799,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         console.warn('Failed to refresh currency data:', error);
       }
 
-      // 2. Update Other Portfolio market Data (Manual Investments)
+      // 3. Update Other Portfolio market Data (Manual Investments)
       try {
         await apiClient.refreshManualMarketData('default');
         await loadOtherPortfolio();
@@ -794,13 +808,19 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         console.warn('Failed to refresh manual investment data:', error);
       }
 
-      // 3. Recalculate today's performance snapshot
-      // 4. Reload the entire performance history chart
+      // 4. Reload all other data
+      await Promise.all([
+        loadAccounts(),
+        loadOtherAssets(),
+        loadIntegratedAccountsData()
+      ]);
+
+      // 5. Recalculate today's performance snapshot and reload chart
       await handlePostAccountUpdate();
 
       toast({
         title: "Success",
-        description: "Currency rates and manual investments refreshed successfully",
+        description: "All data refreshed successfully",
       });
 
     } catch (error) {
