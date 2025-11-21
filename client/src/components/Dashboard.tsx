@@ -185,9 +185,11 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         loadOtherAssets(),
         loadOtherPortfolio(),
         loadOtherCashBalances(),
-        loadIntegratedAccountsData(),
-        loadPerformanceHistory()
+        loadIntegratedAccountsData()
       ]);
+      
+      // Calculate today's performance snapshot and reload performance history
+      await handlePostAccountUpdate();
     } catch (error) {
       console.error('Error during comprehensive refresh:', error);
     }
