@@ -175,8 +175,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     if (!user) return;
     
     try {
-      // Refresh integrated accounts (IB and Schwab) first
-      await refreshIntegratedAccounts();
+      // Update currency exchange rates
+      try {
+        await apiClient.updateEnhancedExchangeRates();
+      } catch (error) {
+        console.warn('Failed to refresh currency rates:', error);
+      }
       
       // Load all data in parallel for better performance
       await Promise.all([
@@ -783,17 +787,10 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       
       toast({
         title: "Refreshing Data",
-        description: "Updating all data sources...",
+        description: "Updating currency rates and market data...",
       });
 
-      // 1. Refresh integrated accounts (IB and Schwab)
-      try {
-        await refreshIntegratedAccounts();
-      } catch (error) {
-        console.warn('Failed to refresh integrated accounts:', error);
-      }
-
-      // 2. Update Currency Exchange Rates and reload currency pair data
+      // 1. Update Currency Exchange Rates and reload currency pair data
       try {
         await apiClient.updateEnhancedExchangeRates();
         await loadCurrencies();
@@ -801,7 +798,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         console.warn('Failed to refresh currency data:', error);
       }
 
-      // 3. Update Other Portfolio market Data (Manual Investments)
+      // 2. Update Other Portfolio market Data (Manual Investments)
       try {
         await apiClient.refreshManualMarketData('default');
         await loadOtherPortfolio();
@@ -810,19 +807,19 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         console.warn('Failed to refresh manual investment data:', error);
       }
 
-      // 4. Reload all other data
+      // 3. Reload all other data
       await Promise.all([
         loadAccounts(),
         loadOtherAssets(),
         loadIntegratedAccountsData()
       ]);
 
-      // 5. Recalculate today's performance snapshot and reload chart
+      // 4. Recalculate today's performance snapshot and reload chart
       await handlePostAccountUpdate();
 
       toast({
         title: "Success",
-        description: "All data refreshed successfully",
+        description: "Currency rates and market data refreshed successfully",
       });
 
     } catch (error) {
