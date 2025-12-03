@@ -108,6 +108,76 @@ export class SchwabService {
   }
 
   /**
+   * Proactively refresh tokens for all Schwab accounts to keep them alive
+   * This should be called periodically (e.g., every 20 minutes) to prevent token expiration
+   */
+  static async proactiveTokenRefresh(): Promise<void> {
+    try {
+      Logger.info('🔄 Starting proactive Schwab token refresh...');
+      
+      const { dbAll } = await import('../database/connection.js');
+      
+      // Get all accounts with Schwab integration
+      const accounts = await dbAll(
+        `SELECT id, user_id as userId, name, integration_config as integrationConfig
+         FROM accounts 
+         WHERE integration_type = 'SCHWAB'
+         AND integration_config IS NOT NULL`
+      ) as Array<{ id: number; userId: number; name: string; integrationConfig: string }>;
+      
+      if (accounts.length === 0) {
+        Logger.debug('ℹ️  No Schwab accounts found for proactive refresh');
+        return;
+      }
+
+      Logger.info(`📊 Found ${accounts.length} Schwab account(s) for proactive token refresh`);
+      
+      let refreshedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+
+      for (const account of accounts) {
+        try {
+          const config = JSON.parse(account.integrationConfig);
+          
+          if (!config.refreshToken) {
+            Logger.debug(`⏭️  Skipping account ${account.name}: No refresh token`);
+            skippedCount++;
+            continue;
+          }
+
+          // Check if token will expire in the next 25 minutes (proactive refresh window)
+          const now = Math.floor(Date.now() / 1000);
+          const expiresAt = config.tokenExpiresAt || 0;
+          const timeUntilExpiry = expiresAt - now;
+          
+          // Refresh if token expires within 25 minutes (1500 seconds)
+          if (timeUntilExpiry > 1500) {
+            Logger.debug(`⏭️  Skipping account ${account.name}: Token still valid for ${Math.floor(timeUntilExpiry / 60)} minutes`);
+            skippedCount++;
+            continue;
+          }
+
+          Logger.info(`🔄 Proactively refreshing token for account ${account.name} (expires in ${Math.floor(timeUntilExpiry / 60)} minutes)`);
+          
+          // Trigger token refresh by calling getValidAccessTokenForAccount
+          await this.getValidAccessTokenForAccount(account.id, account.userId);
+          
+          refreshedCount++;
+          Logger.info(`✅ Proactively refreshed token for account ${account.name}`);
+        } catch (error: any) {
+          Logger.error(`❌ Failed to proactively refresh token for account ${account.name}:`, error.message);
+          errorCount++;
+        }
+      }
+
+      Logger.info(`✅ Proactive token refresh completed: ${refreshedCount} refreshed, ${skippedCount} skipped, ${errorCount} failed`);
+    } catch (error: any) {
+      Logger.error('❌ Error in proactive token refresh:', error);
+    }
+  }
+
+  /**
    * Refresh access token using refresh token
    */
   private static async refreshAccessToken(userId: number, settings: SchwabUserSettings): Promise<string> {

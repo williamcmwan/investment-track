@@ -787,10 +787,17 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       
       toast({
         title: "Refreshing Data",
-        description: "Updating currency rates and market data...",
+        description: "Updating all portfolio data, currency rates and market data...",
       });
 
-      // 1. Update Currency Exchange Rates (no snapshot calculation on server)
+      // 1. Refresh IB and Schwab integrated accounts first (most important for accurate data)
+      try {
+        await refreshIntegratedAccounts();
+      } catch (error) {
+        console.warn('Failed to refresh integrated accounts:', error);
+      }
+
+      // 2. Update Currency Exchange Rates (no snapshot calculation on server)
       try {
         await apiClient.updateEnhancedExchangeRates();
         await loadCurrencies();
@@ -798,7 +805,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         console.warn('Failed to refresh currency data:', error);
       }
 
-      // 2. Update Other Portfolio market Data (Manual Investments)
+      // 3. Update Other Portfolio market Data (Manual Investments)
       try {
         await apiClient.refreshManualMarketData('default');
         await loadOtherPortfolio();
@@ -807,14 +814,14 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         console.warn('Failed to refresh manual investment data:', error);
       }
 
-      // 3. Reload all other data
+      // 4. Reload all other data
       await Promise.all([
         loadAccounts(),
         loadOtherAssets(),
         loadIntegratedAccountsData()
       ]);
 
-      // 4. Calculate performance snapshot after all data is loaded
+      // 5. Calculate performance snapshot after all data is loaded
       await handlePostAccountUpdate();
 
       toast({

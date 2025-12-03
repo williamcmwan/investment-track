@@ -1,13 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit, Trash2, RefreshCw, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
+import { Plus, Edit, Trash2, RefreshCw, TrendingUp, TrendingDown, DollarSign, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api";
+
+type SortField = 'symbol' | 'dayChange' | 'averageCost' | 'quantity' | 'marketPrice' | 'unrealizedPnl' | 'marketValue' | 'secType';
+type SortDirection = 'asc' | 'desc';
 
 interface ManualPosition {
   id: number;
@@ -71,6 +74,94 @@ export default function OtherPortfolioView({ accounts }: OtherPortfolioViewProps
     currency: 'USD',
     amount: ''
   });
+
+  // Sorting state
+  const [sortConfig, setSortConfig] = useState<{ field: SortField; direction: SortDirection } | null>(null);
+
+  // Handle sorting
+  const handleSort = (field: SortField) => {
+    setSortConfig(prev => {
+      if (prev?.field === field) {
+        // Toggle direction
+        return {
+          field,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc'
+        };
+      }
+      // New field, default to descending for numeric fields, ascending for symbol
+      return {
+        field,
+        direction: field === 'symbol' ? 'asc' : 'desc'
+      };
+    });
+  };
+
+  // Get sorted positions
+  const sortedPositions = useMemo(() => {
+    if (!sortConfig) return positions;
+
+    return [...positions].sort((a, b) => {
+      let aVal: number | string;
+      let bVal: number | string;
+
+      switch (sortConfig.field) {
+        case 'symbol':
+          aVal = a.symbol;
+          bVal = b.symbol;
+          break;
+        case 'dayChange':
+          aVal = a.dayChange || 0;
+          bVal = b.dayChange || 0;
+          break;
+        case 'averageCost':
+          aVal = a.averageCost || 0;
+          bVal = b.averageCost || 0;
+          break;
+        case 'quantity':
+          aVal = a.quantity || 0;
+          bVal = b.quantity || 0;
+          break;
+        case 'marketPrice':
+          aVal = a.marketPrice || 0;
+          bVal = b.marketPrice || 0;
+          break;
+        case 'unrealizedPnl':
+          aVal = a.unrealizedPnl || 0;
+          bVal = b.unrealizedPnl || 0;
+          break;
+        case 'marketValue':
+          aVal = a.marketValue || 0;
+          bVal = b.marketValue || 0;
+          break;
+        case 'secType':
+          aVal = a.secType || '';
+          bVal = b.secType || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortConfig.direction === 'asc' 
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      }
+
+      return sortConfig.direction === 'asc' 
+        ? (aVal as number) - (bVal as number)
+        : (bVal as number) - (aVal as number);
+    });
+  }, [positions, sortConfig]);
+
+  // Render sort icon
+  const renderSortIcon = (field: SortField) => {
+    if (sortConfig?.field !== field) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
+    }
+    return sortConfig.direction === 'asc' 
+      ? <ArrowUp className="h-3 w-3 ml-1" />
+      : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
 
   useEffect(() => {
     loadData();
@@ -336,19 +427,59 @@ export default function OtherPortfolioView({ accounts }: OtherPortfolioViewProps
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-2 font-medium">Symbol</th>
-                    <th className="text-right p-2 font-medium">Day Change</th>
-                    <th className="text-right p-2 font-medium">Avg Cost</th>
-                    <th className="text-right p-2 font-medium">Position</th>
-                    <th className="text-right p-2 font-medium">Current Price</th>
-                    <th className="text-right p-2 font-medium">Unrealized P&L</th>
-                    <th className="text-right p-2 font-medium">Market Value</th>
-                    <th className="text-center p-2 font-medium">Type</th>
+                    <th 
+                      className="text-left p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                      onClick={() => handleSort('symbol')}
+                    >
+                      <div className="flex items-center">Symbol{renderSortIcon('symbol')}</div>
+                    </th>
+                    <th 
+                      className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                      onClick={() => handleSort('dayChange')}
+                    >
+                      <div className="flex items-center justify-end">Day Change{renderSortIcon('dayChange')}</div>
+                    </th>
+                    <th 
+                      className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                      onClick={() => handleSort('averageCost')}
+                    >
+                      <div className="flex items-center justify-end">Avg Cost{renderSortIcon('averageCost')}</div>
+                    </th>
+                    <th 
+                      className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                      onClick={() => handleSort('quantity')}
+                    >
+                      <div className="flex items-center justify-end">Position{renderSortIcon('quantity')}</div>
+                    </th>
+                    <th 
+                      className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                      onClick={() => handleSort('marketPrice')}
+                    >
+                      <div className="flex items-center justify-end">Current Price{renderSortIcon('marketPrice')}</div>
+                    </th>
+                    <th 
+                      className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                      onClick={() => handleSort('unrealizedPnl')}
+                    >
+                      <div className="flex items-center justify-end">Unrealized P&L{renderSortIcon('unrealizedPnl')}</div>
+                    </th>
+                    <th 
+                      className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                      onClick={() => handleSort('marketValue')}
+                    >
+                      <div className="flex items-center justify-end">Market Value{renderSortIcon('marketValue')}</div>
+                    </th>
+                    <th 
+                      className="text-center p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                      onClick={() => handleSort('secType')}
+                    >
+                      <div className="flex items-center justify-center">Type{renderSortIcon('secType')}</div>
+                    </th>
                     <th className="text-center p-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {positions.map((position) => {
+                  {sortedPositions.map((position) => {
                     const pnlPercentage = position.marketValue && position.marketValue > 0
                       ? ((position.unrealizedPnl || 0) / (position.marketValue - (position.unrealizedPnl || 0))) * 100
                       : 0;

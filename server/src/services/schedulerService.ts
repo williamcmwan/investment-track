@@ -11,6 +11,7 @@ export class SchedulerService {
   private static isRunning = false;
   private static dataRefreshTask: ReturnType<typeof cron.schedule> | null = null;
   private static schwabRefreshTask: ReturnType<typeof cron.schedule> | null = null;
+  private static schwabTokenRefreshTask: ReturnType<typeof cron.schedule> | null = null;
 
   /**
    * Initialize the scheduler service
@@ -48,6 +49,11 @@ export class SchedulerService {
       await this.refreshSchwabPortfolios();
     });
 
+    // Schedule proactive Schwab token refresh every 20 minutes to keep tokens alive
+    this.schwabTokenRefreshTask = cron.schedule('*/20 * * * *', async () => {
+      await this.proactiveSchwabTokenRefresh();
+    });
+
     // Also schedule a test task that runs every minute (for development/testing)
     // Remove this in production
     if (process.env.NODE_ENV === 'development') {
@@ -61,6 +67,7 @@ export class SchedulerService {
     Logger.info('📅 Daily performance snapshots will be calculated at 11:59 PM Dublin time');
     Logger.info('🔄 Data refresh (Currency -> Manual Investments -> IB Close Prices) will run every 30 minutes');
     Logger.info('💼 Schwab portfolio refresh will run every minute');
+    Logger.info('🔑 Schwab token refresh will run every 20 minutes to keep tokens alive');
     Logger.info('📊 IB Portfolio updates are handled automatically by IBServiceOptimized');
     Logger.info('📊 IB close prices will be refreshed from Yahoo Finance every 30 minutes (no cache)');
     
@@ -98,6 +105,11 @@ export class SchedulerService {
     if (this.schwabRefreshTask) {
       this.schwabRefreshTask.stop();
       this.schwabRefreshTask = null;
+    }
+
+    if (this.schwabTokenRefreshTask) {
+      this.schwabTokenRefreshTask.stop();
+      this.schwabTokenRefreshTask = null;
     }
 
     this.isRunning = false;
@@ -416,6 +428,18 @@ export class SchedulerService {
   static async triggerSchwabRefresh() {
     Logger.info('Manually triggering Schwab portfolio refresh...');
     await this.refreshSchwabPortfolios();
+  }
+
+  /**
+   * Proactively refresh Schwab tokens to keep them alive
+   */
+  private static async proactiveSchwabTokenRefresh() {
+    try {
+      Logger.debug(`[${new Date().toISOString()}] 🔑 Starting proactive Schwab token refresh...`);
+      await SchwabService.proactiveTokenRefresh();
+    } catch (error) {
+      Logger.error('❌ Error in proactive Schwab token refresh:', error);
+    }
   }
 
   /**

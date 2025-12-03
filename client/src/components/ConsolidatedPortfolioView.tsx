@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
+import { Loader2, RefreshCw, TrendingUp, TrendingDown, DollarSign, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api";
 import OtherPortfolioView from "./OtherPortfolioView";
+
+type SortField = 'symbol' | 'dayChange' | 'averageCost' | 'position' | 'marketPrice' | 'unrealizedPnL' | 'marketValue' | 'secType';
+type SortDirection = 'asc' | 'desc';
 
 interface Account {
   id: number;
@@ -67,11 +70,106 @@ export default function ConsolidatedPortfolioView({
     lastUpdated?: string;
   }>>({});
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
+  const [sortConfig, setSortConfig] = useState<Record<number, { field: SortField; direction: SortDirection }>>({});
 
   useEffect(() => {
     loadAccounts();
     fetchExchangeRates();
   }, []);
+
+  // Handle sorting
+  const handleSort = (accountId: number, field: SortField) => {
+    setSortConfig(prev => {
+      const current = prev[accountId];
+      if (current?.field === field) {
+        // Toggle direction
+        return {
+          ...prev,
+          [accountId]: {
+            field,
+            direction: current.direction === 'asc' ? 'desc' : 'asc'
+          }
+        };
+      }
+      // New field, default to descending for numeric fields, ascending for symbol
+      return {
+        ...prev,
+        [accountId]: {
+          field,
+          direction: field === 'symbol' ? 'asc' : 'desc'
+        }
+      };
+    });
+  };
+
+  // Get sorted portfolio for an account
+  const getSortedPortfolio = (accountId: number, portfolio: PortfolioPosition[]) => {
+    const config = sortConfig[accountId];
+    if (!config) return portfolio;
+
+    return [...portfolio].sort((a, b) => {
+      let aVal: number | string;
+      let bVal: number | string;
+
+      switch (config.field) {
+        case 'symbol':
+          aVal = a.symbol;
+          bVal = b.symbol;
+          break;
+        case 'dayChange':
+          aVal = a.dayChange || 0;
+          bVal = b.dayChange || 0;
+          break;
+        case 'averageCost':
+          aVal = a.averageCost || 0;
+          bVal = b.averageCost || 0;
+          break;
+        case 'position':
+          aVal = a.position || 0;
+          bVal = b.position || 0;
+          break;
+        case 'marketPrice':
+          aVal = a.marketPrice || 0;
+          bVal = b.marketPrice || 0;
+          break;
+        case 'unrealizedPnL':
+          aVal = a.unrealizedPNL || a.unrealizedPnL || 0;
+          bVal = b.unrealizedPNL || b.unrealizedPnL || 0;
+          break;
+        case 'marketValue':
+          aVal = a.marketValue || 0;
+          bVal = b.marketValue || 0;
+          break;
+        case 'secType':
+          aVal = a.secType || '';
+          bVal = b.secType || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return config.direction === 'asc' 
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      }
+
+      return config.direction === 'asc' 
+        ? (aVal as number) - (bVal as number)
+        : (bVal as number) - (aVal as number);
+    });
+  };
+
+  // Render sort icon
+  const renderSortIcon = (accountId: number, field: SortField) => {
+    const config = sortConfig[accountId];
+    if (config?.field !== field) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
+    }
+    return config.direction === 'asc' 
+      ? <ArrowUp className="h-3 w-3 ml-1" />
+      : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
 
   const fetchExchangeRates = async () => {
     try {
@@ -359,18 +457,58 @@ export default function ConsolidatedPortfolioView({
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b">
-                            <th className="text-left p-2 font-medium">Symbol</th>
-                            <th className="text-right p-2 font-medium">Day Change</th>
-                            <th className="text-right p-2 font-medium">Avg Cost</th>
-                            <th className="text-right p-2 font-medium">Position</th>
-                            <th className="text-right p-2 font-medium">Current Price</th>
-                            <th className="text-right p-2 font-medium">Unrealized P&L</th>
-                            <th className="text-right p-2 font-medium">Market Value</th>
-                            <th className="text-center p-2 font-medium">Type</th>
+                            <th 
+                              className="text-left p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                              onClick={() => handleSort(account.id, 'symbol')}
+                            >
+                              <div className="flex items-center">Symbol{renderSortIcon(account.id, 'symbol')}</div>
+                            </th>
+                            <th 
+                              className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                              onClick={() => handleSort(account.id, 'dayChange')}
+                            >
+                              <div className="flex items-center justify-end">Day Change{renderSortIcon(account.id, 'dayChange')}</div>
+                            </th>
+                            <th 
+                              className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                              onClick={() => handleSort(account.id, 'averageCost')}
+                            >
+                              <div className="flex items-center justify-end">Avg Cost{renderSortIcon(account.id, 'averageCost')}</div>
+                            </th>
+                            <th 
+                              className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                              onClick={() => handleSort(account.id, 'position')}
+                            >
+                              <div className="flex items-center justify-end">Position{renderSortIcon(account.id, 'position')}</div>
+                            </th>
+                            <th 
+                              className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                              onClick={() => handleSort(account.id, 'marketPrice')}
+                            >
+                              <div className="flex items-center justify-end">Current Price{renderSortIcon(account.id, 'marketPrice')}</div>
+                            </th>
+                            <th 
+                              className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                              onClick={() => handleSort(account.id, 'unrealizedPnL')}
+                            >
+                              <div className="flex items-center justify-end">Unrealized P&L{renderSortIcon(account.id, 'unrealizedPnL')}</div>
+                            </th>
+                            <th 
+                              className="text-right p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                              onClick={() => handleSort(account.id, 'marketValue')}
+                            >
+                              <div className="flex items-center justify-end">Market Value{renderSortIcon(account.id, 'marketValue')}</div>
+                            </th>
+                            <th 
+                              className="text-center p-2 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                              onClick={() => handleSort(account.id, 'secType')}
+                            >
+                              <div className="flex items-center justify-center">Type{renderSortIcon(account.id, 'secType')}</div>
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {data.portfolio.map((position: any, index: number) => {
+                          {getSortedPortfolio(account.id, data.portfolio).map((position: any, index: number) => {
                             const pnlPercentage = position.marketValue > 0 
                               ? ((position.unrealizedPNL || position.unrealizedPnL || 0) / (position.marketValue - (position.unrealizedPNL || position.unrealizedPnL || 0))) * 100
                               : 0;

@@ -221,7 +221,8 @@ export class IBServiceOptimized {
     // Step 1: Subscribe to reqAccountUpdates() and wait for data
     await this.subscribeToAccountUpdates(mainAccountId);
 
-    // Step 2: Fetch close prices from Yahoo Finance for all positions (always fresh, no cache)
+    // Step 2: Fetch close prices from Yahoo Finance for non-bond positions (always fresh, no cache)
+    // Note: Bonds don't have Yahoo Finance data - their close prices are set at 23:59 via copyBondPricesToClose()
     const positions = Array.from(this.accountData.portfolioPositions.values());
     await this.fetchClosePricesFromYahoo(positions, mainAccountId, false);
 
@@ -388,6 +389,11 @@ export class IBServiceOptimized {
           Logger.debug(`${position.symbol} - Using cached close price: ${position.closePrice}`);
         } else {
           const yahooSymbol = this.convertToYahooSymbol(position.symbol, position.exchange || position.primaryExchange, position.secType);
+          // Skip positions that don't have Yahoo Finance data (e.g., bonds)
+          if (yahooSymbol === null) {
+            Logger.debug(`${position.symbol} - Skipping Yahoo Finance fetch (${position.secType} not supported)`);
+            continue;
+          }
           symbolsToFetch.push(yahooSymbol);
           symbolToPosition.set(yahooSymbol, position);
         }
@@ -402,6 +408,11 @@ export class IBServiceOptimized {
         }
         
         const yahooSymbol = this.convertToYahooSymbol(position.symbol, position.exchange || position.primaryExchange, position.secType);
+        // Skip positions that don't have Yahoo Finance data (e.g., bonds)
+        if (yahooSymbol === null) {
+          Logger.debug(`${position.symbol} - Skipping Yahoo Finance fetch (${position.secType} not supported)`);
+          continue;
+        }
         symbolsToFetch.push(yahooSymbol);
         symbolToPosition.set(yahooSymbol, position);
       }
@@ -433,8 +444,15 @@ export class IBServiceOptimized {
   /**
    * Convert IB symbol to Yahoo Finance symbol format
    * Adds exchange suffixes for non-US stocks and crypto
+   * Returns null for securities that don't have Yahoo Finance data (e.g., bonds)
    */
-  private static convertToYahooSymbol(symbol: string, exchange?: string, secType?: string): string {
+  private static convertToYahooSymbol(symbol: string, exchange?: string, secType?: string): string | null {
+    // Bonds (including US Treasury bonds like US-T) don't have Yahoo Finance data
+    // They use copyBondPricesToClose() instead
+    if (secType === 'BOND') {
+      return null;
+    }
+    
     // Crypto: Add -USD suffix
     // e.g. ETH -> ETH-USD, BTC -> BTC-USD
     if (secType === 'CRYPTO') {
@@ -830,9 +848,32 @@ export class IBServiceOptimized {
 
     Logger.debug(`📊 Syncing ${positions.length} positions`);
 
+    const { dbRun, dbAll } = await import('../database/connection.js');
+
+    // For bonds, preserve existing close prices from database (set at 23:59)
+    // This prevents overwriting bond close prices during daytime refreshes
+    const existingBondClosePrices = await dbAll(
+      `SELECT con_id, close_price FROM portfolios 
+       WHERE source = 'IB' AND main_account_id = ? AND sec_type = 'BOND' 
+       AND close_price IS NOT NULL AND close_price > 0`,
+      [mainAccountId]
+    );
+    const bondClosePriceMap = new Map<number, number>();
+    for (const row of existingBondClosePrices) {
+      bondClosePriceMap.set(row.con_id, row.close_price);
+    }
+    Logger.debug(`📋 Preserved ${bondClosePriceMap.size} existing bond close prices`);
+
     // Calculate day change for each position
     const enrichedPositions = positions.map(pos => {
-      const closePrice = pos.closePrice;
+      // For bonds, use preserved close price from database (set at 23:59)
+      // For other securities, use the close price fetched from Yahoo Finance
+      let closePrice = pos.closePrice;
+      if (pos.secType === 'BOND' && pos.conId && bondClosePriceMap.has(pos.conId)) {
+        closePrice = bondClosePriceMap.get(pos.conId)!;
+        Logger.debug(`${pos.symbol} (BOND): Using preserved close price: ${closePrice}`);
+      }
+      
       const lastPrice = pos.marketPrice;
       
       Logger.debug(`${pos.symbol}: marketPrice=${lastPrice}, closePrice=${closePrice}`);
@@ -857,13 +898,13 @@ export class IBServiceOptimized {
       
       return {
         ...pos,
+        closePrice, // Use the preserved close price for bonds
         dayChange,
         dayChangePercent
       };
     });
 
     // Batch save to database
-    const { dbRun } = await import('../database/connection.js');
     await dbRun('DELETE FROM portfolios WHERE source = ? AND main_account_id = ?', ['IB', mainAccountId]);
 
     if (enrichedPositions.length === 0) return;
@@ -1122,8 +1163,15 @@ export class IBServiceOptimized {
       await this.fetchClosePricesFromYahoo(positions, mainAccountId, false);
       
       // Update database with new close prices and recalculate day changes
+      // Note: Skip bonds - their close prices are only set at 23:59 via copyBondPricesToClose()
       let updatedCount = 0;
       for (const position of positions) {
+        // Skip bonds - their close prices should only be updated at 23:59
+        if (position.secType === 'BOND') {
+          Logger.debug(`${position.symbol} (BOND): Skipping close price update (only updated at 23:59)`);
+          continue;
+        }
+        
         if (!position.closePrice || !position.conId) continue;
         
         // Calculate day change
@@ -1133,13 +1181,8 @@ export class IBServiceOptimized {
         let dayChangePercent = null;
         
         if (closePrice && lastPrice && closePrice > 0 && lastPrice !== closePrice) {
-          if (position.secType === 'BOND') {
-            dayChange = (lastPrice - closePrice) * position.position * 10;
-            dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
-          } else {
-            dayChange = (lastPrice - closePrice) * position.position;
-            dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
-          }
+          dayChange = (lastPrice - closePrice) * position.position;
+          dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
         }
         
         // Update database
