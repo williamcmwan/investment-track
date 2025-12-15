@@ -34,6 +34,7 @@ import ibRoutes from './routes/ib.js';
 import manualInvestmentRoutes from './routes/manualInvestments.js';
 import otherAssetsRoutes from './routes/otherAssets.js';
 import schwabRoutes from './routes/schwab.js';
+import marketRoutes from './routes/market.js';
 import { SchedulerService } from './services/schedulerService.js';
 import { IBServiceOptimized } from './services/ibServiceOptimized.js';
 import { OtherPortfolioService } from './services/otherPortfolioService.js';
@@ -106,6 +107,7 @@ app.use('/api/ib', ibRoutes);
 app.use('/api/manual-investments', manualInvestmentRoutes);
 app.use('/api/other-assets', otherAssetsRoutes);
 app.use('/api/schwab', schwabRoutes);
+app.use('/api/market', marketRoutes);
 
 // Serve static files from client build (both development and production)
 const clientBuildPath = path.join(__dirname, '../../client/dist');
@@ -140,18 +142,18 @@ async function startServer() {
   try {
     // Logger is already configured from .env file via lazy initialization
     // No need to set it here unless overriding for specific debugging
-    
+
     // Initialize services
     await SchedulerService.initialize();
     // Ensure unified portfolios table is initialized at startup
     await OtherPortfolioService.initializeDatabase();
-    
+
     // Initialize IB optimized service and start auto-refresh for all IB accounts
     Logger.info('🔄 Initializing IB optimized service...');
     try {
       const { IBConnectionService } = await import('./services/ibConnectionService.js');
       const { dbAll } = await import('./database/connection.js');
-      
+
       // Get all IB accounts
       const ibAccounts = await dbAll(
         `SELECT DISTINCT u.id as user_id, ic.target_account_id, ic.host, ic.port, ic.client_id
@@ -159,10 +161,10 @@ async function startServer() {
          JOIN users u ON ic.user_id = u.id
          WHERE ic.target_account_id IS NOT NULL`
       );
-      
+
       if (ibAccounts && ibAccounts.length > 0) {
         Logger.info(`📊 Found ${ibAccounts.length} IB account(s) to initialize`);
-        
+
         for (const account of ibAccounts) {
           try {
             Logger.info(`🔌 Starting refresh for IB account ${account.target_account_id}...`);
@@ -205,11 +207,11 @@ const server = await startServer();
 // Graceful shutdown handling
 const gracefulShutdown = async (signal: string) => {
   Logger.info(`\n${signal} received, starting graceful shutdown...`);
-  
+
   // Stop accepting new connections
   server.close(async () => {
     Logger.info('HTTP server closed');
-    
+
     // Shutdown services
     try {
       await IBServiceOptimized.stopRefresh();

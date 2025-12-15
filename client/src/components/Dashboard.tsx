@@ -4,17 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, ReferenceLine, Tooltip as RechartsTooltip } from "recharts";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  PlusCircle, 
-  BarChart3, 
-  ArrowUpRight, 
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  PlusCircle,
+  BarChart3,
+  ArrowUpRight,
   ArrowDownRight,
   Wallet,
   ArrowLeftRight,
@@ -71,7 +71,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Call hooks first, before any conditional logic
   const { user } = useAuth();
   const { toast } = useToast();
-  
+  const baseCurrency = user?.baseCurrency || "HKD"; // Use user's base currency
+
   // Initialize currentView from localStorage or default to "overview"
   const [currentView, setCurrentView] = useState(() => {
     const savedView = localStorage.getItem('dashboard-current-view');
@@ -101,10 +102,111 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     return saved ? parseInt(saved, 10) : 30;
   });
   const [lastPerformanceUpdate, setLastPerformanceUpdate] = useState<Date | null>(null);
-  
+  const [qqqHoldings, setQqqHoldings] = useState<string[]>([]);
+  const [qqqPositions, setQqqPositions] = useState<any[]>([]);
+  const [isQQQTableExpanded, setIsQQQTableExpanded] = useState(false);
+  const [qqqSortConfig, setQqqSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'pnlBase', direction: 'desc' });
+
+  // Load QQQ holdings on mount
+  useEffect(() => {
+    const loadQQQ = async () => {
+      try {
+        const response = await apiClient.getQQQHoldings();
+        if (response.data) {
+          setQqqHoldings(response.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch QQQ holdings", error);
+      }
+    };
+    loadQQQ();
+  }, []);
+
+  // Compute QQQ positions when portfolios or holdings change
+  useEffect(() => {
+    if (qqqHoldings.length === 0) return;
+
+    // Combine all portfolios
+    // Normalize symbols: uppercase, trim. Some might be XYZ, others XYZ.US, etc.
+    // For now, assume simple matching.
+    const allPositions = [
+      ...integratedAccountsPortfolio,
+      ...otherPortfolio
+    ];
+
+    const filtered = allPositions.filter(pos => {
+      // Basic normalization: remove anything after a dot (e.g., BRK.B -> BRK) if needed, 
+      // but usually tickers match. QQQ uses standard tickers.
+      // QQQ file has "BRK.B", "GOOGL", etc.
+      // Account positions might be "BRK B", "BRK.B", etc.
+
+      // Try exact match first
+      if (qqqHoldings.includes(pos.symbol)) return true;
+
+      // Try replacing dot with space or vice versa?
+      // For now, stick to direct match to start
+      return false;
+    });
+
+    // Add P&L and sort
+    const withPnL = filtered.map(pos => {
+      // Coalesce P&L values
+      // Note: unrealizedPNL might be missing, try to calculate if needed 
+      // but usually API returns it. 
+      const pnlRaw = pos.unrealizedPNL ?? pos.unrealizedPnL ?? 0;
+
+      // Calculate Market Value (USD and HKD)
+      // Assuming pos.currency is the original currency (likely USD for QQQ)
+      const marketValueRaw = pos.marketValue || 0;
+      const marketValueBase = convertToBaseCurrency(marketValueRaw, pos.currency);
+
+      // Calculate P&L (USD and HKD)
+      const pnlBase = convertToBaseCurrency(pnlRaw, pos.currency);
+
+      // Calculate P&L %
+      // If API provides it, use it. Otherwise calculate: P&L / (MarketValue - P&L) * 100
+      // because Cost Basis = MarketValue - P&L
+      const costBasis = marketValueRaw - pnlRaw;
+      let pnlPercent = 0;
+
+      if (costBasis > 0) {
+        pnlPercent = (pnlRaw / costBasis) * 100;
+      }
+
+      return {
+        ...pos,
+        pnl: pnlRaw,
+        pnlBase,
+        marketValueBase,
+        pnlPercent,
+        avgCost: pos.averageCost || 0,
+        costBasis
+      };
+    }).sort((a, b) => b.pnlBase - a.pnlBase); // Descending P&L
+
+    setQqqPositions(withPnL);
+  }, [qqqHoldings, integratedAccountsPortfolio, otherPortfolio, exchangeRates, baseCurrency]);
+
+  const handleQQQSort = (key: string) => {
+    setQqqSortConfig(current => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  // ... (keeping pagination and other code same) ...
+
+  // Calculate generic totals for QQQ table
+  const qqqTotals = qqqPositions.reduce((acc, pos) => ({
+    marketValue: acc.marketValue + pos.marketValue, // USD (approx)
+    marketValueBase: acc.marketValueBase + pos.marketValueBase, // HKD
+    pnl: acc.pnl + pos.pnl, // USD (approx)
+    pnlBase: acc.pnlBase + pos.pnlBase // HKD
+  }), { marketValue: 0, marketValueBase: 0, pnl: 0, pnlBase: 0 });
+
   // Pagination constants
   const ITEMS_PER_PAGE = 30;
-  
+
   // Get filtered performance data based on selected days
   const getFilteredPerformanceData = () => {
     if (performanceDays === 0) return allPerformanceData; // Show all data
@@ -116,18 +218,18 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     const filteredData = getFilteredPerformanceData();
     const startIndex = performancePage * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
-    
+
     // Create a map for quick lookup of previous day data
     const dataByDate = new Map();
     allPerformanceData.forEach(item => {
       dataByDate.set(item.date, item);
     });
-    
+
     return filteredData.slice(startIndex, endIndex).map(row => {
       // Find the chronologically previous day
       const currentDate = new Date(row.date);
       let prev = null;
-      
+
       // Look for the most recent previous day in the data
       for (const item of allPerformanceData) {
         const itemDate = new Date(item.date);
@@ -137,20 +239,20 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           }
         }
       }
-      
+
       return { ...row, prev };
     });
   };
-  
+
   const filteredDataLength = getFilteredPerformanceData().length;
   const totalPages = Math.ceil(filteredDataLength / ITEMS_PER_PAGE);
   const canGoPrevious = performancePage > 0;
   const canGoNext = performancePage < totalPages - 1;
-  
+
   const [showQuickUpdateDialog, setShowQuickUpdateDialog] = useState(false);
   const [quickUpdateAmounts, setQuickUpdateAmounts] = useState<Record<number, string>>({});
   const [isUpdatingBalances, setIsUpdatingBalances] = useState(false);
-  const baseCurrency = user?.baseCurrency || "HKD"; // Use user's base currency
+
 
   // Update localStorage whenever currentView changes
   useEffect(() => {
@@ -177,7 +279,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Comprehensive data refresh function
   const handleComprehensiveDataRefresh = async () => {
     if (!user) return;
-    
+
     try {
       // Update currency exchange rates (no snapshot calculation on server)
       try {
@@ -185,7 +287,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       } catch (error) {
         console.warn('Failed to refresh currency rates:', error);
       }
-      
+
       // Load all data in parallel for better performance
       await Promise.all([
         loadAccounts(),
@@ -195,7 +297,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         loadOtherCashBalances(),
         loadIntegratedAccountsData()
       ]);
-      
+
       // Calculate performance snapshot after all data is loaded
       await handlePostAccountUpdate();
     } catch (error) {
@@ -230,12 +332,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   // Fetch exchange rates when any data source changes and user is authenticated
   useEffect(() => {
     if (user && (accounts.length > 0 || ibPortfolio.length > 0 || ibCashBalances.length > 0 ||
-        otherPortfolio.length > 0 || otherCashBalances.length > 0 || otherAssets.length > 0 ||
-        integratedAccountsPortfolio.length > 0 || integratedAccountsCash.length > 0)) {
+      otherPortfolio.length > 0 || otherCashBalances.length > 0 || otherAssets.length > 0 ||
+      integratedAccountsPortfolio.length > 0 || integratedAccountsCash.length > 0)) {
       fetchExchangeRates();
     }
-  }, [accounts, ibPortfolio, ibCashBalances, otherPortfolio, otherCashBalances, otherAssets, 
-      integratedAccountsPortfolio, integratedAccountsCash, baseCurrency, user]);
+  }, [accounts, ibPortfolio, ibCashBalances, otherPortfolio, otherCashBalances, otherAssets,
+    integratedAccountsPortfolio, integratedAccountsCash, baseCurrency, user]);
 
   // Removed auto-refresh functionality - users can manually refresh from Currency Exchange page
 
@@ -252,7 +354,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           const db = new Date(b.date).getTime();
           return da - db; // Ascending order for calculation
         });
-        
+
         const dataWithDailyPL = sortedForDailyCalc.map((entry: any, index: number) => {
           if (index === 0) {
             // First entry has no previous day, so Daily P&L is 0
@@ -264,7 +366,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
             return { ...entry, dailyPL };
           }
         });
-        
+
         // Sort in descending order (newest first) for table display
         const sortedDesc = [...dataWithDailyPL].sort((a: any, b: any) => {
           const da = new Date(a.date).getTime();
@@ -272,7 +374,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           return db - da; // Descending order
         });
         setAllPerformanceData(sortedDesc);
-        
+
         // For chart, we still want chronological order (oldest to newest)
         const sortedAsc = [...dataWithDailyPL].sort((a: any, b: any) => {
           const da = new Date(a.date).getTime();
@@ -281,7 +383,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         });
         // Chart will use performanceDays filter, so store all data
         setPerformanceHistory(sortedAsc);
-        
+
         // Update last refresh time
         setLastPerformanceUpdate(new Date());
       }
@@ -358,13 +460,13 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       for (const account of accounts) {
         // Check if account has integration
         const integrationResponse = await apiClient.getAccountIntegration(account.id);
-        
+
         if (integrationResponse.data && integrationResponse.data.type) {
           console.log(`Refreshing ${integrationResponse.data.type} account: ${account.name}`);
-          
+
           try {
             const refreshResponse = await apiClient.refreshAccountIntegration(account.id);
-            
+
             if (refreshResponse.data && refreshResponse.data.success) {
               refreshedCount++;
               console.log(`✅ Updated ${account.name}: ${refreshResponse.data.balance} ${refreshResponse.data.currency}`);
@@ -391,7 +493,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     setIsUpdatingBalances(true);
     try {
       const updates = [];
-      
+
       // Process each account with a non-empty amount
       for (const account of accounts) {
         const amountStr = quickUpdateAmounts[account.id];
@@ -403,7 +505,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
               currentBalance: amount,
               date: new Date().toISOString().split('T')[0] // Today's date in YYYY-MM-DD format
             });
-            
+
             if (response.error) {
               toast({
                 title: "Error",
@@ -416,19 +518,19 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           }
         }
       }
-      
+
       if (updates.length > 0) {
         toast({
           title: "Success",
           description: `Updated balances for ${updates.length} account(s): ${updates.join(', ')}`,
         });
-        
+
         // Reload accounts and update performance data
         await loadAccounts();
         await handlePostAccountUpdate();
         // Update today's performance data only when accounts are actually updated
         updateTodaysPerformanceData();
-        
+
         // Clear the form and close dialog
         setQuickUpdateAmounts({});
         setShowQuickUpdateDialog(false);
@@ -610,12 +712,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const calculateCurrencyPL = () => {
     const totalPL = currencies.reduce((sum, currency) => {
       const [fromCurrency, toCurrency] = currency.pair.split('/');
-      
+
       // Calculate current value and cost basis in the original pair's target currency
       const currentValue = currency.amount * currency.currentRate;
       const costBasis = currency.amount * currency.avgCost;
       const profitLossInOriginalCurrency = currentValue - costBasis;
-      
+
       // Convert profit/loss to base currency
       if (toCurrency === baseCurrency) {
         // Already in base currency
@@ -630,8 +732,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         return sum + profitLossInOriginalCurrency;
       }
     }, 0);
-    
-    
+
+
     return totalPL;
   };
 
@@ -686,7 +788,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         if (currency === baseCurrency) {
           return { currency, rate: 1 };
         }
-        
+
         try {
           const pair = `${currency}/${baseCurrency}`;
           const response = await apiClient.getExchangeRate(pair);
@@ -696,13 +798,13 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           return { currency, rate: 1 };
         }
       });
-      
+
       const rates = await Promise.all(ratePromises);
       const rateMap = rates.reduce((acc, { currency, rate }) => {
         acc[currency] = rate;
         return acc;
       }, {} as Record<string, number>);
-      
+
       setExchangeRates(rateMap);
     } catch (error) {
       console.error("Failed to fetch exchange rates:", error);
@@ -734,23 +836,23 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     // Filter to only include investment accounts for P&L calculations
     // Handle accounts that might not have accountType set (default to INVESTMENT for backward compatibility)
     const investmentAccounts = accounts.filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT');
-    
-    const totalCapital = investmentAccounts.reduce((sum, acc) => 
+
+    const totalCapital = investmentAccounts.reduce((sum, acc) =>
       sum + convertToBaseCurrency(acc.originalCapital, acc.currency), 0
     );
-    
-    const currentBalance = investmentAccounts.reduce((sum, acc) => 
+
+    const currentBalance = investmentAccounts.reduce((sum, acc) =>
       sum + convertToBaseCurrency(acc.currentBalance, acc.currency), 0
     );
-    
+
     // Get Total P&L from Investment Accounts (matches Investment Accounts page)
-    const totalProfitLoss = investmentAccounts.reduce((sum, acc) => 
+    const totalProfitLoss = investmentAccounts.reduce((sum, acc) =>
       sum + convertToBaseCurrency(acc.profitLoss, acc.currency), 0
     );
-    
+
     // Get Currency P&L from Currency Exchange page
     const currencyProfitLoss = calculateCurrencyPL();
-    
+
     // Investment P&L = Total P&L - Currency P&L (pure investment performance)
     const investmentProfitLoss = totalProfitLoss - currencyProfitLoss;
     const totalProfitLossPercent = totalCapital > 0 ? (totalProfitLoss / totalCapital) * 100 : 0;
@@ -784,7 +886,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
   const handleComprehensiveRefresh = async () => {
     try {
       setIsLoadingPerformance(true);
-      
+
       toast({
         title: "Refreshing Data",
         description: "Updating all portfolio data, currency rates and market data...",
@@ -853,8 +955,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         console.error('Error calculating today snapshot:', error);
       }
     };
-    
-    
+
+
 
     const chartConfig = {
       totalPL: {
@@ -881,7 +983,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     const totalProfitLossConverted = summaryData.totalProfitLoss;
     const investmentProfitLossConverted = summaryData.investmentProfitLoss;
     const currencyProfitLossConverted = summaryData.currencyProfitLoss;
-    
+
     // Filter chart data based on selected days
     const chartData = performanceHistory.slice(-performanceDays);
 
@@ -889,20 +991,20 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     const investmentAccountsValue = accounts
       .filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT')
       .reduce((sum, acc) => sum + convertToBaseCurrency(acc.currentBalance, acc.currency), 0);
-    
+
     const bankAccountsValue = accounts
       .filter(acc => acc.accountType === 'BANK')
       .reduce((sum, acc) => sum + convertToBaseCurrency(acc.currentBalance, acc.currency), 0);
-    
-    const otherAssetsValue = otherAssets.reduce((sum, asset) => 
+
+    const otherAssetsValue = otherAssets.reduce((sum, asset) =>
       sum + convertToBaseCurrency(asset.marketValue, asset.currency), 0
     );
-    
+
     const totalAssetsValue = investmentAccountsValue + bankAccountsValue + otherAssetsValue;
 
     // Generate Portfolio Analytics CSV Log
     const generatePortfolioAnalyticsCSV = () => {
-      const csvData: Array<{category: string, source: string, itemName: string, valueInBase: number}> = [];
+      const csvData: Array<{ category: string, source: string, itemName: string, valueInBase: number }> = [];
 
       // Flatten all items from portfolioChartData
       portfolioChartData.forEach(categoryData => {
@@ -951,7 +1053,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
 
     // Generate Currency Analytics CSV Log
     const generateCurrencyAnalyticsCSV = () => {
-      const csvData: Array<{currency: string, source: string, itemName: string, amount: number}> = [];
+      const csvData: Array<{ currency: string, source: string, itemName: string, amount: number }> = [];
 
       // Add bank accounts
       accounts.filter(acc => acc.accountType === 'BANK').forEach(acc => {
@@ -962,7 +1064,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           amount: acc.currentBalance
         });
       });
-      
+
       // Note: Legacy IB portfolio and cash are now included in integratedAccountsPortfolio/Cash
       // to avoid double counting. Keeping these commented out for reference.
       // // Add IB portfolio positions
@@ -988,7 +1090,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       //     });
       //   }
       // });
-      
+
       // Add other portfolio positions
       otherPortfolio.forEach(position => {
         if (position.marketPrice && position.quantity && position.currency) {
@@ -1000,7 +1102,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           });
         }
       });
-      
+
       // Add other portfolio cash balances
       otherCashBalances.forEach(cash => {
         if (cash.amount && cash.currency) {
@@ -1012,7 +1114,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           });
         }
       });
-      
+
       // Add other assets
       otherAssets.forEach(asset => {
         csvData.push({
@@ -1022,13 +1124,13 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           amount: asset.marketValue
         });
       });
-      
+
       // Add integrated accounts portfolio - separate IB and Schwab
       integratedAccountsPortfolio.forEach(position => {
         if (position.marketValue && position.currency) {
-          const source = position.accountType === 'IB' ? 'IB Portfolio' : 
-                        position.accountType === 'SCHWAB' ? 'Schwab Portfolio' : 
-                        'Integrated Portfolio';
+          const source = position.accountType === 'IB' ? 'IB Portfolio' :
+            position.accountType === 'SCHWAB' ? 'Schwab Portfolio' :
+              'Integrated Portfolio';
           csvData.push({
             currency: position.currency,
             source: source,
@@ -1037,15 +1139,15 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           });
         }
       });
-      
+
       // Add integrated accounts cash - separate IB and Schwab
       integratedAccountsCash.forEach(cash => {
         const currency = cash.currency;
         const amount = cash.balance || cash.amount || 0;
         if (amount && currency) {
-          const source = cash.accountType === 'IB' ? 'IB Cash' : 
-                        cash.accountType === 'SCHWAB' ? 'Schwab Cash' : 
-                        'Integrated Cash';
+          const source = cash.accountType === 'IB' ? 'IB Cash' :
+            cash.accountType === 'SCHWAB' ? 'Schwab Cash' :
+              'Integrated Cash';
           csvData.push({
             currency: currency,
             source: source,
@@ -1054,7 +1156,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           });
         }
       });
-      
+
       // Sort by currency, then by source
       csvData.sort((a, b) => {
         if (a.currency !== b.currency) {
@@ -1062,15 +1164,15 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         }
         return a.source.localeCompare(b.source);
       });
-      
+
       // Generate CSV content
       const csvHeader = 'Currency,Source,Item Name,Amount\n';
-      const csvRows = csvData.map(row => 
+      const csvRows = csvData.map(row =>
         `${row.currency},"${row.source}","${row.itemName}",${row.amount.toFixed(2)}`
       ).join('\n');
-      
+
       const csvContent = csvHeader + csvRows;
-      
+
       // Create and download CSV file
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
@@ -1081,7 +1183,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       toast({
         title: "Success",
         description: "Currency analytics CSV file downloaded successfully",
@@ -1135,56 +1237,56 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
 
       // Crypto category
       if (secType === 'CRYPTO' || symbol.includes('BTC') || symbol.includes('ETH') ||
-          symbol.includes('USDT') || symbol.includes('USDC')) {
+        symbol.includes('USDT') || symbol.includes('USDC')) {
         return 'CRYPTO';
       }
 
       // Bonds category
       if (secType === 'BOND' || symbol.includes('TLT') || symbol.includes('IEF') ||
-          symbol.includes('AGG') || symbol.includes('BND')) {
+        symbol.includes('AGG') || symbol.includes('BND')) {
         return 'BOND_USA';
       }
 
       // REIT detection - check category, industry, or symbol patterns
       const isREIT = category.includes('REIT') ||
-                     category.includes('REITS') ||
-                     industry.includes('REIT') ||
-                     symbol.includes('REIT') ||
-                     symbol.endsWith('.UN');
+        category.includes('REITS') ||
+        industry.includes('REIT') ||
+        symbol.includes('REIT') ||
+        symbol.endsWith('.UN');
 
       // For stocks (STK or ETF), categorize by region
       if (secType === 'STK' || secType === 'ETF') {
         // First check if it's a REIT, then categorize by country
         if (isREIT) {
           if (country === 'CANADA' || country === 'CA' ||
-              symbol.endsWith('.TO') || symbol.endsWith('.UN') || exchange.includes('TSX')) {
+            symbol.endsWith('.TO') || symbol.endsWith('.UN') || exchange.includes('TSX')) {
             return 'REIT_CANADA';
           } else if (country === 'SINGAPORE' || country === 'SG' ||
-                     symbol.endsWith('.SG') || exchange.includes('SGX')) {
+            symbol.endsWith('.SG') || exchange.includes('SGX')) {
             return 'REIT_SINGAPORE';
           } else if (country === 'UK' || country === 'GB' || country === 'UNITED KINGDOM' ||
-                     country === 'FRANCE' || country === 'FR' ||
-                     country === 'GERMANY' || country === 'DE' ||
-                     country === 'ITALY' || country === 'IT' ||
-                     country === 'SPAIN' || country === 'ES' ||
-                     country === 'EUROPE' ||
-                     exchange.includes('LSE') || exchange.includes('EURONEXT')) {
+            country === 'FRANCE' || country === 'FR' ||
+            country === 'GERMANY' || country === 'DE' ||
+            country === 'ITALY' || country === 'IT' ||
+            country === 'SPAIN' || country === 'ES' ||
+            country === 'EUROPE' ||
+            exchange.includes('LSE') || exchange.includes('EURONEXT')) {
             return 'REIT_EUROPE';
           } else if (country === 'USA' || country === 'US' || country === 'UNITED STATES' ||
-                     exchange.includes('NYSE') || exchange.includes('NASDAQ')) {
+            exchange.includes('NYSE') || exchange.includes('NASDAQ')) {
             return 'REIT_USA';
           }
         } else {
           // Not a REIT, categorize as stock by country
           if (country === 'HONG KONG' || country === 'HK' ||
-              exchange.includes('HKEX') || exchange.includes('SEHK')) {
+            exchange.includes('HKEX') || exchange.includes('SEHK')) {
             return 'STOCK_HK';
           } else if (country === 'CANADA' || country === 'CA' ||
-                     symbol.endsWith('.TO') || exchange.includes('TSX')) {
+            symbol.endsWith('.TO') || exchange.includes('TSX')) {
             return 'STOCK_CANADA';
           } else if (country === 'USA' || country === 'US' || country === 'UNITED STATES' ||
-                     exchange.includes('NYSE') || exchange.includes('NASDAQ') ||
-                     exchange.includes('AMEX')) {
+            exchange.includes('NYSE') || exchange.includes('NASDAQ') ||
+            exchange.includes('AMEX')) {
             return 'STOCK_USA';
           }
         }
@@ -1194,7 +1296,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     };
 
     // Calculate Portfolio Distribution
-    const portfolioDistribution = new Map<string, { value: number, items: Array<{name: string, category: string, value: number, source: string, originalValue: number, originalCurrency: string}> }>();
+    const portfolioDistribution = new Map<string, { value: number, items: Array<{ name: string, category: string, value: number, source: string, originalValue: number, originalCurrency: string }> }>();
 
     // Helper to add to distribution
     const addToPortfolio = (category: string, value: number, itemName: string, source: string, originalValue: number, originalCurrency: string) => {
@@ -1209,11 +1311,11 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       if (position.marketValue && position.marketValue > 0) {
         const category = categorizePosition(position);
         const valueInBase = convertToBaseCurrency(position.marketValue, position.currency);
-        const source = position.accountType === 'IB' ? 'IB Portfolio' : 
-                      position.accountType === 'SCHWAB' ? 'Schwab Portfolio' : 
-                      'Integrated Portfolio';
+        const source = position.accountType === 'IB' ? 'IB Portfolio' :
+          position.accountType === 'SCHWAB' ? 'Schwab Portfolio' :
+            'Integrated Portfolio';
         addToPortfolio(category, valueInBase,
-          `${position.symbol} (${position.secType || 'Unknown'})`, source, 
+          `${position.symbol} (${position.secType || 'Unknown'})`, source,
           position.marketValue, position.currency);
       }
     });
@@ -1235,9 +1337,9 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       const amount = cash.balance || cash.amount || 0;
       if (amount && amount > 0) {
         const valueInBase = convertToBaseCurrency(amount, cash.currency);
-        const source = cash.accountType === 'IB' ? 'IB Cash' : 
-                      cash.accountType === 'SCHWAB' ? 'Schwab Cash' : 
-                      'Integrated Cash';
+        const source = cash.accountType === 'IB' ? 'IB Cash' :
+          cash.accountType === 'SCHWAB' ? 'Schwab Cash' :
+            'Integrated Cash';
         addToPortfolio('CASH', valueInBase, `Cash - ${cash.currency}`, source,
           amount, cash.currency);
       }
@@ -1265,7 +1367,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     otherAssets.forEach(asset => {
       const valueInBase = convertToBaseCurrency(asset.marketValue, asset.currency);
       if (asset.assetType?.toLowerCase().includes('real estate') ||
-          asset.assetType?.toLowerCase().includes('property')) {
+        asset.assetType?.toLowerCase().includes('property')) {
         addToPortfolio('REAL_ESTATE', valueInBase,
           `${asset.asset} (${asset.assetType})`, 'Other Assets',
           asset.marketValue, asset.currency);
@@ -1362,7 +1464,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       data.bankAccounts += acc.currentBalance;
       data.total += acc.currentBalance;
     });
-    
+
     // Note: Legacy IB portfolio and cash are now included in integratedAccountsPortfolio/Cash
     // to avoid double counting. Keeping these commented out for reference.
     // // Add IB portfolio positions
@@ -1382,7 +1484,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
     //     data.total += cash.amount;
     //   }
     // });
-    
+
     // Add other portfolio positions
     otherPortfolio.forEach(position => {
       if (position.marketPrice && position.quantity && position.currency) {
@@ -1392,7 +1494,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         data.total += marketValue;
       }
     });
-    
+
     // Add other portfolio cash balances
     otherCashBalances.forEach(cash => {
       if (cash.amount && cash.currency) {
@@ -1401,14 +1503,14 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         data.total += cash.amount;
       }
     });
-    
+
     // Add other assets
     otherAssets.forEach(asset => {
       const data = initCurrency(asset.currency);
       data.otherAssets += asset.marketValue;
       data.total += asset.marketValue;
     });
-    
+
     // Add integrated accounts portfolio - separate IB and Schwab
     integratedAccountsPortfolio.forEach(position => {
       if (position.marketValue && position.currency) {
@@ -1421,7 +1523,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         data.total += position.marketValue;
       }
     });
-    
+
     // Add integrated accounts cash - separate IB and Schwab
     integratedAccountsCash.forEach(cash => {
       const currency = cash.currency;
@@ -1436,7 +1538,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         data.total += amount;
       }
     });
-    
+
     // Debug logging
     console.log('Currency Distribution Debug:', {
       bankAccountsCount: accounts.filter(acc => acc.accountType === 'BANK').length,
@@ -1447,7 +1549,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       otherAssetsCount: otherAssets.length,
       currencyDistribution: Array.from(currencyDistribution.entries())
     });
-    
+
     // Convert to chart data with colors and breakdown
     const currencyChartData = Array.from(currencyDistribution.entries())
       .map(([currency, data]) => ({
@@ -1468,17 +1570,17 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
       }))
       .filter(item => item.valueHKD > 0)
       .sort((a, b) => b.valueHKD - a.valueHKD);
-    
+
     // Calculate percentages
     const totalValue = currencyChartData.reduce((sum, item) => sum + item.valueHKD, 0);
     currencyChartData.forEach(item => {
       item.percentage = totalValue > 0 ? (item.valueHKD / totalValue) * 100 : 0;
     });
-    
+
     // Define colors for currencies
     const currencyColors = [
       "hsl(var(--chart-1))",
-      "hsl(var(--chart-2))", 
+      "hsl(var(--chart-2))",
       "hsl(var(--chart-3))",
       "hsl(var(--chart-4))",
       "hsl(var(--chart-5))",
@@ -1551,39 +1653,39 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           </CardHeader>
           <CardContent className="p-2 md:p-6">
             <ChartContainer config={chartConfig} className="h-[250px] md:h-[400px] w-full" key={`chart-${performanceDays}-${chartData.length}`}>
-              <LineChart 
-                data={chartData} 
-                margin={{ 
-                  top: 10, 
-                  right: 5, 
-                  left: 0, 
-                  bottom: 10 
+              <LineChart
+                data={chartData}
+                margin={{
+                  top: 10,
+                  right: 5,
+                  left: 0,
+                  bottom: 10
                 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                <XAxis 
-                  dataKey="date" 
+                <XAxis
+                  dataKey="date"
                   type="category"
                   tickFormatter={(value, index) => {
                     // Handle date string properly - value should already be in YYYY-MM-DD format
                     if (!value) return '';
-                    
+
                     try {
                       // Parse the date string (YYYY-MM-DD format)
-                    const date = new Date(value);
-                      
+                      const date = new Date(value);
+
                       // Check if date is valid
                       if (isNaN(date.getTime())) {
                         return value; // Return original value if parsing fails
                       }
-                      
+
                       // Show fewer ticks to avoid overcrowding
                       const shouldShow = index === 0 || index === Math.floor(chartData.length / 2) || index === chartData.length - 1;
                       if (!shouldShow) return '';
-                      
-                    return window.innerWidth < 768 
-                      ? date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
-                      : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                      return window.innerWidth < 768
+                        ? date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
+                        : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                     } catch (error) {
                       return value; // Return original value if there's an error
                     }
@@ -1594,7 +1696,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                   axisLine={false}
                   tickLine={false}
                 />
-                <YAxis 
+                <YAxis
                   tickFormatter={(value) => {
                     return value.toLocaleString('en-US', {
                       minimumFractionDigits: 0,
@@ -1607,7 +1709,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                   axisLine={false}
                   tickLine={false}
                 />
-                <ChartTooltip 
+                <ChartTooltip
                   content={({ active, payload, label }) => {
                     if (active && payload && payload.length) {
                       return (
@@ -1619,10 +1721,10 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                                 if (isNaN(date.getTime())) {
                                   return label; // Return original if invalid
                                 }
-                                return date.toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric',
-                              year: window.innerWidth < 768 ? undefined : 'numeric'
+                                return date.toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: window.innerWidth < 768 ? undefined : 'numeric'
                                 });
                               } catch (error) {
                                 return label; // Return original if error
@@ -1632,8 +1734,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                           <div className="space-y-0.5">
                             {payload.map((entry, index) => (
                               <div key={index} className="flex items-center gap-1">
-                                <div 
-                                  className="w-2 h-2 rounded-sm flex-shrink-0" 
+                                <div
+                                  className="w-2 h-2 rounded-sm flex-shrink-0"
                                   style={{ backgroundColor: entry.color }}
                                 />
                                 <span className="text-[10px] md:text-xs text-muted-foreground truncate max-w-[80px] md:max-w-none">
@@ -1657,38 +1759,38 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                     return null;
                   }}
                 />
-                <ChartLegend 
+                <ChartLegend
                   content={<ChartLegendContent className="text-[10px] md:text-xs flex-wrap" />}
                   wrapperStyle={{ paddingTop: '10px' }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="totalPL" 
-                  stroke="var(--color-totalPL)" 
+                <Line
+                  type="monotone"
+                  dataKey="totalPL"
+                  stroke="var(--color-totalPL)"
                   strokeWidth={window.innerWidth < 768 ? 1.5 : 2}
                   dot={{ r: window.innerWidth < 768 ? 2 : 3, fill: "var(--color-totalPL)" }}
                   activeDot={{ r: window.innerWidth < 768 ? 3 : 4, stroke: "var(--color-totalPL)", strokeWidth: 2 }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="investmentPL" 
-                  stroke="var(--color-investmentPL)" 
+                <Line
+                  type="monotone"
+                  dataKey="investmentPL"
+                  stroke="var(--color-investmentPL)"
                   strokeWidth={window.innerWidth < 768 ? 1.5 : 2}
                   dot={{ r: window.innerWidth < 768 ? 1.5 : 2, fill: "var(--color-investmentPL)" }}
                   activeDot={{ r: window.innerWidth < 768 ? 2.5 : 3, stroke: "var(--color-investmentPL)", strokeWidth: 2 }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="currencyPL" 
-                  stroke="var(--color-currencyPL)" 
+                <Line
+                  type="monotone"
+                  dataKey="currencyPL"
+                  stroke="var(--color-currencyPL)"
                   strokeWidth={window.innerWidth < 768 ? 1.5 : 2}
                   dot={{ r: window.innerWidth < 768 ? 1.5 : 2, fill: "var(--color-currencyPL)" }}
                   activeDot={{ r: window.innerWidth < 768 ? 2.5 : 3, stroke: "var(--color-currencyPL)", strokeWidth: 2 }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="dailyPL" 
-                  stroke="var(--color-dailyPL)" 
+                <Line
+                  type="monotone"
+                  dataKey="dailyPL"
+                  stroke="var(--color-dailyPL)"
                   strokeWidth={window.innerWidth < 768 ? 1.5 : 2}
                   dot={{ r: window.innerWidth < 768 ? 1.5 : 2, fill: "var(--color-dailyPL)" }}
                   activeDot={{ r: window.innerWidth < 768 ? 2.5 : 3, stroke: "var(--color-dailyPL)", strokeWidth: 2 }}
@@ -1713,7 +1815,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                   <tbody>
                     {getPaginatedPerformanceData().map((row, idx) => {
                       const prev = row.prev; // Use pre-calculated previous day data
-                      
+
                       const pct = (curr: number, prevVal: number) => {
                         if (!prev || prevVal === 0 || prevVal === undefined || prevVal === null) return '-';
                         const v = ((curr - prevVal) / Math.abs(prevVal)) * 100;
@@ -1804,715 +1906,890 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
           )}
         </Card>
 
-      {/* Profit/Loss Breakdown */}
-      <Card className="bg-gradient-card border-border shadow-card">
-        <CardHeader>
-          <CardTitle className="text-foreground">Profit & Loss Breakdown</CardTitle>
-          <CardDescription>Investment vs Currency performance</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Total Capital and Current Balance */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Profit/Loss Breakdown */}
+        <Card className="bg-gradient-card border-border shadow-card">
+          <CardHeader>
+            <CardTitle className="text-foreground">Profit & Loss Breakdown</CardTitle>
+            <CardDescription>Investment vs Currency performance</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Total Capital and Current Balance */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+                <div className="flex items-center gap-3 mr-auto">
+                  <Wallet className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="font-medium text-foreground">Total Capital</p>
+                    <p className="text-sm text-muted-foreground">Investment capital</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-foreground">
+                    {formatCurrency(totalCapitalConverted)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+                <div className="flex items-center gap-3 mr-auto">
+                  <DollarSign className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="font-medium text-foreground">Current Balance</p>
+                    <p className="text-sm text-muted-foreground">Current portfolio value</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-foreground">
+                    {formatCurrency(currentBalanceConverted)}
+                  </p>
+                </div>
+              </div>
+            </div>
             <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
               <div className="flex items-center gap-3 mr-auto">
-                <Wallet className="h-5 w-5 text-primary" />
+                <TrendingUp className="h-5 w-5 text-primary" />
                 <div>
-                  <p className="font-medium text-foreground">Total Capital</p>
-                  <p className="text-sm text-muted-foreground">Investment capital</p>
+                  <p className="font-medium text-foreground">Total P&L</p>
+                  <p className="text-sm text-muted-foreground">Overall portfolio performance</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="font-bold text-foreground">
-                  {formatCurrency(totalCapitalConverted)}
+                <p className={`font-bold ${totalProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
+                  {formatCurrency(totalProfitLossConverted)}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {formatPercent((totalProfitLossConverted / totalCapitalConverted) * 100)}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
               <div className="flex items-center gap-3 mr-auto">
-                <DollarSign className="h-5 w-5 text-primary" />
+                <BarChart3 className="h-5 w-5 text-primary" />
                 <div>
-                  <p className="font-medium text-foreground">Current Balance</p>
+                  <p className="font-medium text-foreground">Investment P&L</p>
+                  <p className="text-sm text-muted-foreground">Excluding currency effects</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className={`font-bold ${investmentProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
+                  {formatCurrency(investmentProfitLossConverted)}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {formatPercent((investmentProfitLossConverted / totalCapitalConverted) * 100)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+              <div className="flex items-center gap-3 mr-auto">
+                <ArrowLeftRight className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium text-foreground">Currency P&L</p>
+                  <p className="text-sm text-muted-foreground">Exchange rate fluctuations</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className={`font-bold ${currencyProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
+                  {formatCurrency(currencyProfitLossConverted)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Assets Breakdown */}
+        <Card className="bg-gradient-card border-border shadow-card">
+          <CardHeader>
+            <CardTitle className="text-foreground">Total Assets</CardTitle>
+            <CardDescription>Complete asset portfolio breakdown</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+              <div className="flex items-center gap-3 mr-auto">
+                <PiggyBank className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium text-foreground">Investment Accounts</p>
                   <p className="text-sm text-muted-foreground">Current portfolio value</p>
                 </div>
               </div>
               <div className="text-right">
                 <p className="font-bold text-foreground">
-                  {formatCurrency(currentBalanceConverted)}
+                  {formatCurrency(investmentAccountsValue, baseCurrency)}
                 </p>
               </div>
             </div>
-          </div>
-          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
-            <div className="flex items-center gap-3 mr-auto">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              <div>
-                <p className="font-medium text-foreground">Total P&L</p>
-                <p className="text-sm text-muted-foreground">Overall portfolio performance</p>
+
+            <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+              <div className="flex items-center gap-3 mr-auto">
+                <Landmark className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium text-foreground">Bank Accounts</p>
+                  <p className="text-sm text-muted-foreground">Total bank balance</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-foreground">
+                  {formatCurrency(bankAccountsValue, baseCurrency)}
+                </p>
               </div>
             </div>
-            <div className="text-right">
-              <p className={`font-bold ${totalProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
-                {formatCurrency(totalProfitLossConverted)}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {formatPercent((totalProfitLossConverted / totalCapitalConverted) * 100)}
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
-            <div className="flex items-center gap-3 mr-auto">
-              <BarChart3 className="h-5 w-5 text-primary" />
-              <div>
-                <p className="font-medium text-foreground">Investment P&L</p>
-                <p className="text-sm text-muted-foreground">Excluding currency effects</p>
+            <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
+              <div className="flex items-center gap-3 mr-auto">
+                <Building className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium text-foreground">Other Assets</p>
+                  <p className="text-sm text-muted-foreground">Real estate, collectibles, etc.</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-foreground">
+                  {formatCurrency(otherAssetsValue, baseCurrency)}
+                </p>
               </div>
             </div>
-            <div className="text-right">
-              <p className={`font-bold ${investmentProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
-                {formatCurrency(investmentProfitLossConverted)}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {formatPercent((investmentProfitLossConverted / totalCapitalConverted) * 100)}
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
-            <div className="flex items-center gap-3 mr-auto">
-              <ArrowLeftRight className="h-5 w-5 text-primary" />
-              <div>
-                <p className="font-medium text-foreground">Currency P&L</p>
-                <p className="text-sm text-muted-foreground">Exchange rate fluctuations</p>
+            <div className="flex items-center justify-end p-4 bg-primary/10 rounded-lg border-2 border-primary/20">
+              <div className="flex items-center gap-3 mr-auto">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium text-foreground text-lg">Total Assets</p>
+                  <p className="text-sm text-muted-foreground">Complete portfolio value</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-foreground text-xl">
+                  {formatCurrency(totalAssetsValue, baseCurrency)}
+                </p>
               </div>
             </div>
-            <div className="text-right">
-              <p className={`font-bold ${currencyProfitLossConverted > 0 ? 'text-profit' : 'text-loss'}`}>
-                {formatCurrency(currencyProfitLossConverted)}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Total Assets Breakdown */}
-      <Card className="bg-gradient-card border-border shadow-card">
-        <CardHeader>
-          <CardTitle className="text-foreground">Total Assets</CardTitle>
-          <CardDescription>Complete asset portfolio breakdown</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
-            <div className="flex items-center gap-3 mr-auto">
-              <PiggyBank className="h-5 w-5 text-primary" />
-              <div>
-                <p className="font-medium text-foreground">Investment Accounts</p>
-                <p className="text-sm text-muted-foreground">Current portfolio value</p>
+        {/* Currency Analytics */}
+        <Card className="bg-gradient-card border-border shadow-card">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-foreground">Currency Analytics</CardTitle>
+              <CardDescription>Portfolio distribution by currency</CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={generateCurrencyAnalyticsCSV}
+              className="flex items-center gap-2"
+            >
+              <ArrowDownRight className="h-4 w-4" />
+              Export CSV
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Pie Chart */}
+              <div className="flex items-center justify-center">
+                <ChartContainer config={{}} className="h-[300px] w-full">
+                  <PieChart>
+                    <Pie
+                      data={currencyChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={120}
+                      paddingAngle={2}
+                      dataKey="valueHKD"
+                      label={({ currency, percentage }) =>
+                        percentage > 5 ? `${currency} ${percentage.toFixed(1)}%` : ''
+                      }
+                      labelLine={false}
+                    >
+                      {currencyChartData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={currencyColors[index % currencyColors.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <ChartTooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-background border border-border rounded-lg p-3 shadow-lg max-w-xs">
+                              <p className="font-medium text-foreground mb-1">{data.currency}</p>
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {formatCurrency(data.valueHKD, baseCurrency)} ({data.percentage.toFixed(1)}%)
+                              </p>
+                              <p className="text-xs text-muted-foreground mb-1">
+                                Original: {formatCurrency(data.value, data.currency)}
+                              </p>
+                              <div className="text-xs text-muted-foreground space-y-0.5 mt-2 pt-2 border-t border-border/50">
+                                {data.breakdown.bankAccounts > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>Bank Accounts:</span>
+                                    <span>{formatCurrency(data.breakdown.bankAccounts, data.currency)}</span>
+                                  </div>
+                                )}
+                                {data.breakdown.ibPortfolio > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>IB Portfolio:</span>
+                                    <span>{formatCurrency(data.breakdown.ibPortfolio, data.currency)}</span>
+                                  </div>
+                                )}
+                                {data.breakdown.ibCash > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>IB Cash:</span>
+                                    <span>{formatCurrency(data.breakdown.ibCash, data.currency)}</span>
+                                  </div>
+                                )}
+                                {data.breakdown.otherPortfolio > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>Other Portfolio:</span>
+                                    <span>{formatCurrency(data.breakdown.otherPortfolio, data.currency)}</span>
+                                  </div>
+                                )}
+                                {data.breakdown.otherCash > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>Other Cash:</span>
+                                    <span>{formatCurrency(data.breakdown.otherCash, data.currency)}</span>
+                                  </div>
+                                )}
+                                {data.breakdown.otherAssets > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>Other Assets:</span>
+                                    <span>{formatCurrency(data.breakdown.otherAssets, data.currency)}</span>
+                                  </div>
+                                )}
+                                {data.breakdown.schwabPortfolio > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>Schwab Portfolio:</span>
+                                    <span>{formatCurrency(data.breakdown.schwabPortfolio, data.currency)}</span>
+                                  </div>
+                                )}
+                                {data.breakdown.schwabCash > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>Schwab Cash:</span>
+                                    <span>{formatCurrency(data.breakdown.schwabCash, data.currency)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </PieChart>
+                </ChartContainer>
               </div>
-            </div>
-            <div className="text-right">
-              <p className="font-bold text-foreground">
-                {formatCurrency(investmentAccountsValue, baseCurrency)}
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
-            <div className="flex items-center gap-3 mr-auto">
-              <Landmark className="h-5 w-5 text-primary" />
-              <div>
-                <p className="font-medium text-foreground">Bank Accounts</p>
-                <p className="text-sm text-muted-foreground">Total bank balance</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="font-bold text-foreground">
-                {formatCurrency(bankAccountsValue, baseCurrency)}
-              </p>
-            </div>
-          </div>
+              {/* Legend and Details */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <PieChartIcon className="h-4 w-4 text-primary" />
+                    <h3 className="font-semibold text-sm text-foreground">Currency Breakdown</h3>
+                  </div>
+                  {currencyChartData.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        if (expandedCurrencies.size === currencyChartData.length) {
+                          setExpandedCurrencies(new Set());
+                        } else {
+                          setExpandedCurrencies(new Set(currencyChartData.map(item => item.currency)));
+                        }
+                      }}
+                    >
+                      {expandedCurrencies.size === currencyChartData.length ? 'Collapse All' : 'Expand All'}
+                    </Button>
+                  )}
+                </div>
 
-          <div className="flex items-center justify-end p-4 bg-background/30 rounded-lg">
-            <div className="flex items-center gap-3 mr-auto">
-              <Building className="h-5 w-5 text-primary" />
-              <div>
-                <p className="font-medium text-foreground">Other Assets</p>
-                <p className="text-sm text-muted-foreground">Real estate, collectibles, etc.</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="font-bold text-foreground">
-                {formatCurrency(otherAssetsValue, baseCurrency)}
-              </p>
-            </div>
-          </div>
+                <div className="space-y-1.5">
+                  {currencyChartData.map((item, index) => {
+                    const isExpanded = expandedCurrencies.has(item.currency);
+                    const toggleExpand = () => {
+                      setExpandedCurrencies(prev => {
+                        const newSet = new Set(prev);
+                        if (newSet.has(item.currency)) {
+                          newSet.delete(item.currency);
+                        } else {
+                          newSet.add(item.currency);
+                        }
+                        return newSet;
+                      });
+                    };
 
-          <div className="flex items-center justify-end p-4 bg-primary/10 rounded-lg border-2 border-primary/20">
-            <div className="flex items-center gap-3 mr-auto">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              <div>
-                <p className="font-medium text-foreground text-lg">Total Assets</p>
-                <p className="text-sm text-muted-foreground">Complete portfolio value</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="font-bold text-foreground text-xl">
-                {formatCurrency(totalAssetsValue, baseCurrency)}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Currency Analytics */}
-      <Card className="bg-gradient-card border-border shadow-card">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-foreground">Currency Analytics</CardTitle>
-            <CardDescription>Portfolio distribution by currency</CardDescription>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={generateCurrencyAnalyticsCSV}
-            className="flex items-center gap-2"
-          >
-            <ArrowDownRight className="h-4 w-4" />
-            Export CSV
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Pie Chart */}
-            <div className="flex items-center justify-center">
-              <ChartContainer config={{}} className="h-[300px] w-full">
-                <PieChart>
-                  <Pie
-                    data={currencyChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={120}
-                    paddingAngle={2}
-                    dataKey="valueHKD"
-                    label={({ currency, percentage }) =>
-                      percentage > 5 ? `${currency} ${percentage.toFixed(1)}%` : ''
-                    }
-                    labelLine={false}
-                  >
-                    {currencyChartData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={currencyColors[index % currencyColors.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <ChartTooltip 
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                        return (
-                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg max-w-xs">
-                            <p className="font-medium text-foreground mb-1">{data.currency}</p>
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {formatCurrency(data.valueHKD, baseCurrency)} ({data.percentage.toFixed(1)}%)
-                            </p>
-                            <p className="text-xs text-muted-foreground mb-1">
-                              Original: {formatCurrency(data.value, data.currency)}
-                            </p>
-                            <div className="text-xs text-muted-foreground space-y-0.5 mt-2 pt-2 border-t border-border/50">
-                              {data.breakdown.bankAccounts > 0 && (
-                                <div className="flex justify-between">
-                                  <span>Bank Accounts:</span>
-                                  <span>{formatCurrency(data.breakdown.bankAccounts, data.currency)}</span>
-                                </div>
-                              )}
-                              {data.breakdown.ibPortfolio > 0 && (
-                                <div className="flex justify-between">
-                                  <span>IB Portfolio:</span>
-                                  <span>{formatCurrency(data.breakdown.ibPortfolio, data.currency)}</span>
-                                </div>
-                              )}
-                              {data.breakdown.ibCash > 0 && (
-                                <div className="flex justify-between">
-                                  <span>IB Cash:</span>
-                                  <span>{formatCurrency(data.breakdown.ibCash, data.currency)}</span>
-                                </div>
-                              )}
-                              {data.breakdown.otherPortfolio > 0 && (
-                                <div className="flex justify-between">
-                                  <span>Other Portfolio:</span>
-                                  <span>{formatCurrency(data.breakdown.otherPortfolio, data.currency)}</span>
-                                </div>
-                              )}
-                              {data.breakdown.otherCash > 0 && (
-                                <div className="flex justify-between">
-                                  <span>Other Cash:</span>
-                                  <span>{formatCurrency(data.breakdown.otherCash, data.currency)}</span>
-                                </div>
-                              )}
-                              {data.breakdown.otherAssets > 0 && (
-                                <div className="flex justify-between">
-                                  <span>Other Assets:</span>
-                                  <span>{formatCurrency(data.breakdown.otherAssets, data.currency)}</span>
-                                </div>
-                              )}
-                              {data.breakdown.schwabPortfolio > 0 && (
-                                <div className="flex justify-between">
-                                  <span>Schwab Portfolio:</span>
-                                  <span>{formatCurrency(data.breakdown.schwabPortfolio, data.currency)}</span>
-                                </div>
-                              )}
-                              {data.breakdown.schwabCash > 0 && (
-                                <div className="flex justify-between">
-                                  <span>Schwab Cash:</span>
-                                  <span>{formatCurrency(data.breakdown.schwabCash, data.currency)}</span>
-                                </div>
-                              )}
+                    return (
+                      <div key={item.currency} className="p-2 bg-background/30 rounded-md">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-1">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: currencyColors[index % currencyColors.length] }}
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-foreground">{item.currency}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatCurrency(item.value, item.currency)} original
+                              </p>
                             </div>
                           </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                </PieChart>
-              </ChartContainer>
-            </div>
+                          <div className="text-right mr-2">
+                            <p className="text-sm font-semibold text-foreground">
+                              {formatCurrency(item.valueHKD, baseCurrency)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.percentage.toFixed(1)}%
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 hover:bg-primary/10"
+                            onClick={toggleExpand}
+                            title={isExpanded ? "Collapse" : "Expand"}
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                        {/* Breakdown details - only show when expanded */}
+                        {isExpanded && (
+                          <div className="ml-5 mt-2 space-y-0.5 text-xs text-muted-foreground">
+                            {item.breakdown.bankAccounts > 0 && (
+                              <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                                <span>• Bank Accounts</span>
+                                <span className="text-right whitespace-nowrap">
+                                  {item.currency !== baseCurrency ? formatCurrency(item.breakdown.bankAccounts, item.currency) : ''}
+                                </span>
+                                <span className="text-right whitespace-nowrap">
+                                  {formatCurrency(convertToBaseCurrency(item.breakdown.bankAccounts, item.currency), baseCurrency)}
+                                </span>
+                              </div>
+                            )}
+                            {item.breakdown.ibPortfolio > 0 && (
+                              <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                                <span>• IB Portfolio</span>
+                                <span className="text-right whitespace-nowrap">
+                                  {item.currency !== baseCurrency ? formatCurrency(item.breakdown.ibPortfolio, item.currency) : ''}
+                                </span>
+                                <span className="text-right whitespace-nowrap">
+                                  {formatCurrency(convertToBaseCurrency(item.breakdown.ibPortfolio, item.currency), baseCurrency)}
+                                </span>
+                              </div>
+                            )}
+                            {item.breakdown.ibCash > 0 && (
+                              <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                                <span>• IB Cash</span>
+                                <span className="text-right whitespace-nowrap">
+                                  {item.currency !== baseCurrency ? formatCurrency(item.breakdown.ibCash, item.currency) : ''}
+                                </span>
+                                <span className="text-right whitespace-nowrap">
+                                  {formatCurrency(convertToBaseCurrency(item.breakdown.ibCash, item.currency), baseCurrency)}
+                                </span>
+                              </div>
+                            )}
+                            {item.breakdown.otherPortfolio > 0 && (
+                              <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                                <span>• Other Portfolio</span>
+                                <span className="text-right whitespace-nowrap">
+                                  {item.currency !== baseCurrency ? formatCurrency(item.breakdown.otherPortfolio, item.currency) : ''}
+                                </span>
+                                <span className="text-right whitespace-nowrap">
+                                  {formatCurrency(convertToBaseCurrency(item.breakdown.otherPortfolio, item.currency), baseCurrency)}
+                                </span>
+                              </div>
+                            )}
+                            {item.breakdown.otherCash > 0 && (
+                              <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                                <span>• Other Cash</span>
+                                <span className="text-right whitespace-nowrap">
+                                  {item.currency !== baseCurrency ? formatCurrency(item.breakdown.otherCash, item.currency) : ''}
+                                </span>
+                                <span className="text-right whitespace-nowrap">
+                                  {formatCurrency(convertToBaseCurrency(item.breakdown.otherCash, item.currency), baseCurrency)}
+                                </span>
+                              </div>
+                            )}
+                            {item.breakdown.otherAssets > 0 && (
+                              <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                                <span>• Other Assets</span>
+                                <span className="text-right whitespace-nowrap">
+                                  {item.currency !== baseCurrency ? formatCurrency(item.breakdown.otherAssets, item.currency) : ''}
+                                </span>
+                                <span className="text-right whitespace-nowrap">
+                                  {formatCurrency(convertToBaseCurrency(item.breakdown.otherAssets, item.currency), baseCurrency)}
+                                </span>
+                              </div>
+                            )}
+                            {item.breakdown.schwabPortfolio > 0 && (
+                              <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                                <span>• Schwab Portfolio</span>
+                                <span className="text-right whitespace-nowrap">
+                                  {item.currency !== baseCurrency ? formatCurrency(item.breakdown.schwabPortfolio, item.currency) : ''}
+                                </span>
+                                <span className="text-right whitespace-nowrap">
+                                  {formatCurrency(convertToBaseCurrency(item.breakdown.schwabPortfolio, item.currency), baseCurrency)}
+                                </span>
+                              </div>
+                            )}
+                            {item.breakdown.schwabCash > 0 && (
+                              <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                                <span>• Schwab Cash</span>
+                                <span className="text-right whitespace-nowrap">
+                                  {item.currency !== baseCurrency ? formatCurrency(item.breakdown.schwabCash, item.currency) : ''}
+                                </span>
+                                <span className="text-right whitespace-nowrap">
+                                  {formatCurrency(convertToBaseCurrency(item.breakdown.schwabCash, item.currency), baseCurrency)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
 
-            {/* Legend and Details */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <PieChartIcon className="h-4 w-4 text-primary" />
-                  <h3 className="font-semibold text-sm text-foreground">Currency Breakdown</h3>
+                  {currencyChartData.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <PieChartIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No currency data available</p>
+                      <p className="text-sm">Add some investments to see currency distribution</p>
+                    </div>
+                  )}
                 </div>
+
                 {currencyChartData.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      if (expandedCurrencies.size === currencyChartData.length) {
-                        setExpandedCurrencies(new Set());
-                      } else {
-                        setExpandedCurrencies(new Set(currencyChartData.map(item => item.currency)));
-                      }
-                    }}
-                  >
-                    {expandedCurrencies.size === currencyChartData.length ? 'Collapse All' : 'Expand All'}
-                  </Button>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                {currencyChartData.map((item, index) => {
-                  const isExpanded = expandedCurrencies.has(item.currency);
-                  const toggleExpand = () => {
-                    setExpandedCurrencies(prev => {
-                      const newSet = new Set(prev);
-                      if (newSet.has(item.currency)) {
-                        newSet.delete(item.currency);
-                      } else {
-                        newSet.add(item.currency);
-                      }
-                      return newSet;
-                    });
-                  };
-                  
-                  return (
-                  <div key={item.currency} className="p-2 bg-background/30 rounded-md">
+                  <div className="pt-4 border-t border-border/50">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 flex-1">
-                        <div
-                          className="w-3 h-3 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: currencyColors[index % currencyColors.length] }}
-                        />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-foreground">{item.currency}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatCurrency(item.value, item.currency)} original
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right mr-2">
-                        <p className="text-sm font-semibold text-foreground">
-                          {formatCurrency(item.valueHKD, baseCurrency)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.percentage.toFixed(1)}%
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 hover:bg-primary/10"
-                        onClick={toggleExpand}
-                        title={isExpanded ? "Collapse" : "Expand"}
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
-                        )}
-                      </Button>
+                      <span className="text-sm text-muted-foreground">Total Portfolio Value:</span>
+                      <span className="font-bold text-foreground">
+                        {formatCurrency(totalValue, baseCurrency)}
+                      </span>
                     </div>
-                    {/* Breakdown details - only show when expanded */}
-                    {isExpanded && (
-                    <div className="ml-5 mt-2 space-y-0.5 text-xs text-muted-foreground">
-                      {item.breakdown.bankAccounts > 0 && (
-                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
-                          <span>• Bank Accounts</span>
-                          <span className="text-right whitespace-nowrap">
-                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.bankAccounts, item.currency) : ''}
-                          </span>
-                          <span className="text-right whitespace-nowrap">
-                            {formatCurrency(convertToBaseCurrency(item.breakdown.bankAccounts, item.currency), baseCurrency)}
-                          </span>
-                        </div>
-                      )}
-                      {item.breakdown.ibPortfolio > 0 && (
-                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
-                          <span>• IB Portfolio</span>
-                          <span className="text-right whitespace-nowrap">
-                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.ibPortfolio, item.currency) : ''}
-                          </span>
-                          <span className="text-right whitespace-nowrap">
-                            {formatCurrency(convertToBaseCurrency(item.breakdown.ibPortfolio, item.currency), baseCurrency)}
-                          </span>
-                        </div>
-                      )}
-                      {item.breakdown.ibCash > 0 && (
-                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
-                          <span>• IB Cash</span>
-                          <span className="text-right whitespace-nowrap">
-                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.ibCash, item.currency) : ''}
-                          </span>
-                          <span className="text-right whitespace-nowrap">
-                            {formatCurrency(convertToBaseCurrency(item.breakdown.ibCash, item.currency), baseCurrency)}
-                          </span>
-                        </div>
-                      )}
-                      {item.breakdown.otherPortfolio > 0 && (
-                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
-                          <span>• Other Portfolio</span>
-                          <span className="text-right whitespace-nowrap">
-                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.otherPortfolio, item.currency) : ''}
-                          </span>
-                          <span className="text-right whitespace-nowrap">
-                            {formatCurrency(convertToBaseCurrency(item.breakdown.otherPortfolio, item.currency), baseCurrency)}
-                          </span>
-                        </div>
-                      )}
-                      {item.breakdown.otherCash > 0 && (
-                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
-                          <span>• Other Cash</span>
-                          <span className="text-right whitespace-nowrap">
-                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.otherCash, item.currency) : ''}
-                          </span>
-                          <span className="text-right whitespace-nowrap">
-                            {formatCurrency(convertToBaseCurrency(item.breakdown.otherCash, item.currency), baseCurrency)}
-                          </span>
-                        </div>
-                      )}
-                      {item.breakdown.otherAssets > 0 && (
-                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
-                          <span>• Other Assets</span>
-                          <span className="text-right whitespace-nowrap">
-                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.otherAssets, item.currency) : ''}
-                          </span>
-                          <span className="text-right whitespace-nowrap">
-                            {formatCurrency(convertToBaseCurrency(item.breakdown.otherAssets, item.currency), baseCurrency)}
-                          </span>
-                        </div>
-                      )}
-                      {item.breakdown.schwabPortfolio > 0 && (
-                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
-                          <span>• Schwab Portfolio</span>
-                          <span className="text-right whitespace-nowrap">
-                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.schwabPortfolio, item.currency) : ''}
-                          </span>
-                          <span className="text-right whitespace-nowrap">
-                            {formatCurrency(convertToBaseCurrency(item.breakdown.schwabPortfolio, item.currency), baseCurrency)}
-                          </span>
-                        </div>
-                      )}
-                      {item.breakdown.schwabCash > 0 && (
-                        <div className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
-                          <span>• Schwab Cash</span>
-                          <span className="text-right whitespace-nowrap">
-                            {item.currency !== baseCurrency ? formatCurrency(item.breakdown.schwabCash, item.currency) : ''}
-                          </span>
-                          <span className="text-right whitespace-nowrap">
-                            {formatCurrency(convertToBaseCurrency(item.breakdown.schwabCash, item.currency), baseCurrency)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    )}
-                  </div>
-                  );
-                })}
-                
-                {currencyChartData.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <PieChartIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No currency data available</p>
-                    <p className="text-sm">Add some investments to see currency distribution</p>
                   </div>
                 )}
               </div>
-              
-              {currencyChartData.length > 0 && (
-                <div className="pt-4 border-t border-border/50">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Total Portfolio Value:</span>
-                    <span className="font-bold text-foreground">
-                      {formatCurrency(totalValue, baseCurrency)}
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Portfolio Analytics */}
-      <Card className="bg-gradient-card border-border shadow-card">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-foreground">Portfolio Analytics</CardTitle>
-            <CardDescription>Investment distribution by asset category</CardDescription>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={generatePortfolioAnalyticsCSV}
-            className="flex items-center gap-2"
-          >
-            <ArrowDownRight className="h-4 w-4" />
-            Export CSV
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Pie Chart */}
-            <div className="flex items-center justify-center">
-              <ChartContainer config={{}} className="h-[300px] w-full">
-                <PieChart>
-                  <Pie
-                    data={portfolioChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={120}
-                    paddingAngle={2}
-                    dataKey="value"
-                    label={({ label, percentage }) =>
-                      percentage > 5 ? `${label} ${percentage.toFixed(1)}%` : ''
-                    }
-                    labelLine={false}
-                  >
-                    {portfolioChartData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={portfolioColors[index % portfolioColors.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <ChartTooltip
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                        // Group items by source
-                        const itemsBySource = data.items.reduce((acc: any, item: any) => {
-                          if (!acc[item.source]) {
-                            acc[item.source] = [];
-                          }
-                          acc[item.source].push(item);
-                          return acc;
-                        }, {});
-                        
-                        return (
-                          <div className="bg-background border border-border rounded-lg p-3 shadow-lg max-w-xs">
-                            <p className="font-medium text-foreground mb-1">{data.label}</p>
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {formatCurrency(data.value, baseCurrency)} ({data.percentage.toFixed(1)}%)
-                            </p>
-                            <p className="text-xs text-muted-foreground mb-1">
-                              {data.items.length} position{data.items.length !== 1 ? 's' : ''}
-                            </p>
-                            <div className="text-xs text-muted-foreground space-y-1 mt-2 pt-2 border-t border-border/50 max-h-48 overflow-y-auto">
-                              {Object.entries(itemsBySource).map(([source, items]: [string, any]) => (
-                                <div key={source}>
-                                  <p className="font-medium text-foreground">{source}:</p>
-                                  {items.slice(0, 5).map((item: any, idx: number) => (
-                                    <div key={idx} className="flex justify-between items-start gap-2 ml-2">
-                                      <span className="truncate max-w-[120px]">{item.name}</span>
-                                      <span className="text-right ml-2">
-                                        {item.originalCurrency !== baseCurrency ? (
-                                          <>
-                                            <span className="block">{formatCurrency(item.originalValue, item.originalCurrency)}</span>
-                                            <span className="block text-muted-foreground/70 text-[10px]">≈ {formatCurrency(item.value, baseCurrency)}</span>
-                                          </>
-                                        ) : (
-                                          <span>{formatCurrency(item.value, baseCurrency)}</span>
-                                        )}
-                                      </span>
-                                    </div>
-                                  ))}
-                                  {items.length > 5 && (
-                                    <p className="ml-2 text-muted-foreground">...and {items.length - 5} more</p>
-                                  )}
-                                </div>
-                              ))}
+        {/* Portfolio Analytics */}
+        <Card className="bg-gradient-card border-border shadow-card">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-foreground">Portfolio Analytics</CardTitle>
+              <CardDescription>Investment distribution by asset category</CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={generatePortfolioAnalyticsCSV}
+              className="flex items-center gap-2"
+            >
+              <ArrowDownRight className="h-4 w-4" />
+              Export CSV
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Pie Chart */}
+              <div className="flex items-center justify-center">
+                <ChartContainer config={{}} className="h-[300px] w-full">
+                  <PieChart>
+                    <Pie
+                      data={portfolioChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={120}
+                      paddingAngle={2}
+                      dataKey="value"
+                      label={({ label, percentage }) =>
+                        percentage > 5 ? `${label} ${percentage.toFixed(1)}%` : ''
+                      }
+                      labelLine={false}
+                    >
+                      {portfolioChartData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={portfolioColors[index % portfolioColors.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <ChartTooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          // Group items by source
+                          const itemsBySource = data.items.reduce((acc: any, item: any) => {
+                            if (!acc[item.source]) {
+                              acc[item.source] = [];
+                            }
+                            acc[item.source].push(item);
+                            return acc;
+                          }, {});
+
+                          return (
+                            <div className="bg-background border border-border rounded-lg p-3 shadow-lg max-w-xs">
+                              <p className="font-medium text-foreground mb-1">{data.label}</p>
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {formatCurrency(data.value, baseCurrency)} ({data.percentage.toFixed(1)}%)
+                              </p>
+                              <p className="text-xs text-muted-foreground mb-1">
+                                {data.items.length} position{data.items.length !== 1 ? 's' : ''}
+                              </p>
+                              <div className="text-xs text-muted-foreground space-y-1 mt-2 pt-2 border-t border-border/50 max-h-48 overflow-y-auto">
+                                {Object.entries(itemsBySource).map(([source, items]: [string, any]) => (
+                                  <div key={source}>
+                                    <p className="font-medium text-foreground">{source}:</p>
+                                    {items.slice(0, 5).map((item: any, idx: number) => (
+                                      <div key={idx} className="flex justify-between items-start gap-2 ml-2">
+                                        <span className="truncate max-w-[120px]">{item.name}</span>
+                                        <span className="text-right ml-2">
+                                          {item.originalCurrency !== baseCurrency ? (
+                                            <>
+                                              <span className="block">{formatCurrency(item.originalValue, item.originalCurrency)}</span>
+                                              <span className="block text-muted-foreground/70 text-[10px]">≈ {formatCurrency(item.value, baseCurrency)}</span>
+                                            </>
+                                          ) : (
+                                            <span>{formatCurrency(item.value, baseCurrency)}</span>
+                                          )}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {items.length > 5 && (
+                                      <p className="ml-2 text-muted-foreground">...and {items.length - 5} more</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </PieChart>
+                </ChartContainer>
+              </div>
+
+              {/* Legend and Details */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-primary" />
+                    <h3 className="font-semibold text-sm text-foreground">Category Breakdown</h3>
+                  </div>
+                  {portfolioChartData.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        if (expandedCategories.size === portfolioChartData.length) {
+                          setExpandedCategories(new Set());
+                        } else {
+                          setExpandedCategories(new Set(portfolioChartData.map(item => item.category)));
+                        }
+                      }}
+                    >
+                      {expandedCategories.size === portfolioChartData.length ? 'Collapse All' : 'Expand All'}
+                    </Button>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  {portfolioChartData.map((item, index) => {
+                    const isExpanded = expandedCategories.has(item.category);
+                    const toggleExpand = () => {
+                      setExpandedCategories(prev => {
+                        const newSet = new Set(prev);
+                        if (newSet.has(item.category)) {
+                          newSet.delete(item.category);
+                        } else {
+                          newSet.add(item.category);
+                        }
+                        return newSet;
+                      });
+                    };
+
+                    return (
+                      <div key={item.category} className="p-2 bg-background/30 rounded-md">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-1">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: portfolioColors[index % portfolioColors.length] }}
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-foreground">{item.label}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.items.length} position{item.items.length !== 1 ? 's' : ''}
+                              </p>
                             </div>
                           </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                </PieChart>
-              </ChartContainer>
-            </div>
+                          <div className="text-right mr-2">
+                            <p className="text-sm font-semibold text-foreground">
+                              {formatCurrency(item.value, baseCurrency)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.percentage.toFixed(1)}%
+                            </p>
+                          </div>
 
-            {/* Legend and Details */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-primary" />
-                  <h3 className="font-semibold text-sm text-foreground">Category Breakdown</h3>
-                </div>
-                {portfolioChartData.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      if (expandedCategories.size === portfolioChartData.length) {
-                        setExpandedCategories(new Set());
-                      } else {
-                        setExpandedCategories(new Set(portfolioChartData.map(item => item.category)));
-                      }
-                    }}
-                  >
-                    {expandedCategories.size === portfolioChartData.length ? 'Collapse All' : 'Expand All'}
-                  </Button>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                {portfolioChartData.map((item, index) => {
-                  const isExpanded = expandedCategories.has(item.category);
-                  const toggleExpand = () => {
-                    setExpandedCategories(prev => {
-                      const newSet = new Set(prev);
-                      if (newSet.has(item.category)) {
-                        newSet.delete(item.category);
-                      } else {
-                        newSet.add(item.category);
-                      }
-                      return newSet;
-                    });
-                  };
-                  
-                  return (
-                  <div key={item.category} className="p-2 bg-background/30 rounded-md">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 flex-1">
-                        <div
-                          className="w-3 h-3 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: portfolioColors[index % portfolioColors.length] }}
-                        />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-foreground">{item.label}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.items.length} position{item.items.length !== 1 ? 's' : ''}
-                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 hover:bg-primary/10"
+                            onClick={toggleExpand}
+                            title={isExpanded ? "Collapse" : "Expand"}
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4" />
+                            )}
+                          </Button>
                         </div>
-                      </div>
-                      <div className="text-right mr-2">
-                        <p className="text-sm font-semibold text-foreground">
-                          {formatCurrency(item.value, baseCurrency)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.percentage.toFixed(1)}%
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 hover:bg-primary/10"
-                        onClick={toggleExpand}
-                        title={isExpanded ? "Collapse" : "Expand"}
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
+                        {/* Breakdown details - only show when expanded */}
+                        {isExpanded && (
+                          <div className="ml-5 mt-2 space-y-0.5 text-xs text-muted-foreground">
+                            {item.items.map((position, idx) => {
+                              // Simplify source labels
+                              let simplifiedSource = position.source;
+                              if (position.source === 'Schwab Cash') simplifiedSource = 'Schwab';
+                              else if (position.source === 'IB Cash') simplifiedSource = 'IB';
+                              else if (position.source === 'Other Cash') simplifiedSource = 'Other';
+                              else if (position.source === 'Bank Account') simplifiedSource = '';
+                              else if (position.source === 'Other Assets') simplifiedSource = '';
+                              else if (position.source === 'Schwab Portfolio') simplifiedSource = 'Schwab';
+                              else if (position.source === 'IB Portfolio') simplifiedSource = 'IB';
+                              else if (position.source === 'Other Portfolio') simplifiedSource = 'Other';
+
+                              return (
+                                <div key={idx} className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
+                                  <span className="truncate">• {position.name}{simplifiedSource && ` (${simplifiedSource})`}</span>
+                                  <span className="text-right whitespace-nowrap">
+                                    {position.originalCurrency !== baseCurrency ? formatCurrency(position.originalValue, position.originalCurrency) : ''}
+                                  </span>
+                                  <span className="text-right whitespace-nowrap">
+                                    {formatCurrency(position.value, baseCurrency)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
-                      </Button>
-                    </div>
-                    {/* Breakdown details - only show when expanded */}
-                    {isExpanded && (
-                    <div className="ml-5 mt-2 space-y-0.5 text-xs text-muted-foreground">
-                      {item.items.map((position, idx) => {
-                        // Simplify source labels
-                        let simplifiedSource = position.source;
-                        if (position.source === 'Schwab Cash') simplifiedSource = 'Schwab';
-                        else if (position.source === 'IB Cash') simplifiedSource = 'IB';
-                        else if (position.source === 'Other Cash') simplifiedSource = 'Other';
-                        else if (position.source === 'Bank Account') simplifiedSource = '';
-                        else if (position.source === 'Other Assets') simplifiedSource = '';
-                        else if (position.source === 'Schwab Portfolio') simplifiedSource = 'Schwab';
-                        else if (position.source === 'IB Portfolio') simplifiedSource = 'IB';
-                        else if (position.source === 'Other Portfolio') simplifiedSource = 'Other';
-                        
-                        return (
-                        <div key={idx} className="grid grid-cols-[1fr,110px,100px] gap-2 items-center">
-                          <span className="truncate">• {position.name}{simplifiedSource && ` (${simplifiedSource})`}</span>
-                          <span className="text-right whitespace-nowrap">
-                            {position.originalCurrency !== baseCurrency ? formatCurrency(position.originalValue, position.originalCurrency) : ''}
-                          </span>
-                          <span className="text-right whitespace-nowrap">
-                            {formatCurrency(position.value, baseCurrency)}
-                          </span>
-                        </div>
-                        );
-                      })}
-                    </div>
-                    )}
-                  </div>
-                  );
-                })}
+                      </div>
+                    );
+                  })}
 
-                {portfolioChartData.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No portfolio data available</p>
-                    <p className="text-sm">Add some investments to see category distribution</p>
-                  </div>
-                )}
+                  {portfolioChartData.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No portfolio data available</p>
+                      <p className="text-sm">Add some investments to see category distribution</p>
+                    </div>
+                  )}
+                </div>
+
+                {
+                  portfolioChartData.length > 0 && (
+                    <div className="pt-4 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Total Portfolio Value:</span>
+                        <span className="font-bold text-foreground">
+                          {formatCurrency(totalPortfolioValue, baseCurrency)}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                }
+              </div >
+            </div >
+          </CardContent >
+        </Card >
+
+        {/* QQQ Portfolio P&L */}
+        {qqqPositions.length > 0 && (
+          <Card className="bg-gradient-card border-border shadow-card">
+            <CardHeader>
+              <CardTitle className="text-foreground">QQQ Portfolio P&L</CardTitle>
+              <CardDescription>Profit/Loss for QQQ constituents in your portfolio</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[400px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={qqqPositions}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="symbol"
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                      tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <YAxis
+                      tickFormatter={(value) => formatCurrency(value, baseCurrency)}
+                      tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <RechartsTooltip
+                      cursor={{ fill: 'hsl(var(--muted) / 0.2)' }}
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          const isPositive = data.pnlBase >= 0;
+                          return (
+                            <div className="bg-background border border-border p-3 rounded-lg shadow-lg">
+                              <p className="font-bold text-foreground mb-1">{data.symbol}</p>
+                              <div className={`flex items-center gap-2 ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
+                                <span className="text-sm font-medium">
+                                  {isPositive ? '+' : ''}{formatCurrency(data.pnlBase, baseCurrency)}
+                                </span>
+                                <span className="text-xs">
+                                  ({isPositive ? '+' : ''}{data.pnlPercent.toFixed(2)}%)
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Position: {formatCurrency(data.marketValue, data.currency)} (Original)
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <ReferenceLine y={0} stroke="hsl(var(--border))" />
+                    <Bar dataKey="pnlBase">
+                      {qqqPositions.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={entry.pnlBase >= 0 ? '#22c55e' : '#ef4444'}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
 
-              {portfolioChartData.length > 0 && (
-                <div className="pt-4 border-t border-border/50">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Total Portfolio Value:</span>
-                    <span className="font-bold text-foreground">
-                      {formatCurrency(totalPortfolioValue, baseCurrency)}
-                    </span>
+              {/* Detailed Stats Table */}
+              <div className="mt-8 border rounded-lg overflow-hidden bg-muted/10">
+                <div
+                  className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/20 transition-colors"
+                  onClick={() => setIsQQQTableExpanded(!isQQQTableExpanded)}
+                >
+                  <h3 className="font-semibold text-sm">Detailed Holdings ({qqqPositions.length})</h3>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isQQQTableExpanded ? 'rotate-180' : ''}`} />
+                  </Button>
+                </div>
+
+                {isQQQTableExpanded && (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50 text-muted-foreground font-medium">
+                          <tr>
+                            <th className="p-3 text-left cursor-pointer hover:text-foreground" onClick={() => handleQQQSort('symbol')}>
+                              Symbol {qqqSortConfig.key === 'symbol' && (qqqSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th className="p-3 text-right cursor-pointer hover:text-foreground" onClick={() => handleQQQSort('avgCost')}>
+                              Avg Cost {qqqSortConfig.key === 'avgCost' && (qqqSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th className="p-3 text-right cursor-pointer hover:text-foreground" onClick={() => handleQQQSort('marketPrice')}>
+                              Price {qqqSortConfig.key === 'marketPrice' && (qqqSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th className="p-3 text-right cursor-pointer hover:text-foreground" onClick={() => handleQQQSort('marketValueBase')}>
+                              Mkt Value (Base/Orig) {qqqSortConfig.key === 'marketValueBase' && (qqqSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th className="p-3 text-right cursor-pointer hover:text-foreground" onClick={() => handleQQQSort('pnlBase')}>
+                              P&L (Base/Orig) {qqqSortConfig.key === 'pnlBase' && (qqqSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th className="p-3 text-right cursor-pointer hover:text-foreground" onClick={() => handleQQQSort('pnlPercent')}>
+                              P&L % {qqqSortConfig.key === 'pnlPercent' && (qqqSortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {/* Individual Rows */}
+                          {[...qqqPositions].sort((a, b) => {
+                            const aValue = a[qqqSortConfig.key];
+                            const bValue = b[qqqSortConfig.key];
+                            if (aValue < bValue) return qqqSortConfig.direction === 'asc' ? -1 : 1;
+                            if (aValue > bValue) return qqqSortConfig.direction === 'asc' ? 1 : -1;
+                            return 0;
+                          }).map((pos) => {
+                            const isPositive = pos.pnlBase >= 0;
+                            // Calculate current price = market value / position
+                            // Or use marketPrice if available
+                            const price = pos.marketPrice || (pos.position ? pos.marketValue / pos.position : 0);
+
+                            return (
+                              <tr key={pos.symbol} className="hover:bg-muted/10 transition-colors">
+                                <td className="p-3 font-medium">{pos.symbol}</td>
+                                <td className="p-3 text-right">{formatCurrency(pos.avgCost || pos.averageCost, pos.currency)}</td>
+                                <td className="p-3 text-right">{formatCurrency(price, pos.currency)}</td>
+                                <td className="p-3 text-right">
+                                  <div>{formatCurrency(pos.marketValueBase, baseCurrency)}</div>
+                                  <div className="text-xs text-muted-foreground">{formatCurrency(pos.marketValue || 0, pos.currency)}</div>
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className={isPositive ? "text-green-500" : "text-red-500"}>{formatCurrency(pos.pnlBase, baseCurrency)}</div>
+                                  <div className={`text-xs ${pos.pnl >= 0 ? "text-green-500/70" : "text-red-500/70"}`}>{formatCurrency(pos.pnl, pos.currency)}</div>
+                                </td>
+                                <td className={`p-3 text-right ${isPositive ? "text-green-500" : "text-red-500"}`}>
+                                  {formatPercent(pos.pnlPercent)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+
+                {/* Totals Section */}
+                <div className="border-t bg-muted/20 p-4">
+                  <div className="flex justify-between items-center text-sm font-semibold">
+                    {/* ... (totals content) ... */}
+                    <span>TOTAL</span>
+                    <div className="flex gap-8 text-right">
+                      <div>
+                        <div className="text-muted-foreground text-xs uppercase mb-1">Market Value</div>
+                        <div>{formatCurrency(qqqTotals.marketValueBase, baseCurrency)}</div>
+                        <div className="text-xs text-muted-foreground">{formatCurrency(qqqTotals.marketValue, 'USD')}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground text-xs uppercase mb-1">Profit / Loss</div>
+                        <div className={qqqTotals.pnlBase >= 0 ? "text-green-500" : "text-red-500"}>{formatCurrency(qqqTotals.pnlBase, baseCurrency)}</div>
+                        <div className={`text-xs ${qqqTotals.pnl >= 0 ? "text-green-500/70" : "text-red-500/70"}`}>{formatCurrency(qqqTotals.pnl, 'USD')}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground text-xs uppercase mb-1">Return</div>
+                        <div className={qqqTotals.pnl >= 0 ? "text-green-500" : "text-red-500"}>
+                          {formatPercent((qqqTotals.pnl / (qqqTotals.marketValue - qqqTotals.pnl)) * 100)}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div >
     );
   };
 
@@ -2531,9 +2808,9 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
 
   return (
     <div className="flex flex-1 bg-background">
-      <Sidebar 
-        currentView={currentView} 
-        onViewChange={setCurrentView} 
+      <Sidebar
+        currentView={currentView}
+        onViewChange={setCurrentView}
         onLogout={onLogout}
         isOpen={sidebarOpen}
         onToggle={onSidebarToggle}
@@ -2541,26 +2818,26 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
         onCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         user={user}
       />
-      
+
       <main className="flex-1 overflow-auto">
         <div className="p-4 md:p-6">
           <div className="mb-6">
             <div className="flex items-center justify-between">
               <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
-              {currentView === "overview" && "Dashboard Overview"}
-              {currentView === "accounts" && "Accounts"}
-              {currentView === "currency" && "Currency Exchange"}
-              {currentView === "portfolio" && "Portfolio"}
-              {currentView === "other-assets" && "Other Assets"}
-            </h1>
-            <p className="text-muted-foreground">
-              {currentView === "overview" && "Monitor your investment performance"}
-              {currentView === "accounts" && "Manage your investment & bank accounts"}
-              {currentView === "currency" && "Track currency exchange rates"}
-              {currentView === "portfolio" && "View all integrated account portfolios in one place"}
-              {currentView === "other-assets" && "Track real estate, collectibles, and other investments"}
-            </p>
+                <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
+                  {currentView === "overview" && "Dashboard Overview"}
+                  {currentView === "accounts" && "Accounts"}
+                  {currentView === "currency" && "Currency Exchange"}
+                  {currentView === "portfolio" && "Portfolio"}
+                  {currentView === "other-assets" && "Other Assets"}
+                </h1>
+                <p className="text-muted-foreground">
+                  {currentView === "overview" && "Monitor your investment performance"}
+                  {currentView === "accounts" && "Manage your investment & bank accounts"}
+                  {currentView === "currency" && "Track currency exchange rates"}
+                  {currentView === "portfolio" && "View all integrated account portfolios in one place"}
+                  {currentView === "other-assets" && "Track real estate, collectibles, and other investments"}
+                </p>
               </div>
               {currentView === "overview" && (
                 <Dialog open={showQuickUpdateDialog} onOpenChange={setShowQuickUpdateDialog}>
@@ -2587,15 +2864,15 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                           'Futu - Joy',
                           'Charles Schwab - Joy'
                         ];
-                        
+
                         // Filter investment accounts
                         const investmentAccounts = accounts.filter(acc => !acc.accountType || acc.accountType === 'INVESTMENT');
-                        
+
                         // Sort accounts based on the defined order
                         const sortedAccounts = [...investmentAccounts].sort((a, b) => {
                           const indexA = accountOrder.indexOf(a.name);
                           const indexB = accountOrder.indexOf(b.name);
-                          
+
                           // If both are in the order list, sort by their position
                           if (indexA !== -1 && indexB !== -1) {
                             return indexA - indexB;
@@ -2607,7 +2884,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
                           // If neither is in the list, maintain original order
                           return 0;
                         });
-                        
+
                         return sortedAccounts.map((account, index) => (
                           <div key={account.id} className="flex items-center gap-3">
                             <Label htmlFor={`account-${account.id}`} className="font-medium text-sm min-w-[180px]">
@@ -2667,8 +2944,8 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
 
           {currentView === "overview" && renderOverview()}
           {currentView === "accounts" && (
-            <AccountsView 
-              accounts={accounts} 
+            <AccountsView
+              accounts={accounts}
               baseCurrency={baseCurrency}
               exchangeRates={exchangeRates}
               convertToBaseCurrency={convertToBaseCurrency}
@@ -2681,12 +2958,12 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
             />
           )}
           {currentView === "currency" && (
-            <CurrencyView 
+            <CurrencyView
               baseCurrency={baseCurrency}
             />
           )}
           {currentView === "portfolio" && (
-            <ConsolidatedPortfolioView 
+            <ConsolidatedPortfolioView
               baseCurrency={baseCurrency}
               onAccountUpdate={async () => {
                 await loadAccounts();
@@ -2696,7 +2973,7 @@ const Dashboard = ({ onLogout, sidebarOpen, onSidebarToggle }: DashboardProps) =
             />
           )}
           {currentView === "other-assets" && (
-            <OtherAssetsView 
+            <OtherAssetsView
               baseCurrency={baseCurrency}
               exchangeRates={exchangeRates}
               convertToBaseCurrency={convertToBaseCurrency}

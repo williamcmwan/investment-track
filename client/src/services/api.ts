@@ -450,9 +450,9 @@ class ApiClient {
   }
 
   async refreshManualMarketData(userId: string = 'default') {
-    return this.request<{ 
-      updated: number; 
-      failed: number; 
+    return this.request<{
+      updated: number;
+      failed: number;
       lastRefreshTime: string | null;
     }>('/manual-investments/positions/refresh-market-data', {
       method: 'POST',
@@ -661,6 +661,11 @@ class ApiClient {
 
   async getAccountCash(accountId: number) {
     return this.request<{ success: boolean; cash: Array<{ currency: string; balance: number }> }>(`/accounts/${accountId}/integration/cash`);
+  }
+
+  // Market endpoints
+  async getQQQHoldings() {
+    return this.request<string[]>('/market/qqq');
   }
 }
 

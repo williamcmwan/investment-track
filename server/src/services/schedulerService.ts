@@ -5,6 +5,7 @@ import { ExchangeRateService } from './exchangeRateService.js';
 import { OtherPortfolioService } from './otherPortfolioService.js';
 import { LastUpdateService } from './lastUpdateService.js';
 import { SchwabService } from './schwabService.js';
+import { QQQService } from './qqqService.js';
 import { Logger } from '../utils/logger.js';
 
 export class SchedulerService {
@@ -23,16 +24,23 @@ export class SchedulerService {
     }
 
     Logger.info('🚀 Initializing scheduler service...');
-    
+
     // Initialize last update service
     await LastUpdateService.initialize();
-    
+
+    // Initialize QQQ data
+    await QQQService.initialize();
+
     // Schedule daily performance calculation at 11:59 PM Dublin time
     // Dublin time is GMT+0 (standard time) or GMT+1 (daylight saving time)
     // Using '59 23 * * *' for 11:59 PM server time
     // Note: In production, you should set the server timezone to Europe/Dublin
     const dailyPerformanceTask = cron.schedule('59 23 * * *', async () => {
-      await this.calculateDailySnapshots();
+      // Run concurrent tasks
+      await Promise.all([
+        this.calculateDailySnapshots(),
+        QQQService.updateHoldings()
+      ]);
     }, {
       timezone: 'Europe/Dublin'
     });
@@ -70,16 +78,16 @@ export class SchedulerService {
     Logger.info('🔑 Schwab token refresh will run every 20 minutes to keep tokens alive');
     Logger.info('📊 IB Portfolio updates are handled automatically by IBServiceOptimized');
     Logger.info('📊 IB close prices will be refreshed from Yahoo Finance every 30 minutes (no cache)');
-    
+
     // Calculate today's snapshot immediately if it doesn't exist (uses cached data only)
     this.calculateTodayIfMissing();
-    
+
     // Check and refresh missing exchange rates in the background
     this.refreshMissingExchangeRates();
-    
+
     // Refresh IB close prices on startup (in background)
     this.refreshIBClosePricesOnStartup();
-    
+
     // Don't run initial data refresh on startup - let scheduled job handle it
     Logger.info('📅 Initial data refresh skipped - will run on first scheduled interval');
   }
@@ -122,7 +130,7 @@ export class SchedulerService {
   private static async calculateDailySnapshots() {
     try {
       Logger.info(`[${new Date().toISOString()}] Starting daily performance snapshot calculation...`);
-      
+
       // Step 1: Copy current bond prices to close prices for IB portfolios
       // This is needed because IB doesn't provide close prices for bonds
       Logger.info('📋 Step 1: Copying IB bond prices to close prices...');
@@ -133,13 +141,13 @@ export class SchedulerService {
       } catch (error) {
         Logger.error('❌ Failed to copy IB bond prices:', error);
       }
-      
+
       // Step 2: Calculate snapshots for all users
       Logger.info('📊 Step 2: Calculating performance snapshots...');
-      
+
       // Get all users
-      const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
-      
+      const users = await dbAll('SELECT id, email, name FROM users') as Array<{ id: number, email: string, name: string }>;
+
       if (users.length === 0) {
         Logger.info('No users found for daily snapshot calculation');
         return;
@@ -165,7 +173,7 @@ export class SchedulerService {
       Logger.info(`[${new Date().toISOString()}] Daily snapshot calculation completed:`);
       Logger.info(`  ✅ Successful: ${successCount} users`);
       Logger.info(`  ❌ Failed: ${errorCount} users`);
-      
+
     } catch (error) {
       Logger.error('Error in daily snapshot calculation:', error);
     }
@@ -177,12 +185,12 @@ export class SchedulerService {
   private static async calculateTodayIfMissing() {
     try {
       Logger.debug('Checking if today\'s snapshot needs to be calculated...');
-      
+
       const today = new Date().toISOString().split('T')[0];
-      
+
       // Get all users
-      const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
-      
+      const users = await dbAll('SELECT id, email, name FROM users') as Array<{ id: number, email: string, name: string }>;
+
       for (const user of users) {
         // Check if today's snapshot already exists
         const existingSnapshot = await dbAll(
@@ -201,7 +209,7 @@ export class SchedulerService {
           Logger.debug(`📊 Snapshot already exists for user: ${user.name} (${user.email})`);
         }
       }
-      
+
     } catch (error) {
       Logger.error('Error checking/calculating missing snapshots:', error);
     }
@@ -230,15 +238,15 @@ export class SchedulerService {
     try {
       Logger.info(`[${new Date().toISOString()}] 🔄 Starting automatic data refresh sequence...`);
       const refreshStartTime = Date.now();
-      
+
       // Step 1: Refresh Currency Exchange Rates
       Logger.info('📈 Step 1/3: Refreshing currency exchange rates...');
       try {
         // Get all users to refresh their currency pairs
-        const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+        const users = await dbAll('SELECT id, email, name FROM users') as Array<{ id: number, email: string, name: string }>;
         for (const user of users) {
           await ExchangeRateService.updateAllCurrencyPairs(user.id);
-          
+
           // Recalculate today's performance snapshot after currency update
           try {
             await PerformanceHistoryService.calculateTodaySnapshot(user.id);
@@ -257,9 +265,9 @@ export class SchedulerService {
       Logger.info('💼 Step 2/3: Refreshing manual investment market data...');
       try {
         await OtherPortfolioService.updateAllMarketData('default');
-        
+
         // Recalculate today's performance snapshot after manual investment update
-        const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+        const users = await dbAll('SELECT id, email, name FROM users') as Array<{ id: number, email: string, name: string }>;
         for (const user of users) {
           try {
             await PerformanceHistoryService.calculateTodaySnapshot(user.id);
@@ -268,7 +276,7 @@ export class SchedulerService {
             Logger.error(`❌ Failed to update performance snapshot after manual investment refresh for user ${user.name}:`, performanceError);
           }
         }
-        
+
         // Note: Manual investment update times are now tracked per-account in OtherPortfolioService
         Logger.info('✅ Manual investment market data refreshed successfully');
       } catch (error) {
@@ -280,9 +288,9 @@ export class SchedulerService {
       try {
         const { IBServiceOptimized } = await import('./ibServiceOptimized.js');
         await IBServiceOptimized.refreshAllClosePrices();
-        
+
         // Recalculate today's performance snapshot after IB close price update
-        const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
+        const users = await dbAll('SELECT id, email, name FROM users') as Array<{ id: number, email: string, name: string }>;
         for (const user of users) {
           try {
             await PerformanceHistoryService.calculateTodaySnapshot(user.id);
@@ -291,7 +299,7 @@ export class SchedulerService {
             Logger.error(`❌ Failed to update performance snapshot after IB close price refresh for user ${user.name}:`, performanceError);
           }
         }
-        
+
         Logger.info('✅ IB close prices refreshed successfully');
       } catch (error) {
         Logger.error('❌ Failed to refresh IB close prices:', error);
@@ -300,7 +308,7 @@ export class SchedulerService {
       const refreshEndTime = Date.now();
       const totalDuration = refreshEndTime - refreshStartTime;
       Logger.info(`[${new Date().toISOString()}] ✅ Automatic data refresh sequence completed in ${totalDuration}ms`);
-      
+
     } catch (error) {
       Logger.error('❌ Error in automatic data refresh sequence:', error);
     }
@@ -326,10 +334,10 @@ export class SchedulerService {
   private static async refreshMissingExchangeRates() {
     try {
       Logger.debug('🔍 Checking for missing exchange rates...');
-      
+
       // Get all users and their currency pairs
-      const users = await dbAll('SELECT id, email, name FROM users') as Array<{id: number, email: string, name: string}>;
-      
+      const users = await dbAll('SELECT id, email, name FROM users') as Array<{ id: number, email: string, name: string }>;
+
       let refreshCount = 0;
       for (const user of users) {
         try {
@@ -337,20 +345,20 @@ export class SchedulerService {
           const pairs = await dbAll(
             'SELECT DISTINCT pair FROM currency_pairs WHERE user_id = ?',
             [user.id]
-          ) as Array<{pair: string}>;
-          
+          ) as Array<{ pair: string }>;
+
           for (const pairRow of pairs) {
             const [fromCurrency, toCurrency] = pairRow.pair.split('/');
             if (!fromCurrency || !toCurrency || fromCurrency === toCurrency) {
               continue;
             }
-            
+
             // Check if exchange rate exists in cache
             const cached = await dbAll(
               'SELECT rate, updated_at FROM exchange_rates WHERE pair = ?',
               [pairRow.pair]
             );
-            
+
             if (cached.length === 0) {
               Logger.debug(`📈 Missing exchange rate for ${pairRow.pair}, fetching from Yahoo Finance...`);
               try {
@@ -371,13 +379,13 @@ export class SchedulerService {
           Logger.error(`❌ Failed to check exchange rates for user ${user.name}:`, userError);
         }
       }
-      
+
       if (refreshCount > 0) {
         Logger.debug(`✅ Refreshed ${refreshCount} missing exchange rates`);
       } else {
         Logger.debug('✅ All required exchange rates are already cached');
       }
-      
+
     } catch (error) {
       Logger.error('❌ Error checking missing exchange rates:', error);
     }
@@ -392,18 +400,18 @@ export class SchedulerService {
     try {
       Logger.debug(`[${new Date().toISOString()}] 🔄 Starting Schwab portfolio refresh...`);
       const refreshStartTime = Date.now();
-      
+
       // Refresh all Schwab accounts
       await SchwabService.refreshAllAccounts();
-      
+
       // Get all users with Schwab accounts and update their performance snapshots
       const users = await dbAll(
         `SELECT DISTINCT u.id, u.email, u.name 
          FROM users u
          INNER JOIN accounts a ON u.id = a.user_id
          WHERE a.integration_type = 'SCHWAB'`
-      ) as Array<{id: number, email: string, name: string}>;
-      
+      ) as Array<{ id: number, email: string, name: string }>;
+
       for (const user of users) {
         try {
           await PerformanceHistoryService.calculateTodaySnapshot(user.id);
@@ -412,11 +420,11 @@ export class SchedulerService {
           Logger.error(`❌ Failed to update performance snapshot after Schwab refresh for user ${user.name}:`, performanceError);
         }
       }
-      
+
       const refreshEndTime = Date.now();
       const totalDuration = refreshEndTime - refreshStartTime;
       Logger.debug(`[${new Date().toISOString()}] ✅ Schwab portfolio refresh completed in ${totalDuration}ms`);
-      
+
     } catch (error) {
       Logger.error('❌ Error in Schwab portfolio refresh:', error);
     }
