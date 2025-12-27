@@ -355,4 +355,30 @@ router.post('/quotes', async (req: AuthenticatedRequest, res) => {
   }
 });
 
+/**
+ * Get token expiration status for all Schwab accounts
+ * Schwab refresh tokens expire after 7 days - this is a Schwab API limitation
+ */
+router.get('/token-status', async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user?.id || 0;
+    const warningDays = parseInt(req.query.warningDays as string) || 2;
+    
+    const allStatus = await SchwabService.checkTokenExpirationStatus(warningDays);
+    
+    // Filter to only show current user's accounts
+    const userStatus = allStatus.filter(s => s.userId === userId);
+    
+    return res.json({
+      accounts: userStatus,
+      note: 'Schwab refresh tokens expire after 7 days. Re-authentication is required when tokens expire.'
+    });
+  } catch (error: any) {
+    Logger.error('Error getting token status:', error);
+    return res.status(500).json({ 
+      error: error.message || 'Failed to get token status' 
+    });
+  }
+});
+
 export default router;

@@ -178,6 +178,94 @@ export class SchwabService {
   }
 
   /**
+   * Check token expiration status for all Schwab accounts
+   * Returns accounts that need re-authentication soon (within specified days)
+   * Schwab refresh tokens expire after 7 days - this is a Schwab limitation
+   */
+  static async checkTokenExpirationStatus(warningDays: number = 2): Promise<{
+    accountId: number;
+    accountName: string;
+    userId: number;
+    daysUntilExpiry: number;
+    needsReauth: boolean;
+    lastRefreshed?: string;
+  }[]> {
+    try {
+      const { dbAll } = await import('../database/connection.js');
+      
+      const accounts = await dbAll(
+        `SELECT id, user_id as userId, name, integration_config as integrationConfig, updated_at as updatedAt
+         FROM accounts 
+         WHERE integration_type = 'SCHWAB'
+         AND integration_config IS NOT NULL`
+      ) as Array<{ id: number; userId: number; name: string; integrationConfig: string; updatedAt: string }>;
+      
+      const results = [];
+      const now = Math.floor(Date.now() / 1000);
+      const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60;
+      
+      for (const account of accounts) {
+        try {
+          const config = JSON.parse(account.integrationConfig);
+          
+          if (!config.refreshToken || !config.tokenExpiresAt) {
+            results.push({
+              accountId: account.id,
+              accountName: account.name,
+              userId: account.userId,
+              daysUntilExpiry: 0,
+              needsReauth: true,
+              lastRefreshed: account.updatedAt
+            });
+            continue;
+          }
+          
+          // Estimate refresh token expiry: ~7 days from when it was issued
+          // We approximate this by adding 7 days to the access token expiry minus 30 min
+          // (access tokens typically expire in 30 min)
+          const accessTokenExpiresAt = config.tokenExpiresAt;
+          const estimatedRefreshTokenIssuedAt = accessTokenExpiresAt - 1800; // 30 min before access expiry
+          const estimatedRefreshTokenExpiresAt = estimatedRefreshTokenIssuedAt + SEVEN_DAYS_SECONDS;
+          
+          const secondsUntilExpiry = estimatedRefreshTokenExpiresAt - now;
+          const daysUntilExpiry = Math.max(0, Math.floor(secondsUntilExpiry / (24 * 60 * 60)));
+          
+          results.push({
+            accountId: account.id,
+            accountName: account.name,
+            userId: account.userId,
+            daysUntilExpiry,
+            needsReauth: daysUntilExpiry <= warningDays,
+            lastRefreshed: account.updatedAt
+          });
+        } catch {
+          results.push({
+            accountId: account.id,
+            accountName: account.name,
+            userId: account.userId,
+            daysUntilExpiry: 0,
+            needsReauth: true
+          });
+        }
+      }
+      
+      // Log warnings for accounts needing re-auth soon
+      const needsReauth = results.filter(r => r.needsReauth);
+      if (needsReauth.length > 0) {
+        Logger.warn(`⚠️  ${needsReauth.length} Schwab account(s) need re-authentication within ${warningDays} days:`);
+        needsReauth.forEach(r => {
+          Logger.warn(`   - ${r.accountName}: ${r.daysUntilExpiry} days remaining`);
+        });
+      }
+      
+      return results;
+    } catch (error: any) {
+      Logger.error('❌ Error checking token expiration status:', error);
+      return [];
+    }
+  }
+
+  /**
    * Refresh access token using refresh token
    */
   private static async refreshAccessToken(userId: number, settings: SchwabUserSettings): Promise<string> {
