@@ -51,7 +51,7 @@ export class YahooFinanceService {
 
       Logger.debug(`📊 Fetching Yahoo Finance data for ${symbol} using direct API...`);
       
-      // Use direct chart API (same approach as exchange rate service which works reliably)
+      // Use direct chart API with 2 day range to get yesterday's close
       const url = `${this.YAHOO_CHART_API}/${encodeURIComponent(symbol)}?interval=1d&range=2d`;
       
       const response = await fetch(url, {
@@ -76,15 +76,30 @@ export class YahooFinanceService {
       const result = data.chart.result[0];
       const meta = result.meta;
       const quotes = result.indicators?.quote?.[0];
+      const closeArray = quotes?.close;
       
       if (!meta) {
         Logger.debug(`❌ No meta data for symbol ${symbol}`);
         return null;
       }
       
-      // Get current price and previous close
+      // Get current price from meta
       const marketPrice = meta.regularMarketPrice || 0;
-      const previousClose = meta.chartPreviousClose || meta.previousClose || 0;
+      
+      // Get yesterday's close from the quote data (first element in 2-day range)
+      // The closeArray contains [yesterday's close, today's close/current]
+      // chartPreviousClose is the close at the START of the range (2 days ago), not yesterday!
+      let previousClose = 0;
+      if (closeArray && closeArray.length >= 2) {
+        // First element is yesterday's close
+        previousClose = closeArray[0] || 0;
+      } else if (closeArray && closeArray.length === 1) {
+        // Only one day of data, use chartPreviousClose as fallback
+        previousClose = meta.chartPreviousClose || meta.previousClose || 0;
+      } else {
+        // No quote data, use chartPreviousClose as fallback
+        previousClose = meta.chartPreviousClose || meta.previousClose || 0;
+      }
       
       // Calculate day change
       const dayChange = previousClose > 0 ? marketPrice - previousClose : 0;
@@ -110,7 +125,7 @@ export class YahooFinanceService {
         timestamp: Date.now()
       });
 
-      Logger.debug(`✅ Got Yahoo Finance data for ${symbol}: price=${marketData.marketPrice}, prevClose=${marketData.closePrice}`);
+      Logger.debug(`✅ Got Yahoo Finance data for ${symbol}: price=${marketData.marketPrice}, prevClose=${marketData.closePrice}, dayChange=${dayChangePercent.toFixed(2)}%`);
       return marketData;
 
     } catch (error: any) {

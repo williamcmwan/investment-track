@@ -1129,6 +1129,7 @@ export class IBServiceOptimized {
   static async refreshClosePrices(mainAccountId: number): Promise<void> {
     try {
       const { dbAll, dbRun } = await import('../database/connection.js');
+      const { YahooFinanceService } = await import('./yahooFinanceService.js');
       
       Logger.info(`🔄 Refreshing close prices for IB account ${mainAccountId}...`);
       
@@ -1159,12 +1160,10 @@ export class IBServiceOptimized {
         closePrice: row.close_price
       }));
       
-      // Fetch fresh close prices from Yahoo Finance (no cache)
-      await this.fetchClosePricesFromYahoo(positions, mainAccountId, false);
+      // Build symbol mapping for Yahoo Finance
+      const symbolToPosition = new Map<string, PortfolioPosition>();
+      const symbolsToFetch: string[] = [];
       
-      // Update database with new close prices and recalculate day changes
-      // Note: Skip bonds - their close prices are only set at 23:59 via copyBondPricesToClose()
-      let updatedCount = 0;
       for (const position of positions) {
         // Skip bonds - their close prices should only be updated at 23:59
         if (position.secType === 'BOND') {
@@ -1172,17 +1171,46 @@ export class IBServiceOptimized {
           continue;
         }
         
-        if (!position.closePrice || !position.conId) continue;
+        if (!position.conId || position.conId <= 0) continue;
         
-        // Calculate day change
-        const closePrice = position.closePrice;
-        const lastPrice = position.marketPrice;
+        const yahooSymbol = this.convertToYahooSymbol(position.symbol, position.exchange || position.primaryExchange, position.secType);
+        if (yahooSymbol === null) {
+          Logger.debug(`${position.symbol} - Skipping Yahoo Finance fetch (${position.secType} not supported)`);
+          continue;
+        }
+        
+        symbolsToFetch.push(yahooSymbol);
+        symbolToPosition.set(yahooSymbol, position);
+      }
+      
+      if (symbolsToFetch.length === 0) {
+        Logger.info('No symbols to fetch from Yahoo Finance');
+        return;
+      }
+      
+      // Fetch market data from Yahoo Finance (includes both current price and previous close)
+      Logger.info(`🌐 Fetching ${symbolsToFetch.length} close prices from Yahoo Finance...`);
+      const marketDataResults = await YahooFinanceService.getMultipleMarketData(symbolsToFetch);
+      
+      // Update database with new close prices and recalculate day changes
+      let updatedCount = 0;
+      for (const [yahooSymbol, marketData] of marketDataResults.entries()) {
+        const position = symbolToPosition.get(yahooSymbol);
+        if (!position || !position.conId) continue;
+        
+        if (marketData.closePrice <= 0) continue;
+        
+        // Use the current market price from Yahoo Finance for day change calculation
+        // This is more accurate than the stale market price from IB (which may not have updated)
+        const closePrice = marketData.closePrice;  // Previous day's close
+        const currentPrice = marketData.marketPrice;  // Current market price from Yahoo
+        
         let dayChange = null;
         let dayChangePercent = null;
         
-        if (closePrice && lastPrice && closePrice > 0 && lastPrice !== closePrice) {
-          dayChange = (lastPrice - closePrice) * position.position;
-          dayChangePercent = ((lastPrice - closePrice) / closePrice) * 100;
+        if (closePrice > 0 && currentPrice > 0 && currentPrice !== closePrice) {
+          dayChange = (currentPrice - closePrice) * position.position;
+          dayChangePercent = ((currentPrice - closePrice) / closePrice) * 100;
         }
         
         // Update database
@@ -1195,7 +1223,7 @@ export class IBServiceOptimized {
             updated_at = CURRENT_TIMESTAMP
           WHERE con_id = ? AND source = ? AND main_account_id = ?
         `, [
-          position.closePrice,
+          closePrice,
           dayChange,
           dayChangePercent,
           position.conId,
@@ -1204,7 +1232,7 @@ export class IBServiceOptimized {
         ]);
         
         updatedCount++;
-        Logger.debug(`Updated ${position.symbol}: close=${position.closePrice}, dayChange=${dayChange?.toFixed(2)}`);
+        Logger.debug(`Updated ${position.symbol}: close=${closePrice}, currentPrice=${currentPrice}, dayChange=${dayChange?.toFixed(2)}`);
       }
       
       Logger.info(`✅ Refreshed close prices for ${updatedCount} IB positions`);
